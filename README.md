@@ -18,12 +18,13 @@ It is a library, not an HTTP service, multi-agent framework, Router, EventBus, o
 
 ## What it deliberately does not own
 
+- nika's personal agent or superagent architecture, including goals, verification, Proactive behavior, and any future supervision or multi-agent collaboration;
 - Feishu or other channel implementations;
 - Wiki, Skills, personas, or a memory service;
 - concrete Browser/Computer/document Tools and their resource locks;
 - credentials, deployment, proactive product policy, or automatic self-improvement.
 
-[nika](https://github.com/12bitsD/nika) is the first intended consumer. nika keeps its channels, knowledge, concrete Tools, and product behavior behind adapters.
+[nika](https://github.com/12bitsD/nika) is the first intended consumer. nika keeps its complete personal agent and superagent architecture, channels, knowledge, concrete Tools, and product behavior behind adapters. The name superagent does not itself adopt Router/Worker, background jobs, or a multi-agent framework.
 
 ## Public interface direction
 

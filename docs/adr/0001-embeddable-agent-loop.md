@@ -22,7 +22,7 @@ AgentLoop.cancel(cause)
 
 nextloop owns execution identities and state transitions, input/final-commit ordering, model invocation and retry admission, whole-batch Tool validation, correlated observations, unknown outcomes, event projection and recovery, finalization, and delivery-only recovery.
 
-Consumers own channels, concrete Tools, credentials, resource supervision, Prompt and WorkingContext content policy, Wiki and Skills, deployment, proactive product behavior, and product acceptance.
+Consumers own their complete personal agent and superagent architecture, including goals, verification, Proactive behavior, and any future supervision or multi-agent collaboration, as well as channels, concrete Tools, credentials, resource supervision, Prompt and WorkingContext content policy, Wiki and Skills, deployment, and product acceptance. nextloop does not own those product or superagent behaviors.
 
 ## Documentation ownership
 
