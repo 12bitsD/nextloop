@@ -38,6 +38,8 @@ Adapters provide `EventStore`, `ModelProvider`, `ContextBuilder`, `Compactor`, `
 
 ## Documentation
 
+Start with [VISION.md](VISION.md) for goals, scope, and design values, and [requirements.md](docs/architecture/requirements.md) for protocol ownership and acceptance.
+
 - [Loop interface](docs/design/loop-interface.md) — public shape, adapter seams, and ownership.
 - [AgentLoop core design](docs/design/agent-loop.md) — execution state, Tool protocol, cancellation, finalization, and recovery.
 - [ContextBuilder design](docs/design/context-builder.md) — request assembly, WorkingContext, cache, usage, compaction, and budgets.
