@@ -1,68 +1,47 @@
 # nextloop development and verification plan
 
-This plan defines order and evidence. Architecture and engineering direction are closed; implementation has not been accepted or released.
+Current stage: **0.1.0rc1 implementation complete; publication and consumer acceptance are separate**.
 
-## Phase 0 — Contracts
+## Phase 0 — Contracts — Closed
 
-Deliver the DSH-aligned public domain model, Adapter seams, event envelope, transaction groups and ownership rules. Keep the interface small and reject server, Router, EventBus, Wiki and multi-agent expansion.
+The DSH-aligned domain model, four Adapter Protocols, event envelope, transaction groups, and ownership rules are closed.
 
-Current evidence: [AgentLoop](../design/agent-loop.md), [ReAct](../design/react-protocol.md), [Loop interface](../design/loop-interface.md), [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) and the [verification matrix](../design/verification-matrix.md) are accepted as design.
+References: [AgentLoop](../design/agent-loop.md), [ReAct](../design/react-protocol.md), [Loop interface](../design/loop-interface.md), [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md), and [ADR-0003](../adr/0003-python-and-centralized-contracts.md).
 
-Stop if an interface requires Feishu, Wiki, a concrete desktop, Provider credentials or a specific product Prompt to explain the core protocol.
+## Phase 1 — Executable driver — Complete
 
-## Engineering baseline
+Implemented:
 
-- Python 3.11+ and native `asyncio`.
-- Standard-library dataclasses and SQLite; `httpx` and `jsonschema` as the only planned runtime dependencies.
-- All public Schemas, Adapter Protocols, errors and versions in `src/nextloop/contracts.py`.
-- One explicit Turn/Step driver in `loop.py`; no generic handler, middleware, EventBus or manager layer.
-- Small internal modules for projection/recovery, Tool scheduling, Context, SQLite and the two Provider Adapters.
+- `contracts.py`, `loop.py`, and a thin Turn/Step `driver.py`;
+- pure `events/` projection, response/outcome folds, and crash repair;
+- `execute/` model retries, Tool registration/validation, and batch scheduling;
+- in-memory and SQLite EventStores;
+- OpenAI-compatible and Anthropic SSE Providers;
+- a fake-Provider example completing model → Tool → Observation → model → delivery.
 
-See [ADR-0003](../adr/0003-python-and-centralized-contracts.md) for the package layout and ownership rules.
+## Phase 2 — Failure and recovery matrix — Current evidence passes
 
-## Phase 1 — Minimal executable driver
+The current suite contains 30 passing tests, with `ruff` and `mypy` also passing. It covers normal responses, malformed responses, parallel/exclusive ordering, steer, cancellation, Compaction, exact-byte retry, resource restrictions, real subprocess exits, SQLite recovery, delivery-only retry, and recorded Provider streams.
 
-Implement `contracts.py` and one in-process DSH-style Turn/Step driver with fake Adapters: one Session, one model response, one Tool call and one final response. Prove call before effect, result before the next Step, and final facts before delivery.
+Wheel and sdist pass `twine check`. A clean virtual environment installs the wheel and completes the example.
 
-Then add bounded parallel/exclusive scheduling without changing model-order Observation commits.
+See [verification matrix](../design/verification-matrix.md) for the release gate and current evidence.
 
-Do not add real channels or product features until this path is deterministic and the real Store proves transaction behavior.
+## Phase 3 — Release candidate publication — In progress
 
-## Phase 2 — Failure and recovery matrix
+- CI runs Python 3.11, 3.12, and 3.13.
+- A `v0.1.0rc1` tag runs the release workflow.
+- The workflow verifies the package, installs the built wheel in a clean environment, publishes to PyPI through Trusted Publishing, and creates a GitHub Pre-release.
 
-Implement and pass the complete [verification matrix](../design/verification-matrix.md):
+PyPI project and GitHub Environment trusted-publisher setup are external prerequisites. A tag alone is not proof of publication.
 
-- ordinary text, multiple Steps, mixed and malformed responses;
-- parallel/exclusive ordering and ordinary Tool errors;
-- steer during streaming, Tool execution, retry and final commitment;
-- timeout, cancellation, partial output and unknown effects;
-- compaction admission and failure;
-- process death at every commit window;
-- OpenAI/Anthropic recorded-stream contracts and exact-byte retry;
-- delivery-only retry and persistent resource restrictions.
+## Phase 4 — Consumer and final release — Separate acceptance
 
-Stop until each commit window has one owner and every unresolved effect has an honest disposition. Documentation or in-memory fakes alone do not prove durability.
+Before `0.1.0` final:
 
-## Phase 3 — First consumer integration
+- install the RC through a real consumer Adapter and run its smoke test;
+- perform any chosen hosted-model smoke;
+- record compatibility and remaining limitations in release notes;
+- only then tag `v0.1.0`.
 
-Connect nika through Adapters for one real model and one Feishu entry. Keep fake-adapter contract tests separate from real model and Feishu smoke tests.
-
-A passing core suite does not certify BrowserUse, ComputerUse, Wiki writes, document comments, batch export, backup or GC. Those require consumer acceptance evidence.
-
-## Phase 4 — Initial release
-
-Release only after the public API, event schema, migrations and failure matrix are stable enough for nika to consume without private patches.
-
-A release includes:
-
-- API and event-schema version declarations;
-- migration and compatibility notes;
-- the complete contract-test suite;
-- examples with fake Adapters and one consumer Adapter;
-- no claim that unverified product capabilities are complete.
-
-## Structural references
-
-DSH is the primary AgentLoop, Session/projection, request-freezing and crash-closer reference. Hermes remains a secondary steer/finalization reference. PydanticAI and OpenAI Agents SDK are Provider/schema/testing references only.
-
-No complete upstream Runner, fork, Cordis plugin system, Provider-configuration persistence or durable replay model is adopted. The accepted execution deltas are recorded in [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md); the earlier candidate survey remains in [open-source evaluation](../research/2026-11-06-open-source-agent-loops.md).
+nika acceptance remains in nika and is not claimed by nextloop's core suite.

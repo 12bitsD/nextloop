@@ -1,6 +1,6 @@
 # ReAct execution protocol
 
-Status: accepted design, 2026-11-06. Closes T1 response-to-action semantics and the closed 5-variant `ToolOutcome` model.
+Status: implemented for 0.1.0rc1. Closes T1 response-to-action semantics and the closed 5-variant `ToolOutcome` model.
 
 ## 1. One response, one explicit action
 

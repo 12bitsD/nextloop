@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install ${{ matrix.python-version }}
+      - run: uv venv --python ${{ matrix.python-version }} .venv
+      - run: uv pip install --python .venv/bin/python -e '.[dev]'
+      - run: .venv/bin/ruff check src tests
+      - run: .venv/bin/ruff format --check src tests
+      - run: .venv/bin/mypy src/nextloop
+      - run: .venv/bin/pytest -q
+      - run: .venv/bin/python -m build
+      - run: .venv/bin/twine check dist/*

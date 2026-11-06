@@ -1,53 +1,56 @@
 # ADR-0003: Use Python and centralize public contracts
 
-- Status: Accepted (refined 2026-11-06)
+- Status: Accepted and implemented for 0.1.0rc1
 - Date: 2026-11-06
 - Scope: implementation language, dependencies, package layout, and `contracts.py` discipline
-
-## Context
-
-The AgentLoop protocol is closed as design. To keep the implementation small and readable, public contracts must live in one place and internal modules must avoid framework ceremony (handler registries, manager layers, per-state classes, or deep inheritance).
 
 ## Decision
 
 ### Language and dependencies
 
-- Python 3.11+ with native `asyncio` (CI covers 3.11, 3.12, 3.13).
+- Python 3.11+ with native `asyncio`; CI covers 3.11, 3.12, and 3.13.
 - Standard-library `dataclasses`, `typing`, and `sqlite3`.
 - `httpx` for Provider HTTP/SSE and `jsonschema` for Tool argument validation.
 - `pytest` and `pytest-asyncio` for tests; `ruff` and `mypy` for static checks.
 
 ### Centralized `src/nextloop/contracts.py`
 
-All public schemas, protocols, and algebraic types live in `src/nextloop/contracts.py` (target < 250 lines):
+All public schemas and protocols live in `src/nextloop/contracts.py`:
 
-- **Coordinates & Envelope:** `EventCoord(session_id, turn, step, attempt, writer_epoch)`, `SurfaceOp` (`append | epoch | none`), `Event`, `NewEvent`.
-- **Messages & Requests:** `Message`, `ToolCall`, `ToolSpec`, `CandidateRequest`, `ModelUsage`, `ModelResponse`, `FinishReason`.
-- **Closed 5-variant `ToolOutcome` ADT:** `Completed` (including `concludes_turn=True` to conclude a Turn on user questions without a `WaitingRequest` suspension state), `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`, and `ToolExecutionMode` (`parallel | exclusive`).
-- **Turn lifecycle:** `LoopConfig`, `TurnContext`, `TurnOutcome`, `TurnStatus` (`Succeeded | Failed | Cancelled | Blocked | DeliveryUnknown`), `RecoveryOutcome`.
-- **The 4 Adapter Protocols:** `EventStore`, `ModelProvider`, `ToolRuntime`, `DeliveryOwner` (`ContextBuilder` and `Compactor` are internal mechanisms configured via `LoopConfig`).
-- **Errors & Versions:** `API_VERSION`, `EVENT_SCHEMA_VERSION`, `NextloopError`, `InvariantViolation`, `ProviderError`, `CapacityError`, `ProtocolExhausted`.
+- 4D event coordinates and `SurfaceOp` envelopes;
+- messages, requests, responses, Tool specs, and validation results;
+- the closed five-variant `ToolOutcome` ADT;
+- `LoopConfig`, Turn/Recovery outcomes, errors, and versions;
+- the four Adapter Protocols: `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`.
 
-`src/nextloop/__init__.py` explicitly re-exports `contracts.py` and `AgentLoop`.
+`src/nextloop/__init__.py` explicitly re-exports the supported public surface. Provider-private wire types and consumer-owned product schemas remain outside this file.
 
-### Consolidated package layout
+### Final package layout
 
 ```text
 src/nextloop/
-  contracts.py         # 4D coordinates, 5-variant ToolOutcome ADT, Event/SurfaceOp, Protocols, errors
-  loop.py              # AgentLoop public API + single-actor Turn/Step driver + crash recovery
-  events.py            # O(Δ) surface watermark projection and pure crash-closer fold
-  tools.py             # whole-batch JSON Schema validation + parallel/exclusive barrier scheduler
-  context.py           # AppendOnlyContextBuilder, WorkingContext damping, and preflight
-  sqlite.py            # SQLite EventStore with (session_id, seq) and epoch watermark index
-  providers/
+  contracts.py         # public schemas, validation types, outcomes, Protocols, errors
+  loop.py              # AgentLoop public API and active Session registry
+  driver.py            # thin Turn/Step orchestration and SessionActor/Inbox
+  events/
+    project.py         # O(Δ) surface projection and Compaction assembly
+    response.py        # ModelResponse → ResponseDecision + NewEvent[]
+    outcome.py         # ToolOutcome[] → BatchDecision + NewEvent[]
+    repair.py          # incomplete history → crash closers and resource locks
+  execute/
+    model.py           # Provider attempts, cancellation, and retry admission
+    tools.py           # ToolRegistry, whole-batch Schema validation, single Tool execution
+    batch.py           # parallel/exclusive scheduling and failure truncation
+  adapters/
+    memory.py          # in-memory EventStore
+    sqlite.py          # SQLite EventStore with epoch watermark index
     openai.py          # OpenAI-compatible SSE Adapter
     anthropic.py       # Anthropic SSE Adapter
   __init__.py          # explicit public exports
 ```
 
+`events/` contains pure functions with no I/O. `execute/` owns asynchronous side effects and normalized failures. `driver.py` only composes these mechanisms and owns finalization.
+
 ## No generic handler layer
 
-- `loop.py` is written as a direct `while` loop over Turns and Steps, using an in-memory `Inbox` under the Session actor lock and pattern matching (`match outcome:`) over the 5 `ToolOutcome` variants.
-- `events.py` uses pure functions (`project_surface(events)`, `interrupted_turn_closers(events)`).
-- No EventBus, middleware pipeline, per-state class hierarchy, or database-exception control flow is permitted.
+There is no EventBus, middleware chain, per-state class hierarchy, or handler registry for Session events. `ToolRegistry` is a concrete ToolRuntime implementation, not a lifecycle hook system. Tool execution and batch scheduling are separate modules because registration/validation and concurrency/truncation are different responsibilities.

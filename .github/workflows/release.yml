@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install 3.11
+      - run: uv venv --python 3.11 .venv
+      - run: uv pip install --python .venv/bin/python -e '.[dev]'
+      - run: .venv/bin/ruff check src tests
+      - run: .venv/bin/ruff format --check src tests
+      - run: .venv/bin/mypy src/nextloop
+      - run: .venv/bin/pytest -q
+      - run: .venv/bin/python -m build
+      - run: .venv/bin/twine check dist/*
+      - run: uv venv --python 3.11 .release-venv
+      - run: uv pip install --python .release-venv/bin/python dist/*.whl
+      - run: .release-venv/bin/python examples/basic.py
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, 'rc') }}
