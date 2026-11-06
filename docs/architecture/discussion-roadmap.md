@@ -21,7 +21,7 @@ Current entry: **T1 ReAct execution protocol jointly with T3 Tool contracts**. T
 | T2 Model and Context | Provider wire mapping, partial output, retries, cache plans, usage/preflight, compaction | Each candidate has an admitted-request contract and provider examples with byte/retry/cache verification | Mostly closed design in [context-builder.md](../design/context-builder.md); implementation contracts remain |
 | T3 Tool contracts | Schemas, descriptions, results, errors, cancellation, timeouts, unknown effects, large results | Every Tool has a complete contract and failure examples, with validation and observation verification | **Current**, jointly with T1 |
 | T4 Durable state | Event schema, seq, idempotency, lease/fence, transactions, projection, recovery, assets | Crash windows and malformed history have deterministic recovery with no hidden second truth | Pending; implementation-level |
-| T5 Adapter integration | nika EventStore/Provider/Tool/Delivery adapters and conformance evidence | Fake and real adapters satisfy the same protocol with no private bypass | Pending; after core contracts |
+| T5 Adapter integration | Consumer EventStore/Provider/Tool/Delivery adapters and conformance evidence; nika is the first example, not a protocol dependency | Fake and consumer adapters satisfy the same protocol with no private bypass | Pending; after core contracts |
 | T6 Release and maintenance | Versioning, migrations, packaging, CI, compatibility, release notes | Public API and event schema are versioned and the full failure matrix passes | Pending |
 
 ## Current remaining protocol questions
@@ -42,8 +42,8 @@ Current entry: **T1 ReAct execution protocol jointly with T3 Tool contracts**. T
 
 Every accepted decision updates the owning design document and this roadmap. Do not copy the full protocol into this file.
 
-## Product links
+## Integration links
 
-- [nika](https://github.com/12bitsD/nika) owns Feishu, AgentWiki, Skills, product Prompt, deployment, and Proactive.
+- [nika](https://github.com/12bitsD/nika) independently owns personal agent and superagent behavior, Feishu, AgentWiki, Skills, product Prompt, deployment, and Proactive. It is a consumer example, not a milestone dependency.
 - [Open-source AgentLoop evaluation](../research/2026-11-06-open-source-agent-loops.md) records why nextloop is reference-and-self-build rather than a fork.
-- [ADR-0001](../adr/0001-embeddable-agent-loop.md) records the repository boundary.
+- [ADR-0001](../adr/0001-embeddable-agent-loop.md) records the repository boundary and versioned-contract rule.

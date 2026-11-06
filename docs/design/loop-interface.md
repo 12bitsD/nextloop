@@ -1,6 +1,12 @@
 # Loop interface and ownership
 
-Status: interface direction, not an implemented or released API.
+Status: **v1-draft**, not an implemented or released API.
+
+## Independence and version dependency
+
+This document and the public event envelope are the only integration dependency between nextloop and its consumers. Consumers do not depend on nextloop's internal ADRs, design discussions, roadmap, branch, or implementation code, and nextloop does not depend on a consumer's internal documents or milestones.
+
+Public API compatibility and event-schema compatibility are versioned independently. A consumer release may depend on an accepted version of this contract without depending on a nextloop release candidate or internal refactor. A nextloop internal refactor must not change consumer behavior when this contract and event schema are unchanged.
 
 ## Public shape
 

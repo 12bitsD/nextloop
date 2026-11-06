@@ -22,6 +22,8 @@ This map records reusable execution requirements and their verification ownershi
 | L16 | Prove consumer independence through public adapters | [ADR-0001](../adr/0001-embeddable-agent-loop.md) | **Open.** Fake and nika adapters pass the same contract suite with no Feishu/Wiki dependency |
 | L17 | Package and release only after protocol verification | [Development plan](development-plan.md) | **Open.** Language, CI, migrations, API/event versions, compatibility notes, and consumer smoke |
 
-## Cross-repository rule
+## Independence rule
 
-nextloop requirements must remain explainable and testable without Feishu, Wiki, a personal agent, a superagent, or a concrete desktop lock. Consumer requirements and acceptance belong to the consumer repository.
+nextloop requirements are designed, implemented, tested, and released independently. Only L16 concerns consumer integration. nextloop does not depend on nika's internal documents, roadmap, personal agent, superagent, or product acceptance.
+
+Cross-repository integration depends only on the versioned public Loop interface and event schema, not on a shared discussion or consumer implementation. Consumer requirements and acceptance remain in the consumer repository.
