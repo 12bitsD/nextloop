@@ -1,5 +1,7 @@
 # 开源 AgentLoop 内核评估
 
+> 候选调研的历史结论。后续已决定直接 follow DSH AgentLoop 主干并保留明确差异，见 [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md)；本文的“reference + self-build”和串行首版建议不再代表当前架构。
+
 核验日期：2026-11-06。Nika 基线：`main@96135332fb4e5b4d9e2621afd63af6803c2a886d`，当前只有设计文档，没有 runtime。本文只做静态源码与官方文档核验；未运行候选项目、模型或测试。下文“支持”只表示所引固定版本存在该实现，不表示端到端实测。
 
 ## 结论

@@ -67,7 +67,7 @@ A retry may resend the exact provider-facing request only when no assistant outp
 
 OpenAI and Kimi use implicit caching with stable prefixes, name-sorted Tool definitions, canonical key ordering, and provider-default TTL. Anthropic uses explicit breakpoints only after committed immutable content: stable system, fixed `AGENTS.md` bootstrap, or a complete recent Conversation group. Adapters handle provider-specific marker support instead of assuming identical `cache_control` behavior.
 
-Cache hits affect cost and latency only, never correctness. Cached tokens still occupy the context window, and `cache_read/cache_write` is recorded for observability. Runtime records model route and parameters, System Prompt/Tool/AGENTS/Skill-index revisions, Conversation event range, cache plan, and serialization version without injecting them into the model. Ordinary Wiki entries do not require a revision record.
+Cache hits affect cost and latency only, never correctness. Cached tokens still occupy the context window, and `cache_read/cache_write` may be recorded for observability. The outer Runtime may record model route and parameters, System Prompt/Tool/AGENTS/Skill-index revisions, Conversation event range, cache plan, and serialization version without injecting them into the model; Provider connection configuration is not part of the Loop's core Trajectory. Ordinary Wiki entries do not require a revision record.
 
 Compaction preserves System Prompt and `AGENTS.md` bytes while creating a new Conversation cache boundary. Explicit model, Tool, or System Prompt changes also create a new boundary; updated Skill context is appended to preserve the old prefix where possible.
 

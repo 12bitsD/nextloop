@@ -1,29 +1,29 @@
 # nextloop requirements map
 
-This map records reusable execution requirements and their verification ownership. It does not replace the linked contracts. No requirement is implemented by being listed here.
+This map records reusable execution requirements and verification ownership. No requirement is implemented by being listed here. Design closure and runtime verification are separate states.
 
 | ID | Requirement and library value | Authoritative design | Status and acceptance required |
 |---|---|---|---|
-| L1 | Drive chat and coding through one deterministic Loop | [AgentLoop](../design/agent-loop.md) | **Lifecycle baseline recorded.** Ordinary text, Tool, cancellation, finalization, and recovery contract tests |
-| L2 | Convert every model response into a valid action or exit | [ReAct review](../architecture/agent-loop-capability-review.md#react-execution-protocol-gap) | **Open.** Complete/partial/mixed/empty/terminal response decision table, Observation pairing, and continuation rules |
-| L3 | Accept and order steer without a second task queue | [Steer and normal completion](../design/agent-loop.md#6-steer-and-input-buffer) | **Open implementation.** Ingress/final-commit ordering, races, recovery, and start conditions |
-| L4 | Reject malformed Tool proposals before any side effect | [Whole-batch validation](../design/agent-loop.md#tool-call-validation) | **Open implementation.** Zero execution for every invalid item, Provider-valid feedback, and correction limits |
-| L5 | Continue after ordinary Tool errors without hiding failure | [Batch policy](../design/agent-loop.md#tool-batch-failure-policy) | **Open verification.** Actual results, independent continuation, and dependent actions split across model calls |
-| L6 | Handle timeout and unknown effects without duplicate work | [Timeout outcomes](../design/agent-loop.md#tool-timeout-outcomes) | **Open implementation.** Unknown closes batch, admission for inspection, persistent restrictions, and no automatic replay |
-| L7 | Preserve prior provider-visible content and maximize cache reuse | [ContextBuilder](../design/context-builder.md) | **Closed design.** Canonical serialization, revision boundaries, exact retry, and provider cache-plan tests |
-| L8 | Keep one active WorkingContext and reconstruct it after compaction | [WorkingContext](../design/context-builder.md#workingcontext-is-append-versioned) | **Closed design.** Idempotency, expiry, event order, and compaction-position tests |
-| L9 | Prevent oversized requests and compact only when useful | [Usage and compaction](../design/context-builder.md#usage-and-preflight) | **Closed design.** Usage fallbacks, output reserves, thresholds, summary validation, and continuation evaluation |
-| L10 | Adjust optimization guidance without forced termination | [Budgets](../design/context-builder.md#budget-profiles-and-change-boundaries) | **Closed design.** Effective timing, result content, and Run versus Session defaults |
-| L11 | Make each Tool implementation replaceable behind one contract | [ToolRuntime interface](../design/loop-interface.md#toolruntime) | **Open.** Per-Tool schemas, errors, cancellation, timeouts, unknown outcomes, and large results |
-| L12 | Keep one append-only event authority and derive Conversation | [EventStore interface](../design/loop-interface.md#eventstore) | **Open implementation.** Schema, seq, idempotency, lease/fence, transactions, and malformed history |
-| L13 | Recover from every commit window without replaying side effects | [Failure matrix](../design/agent-loop.md#10-failure-and-interruption-matrix) | **Open verification.** Intent, execution, result, final commit, delivery receipt, and stale lease tests |
-| L14 | Preserve large outputs and their references | [Content access](../design/context-builder.md#content-access-and-task-performance) | **Open implementation.** Asset identity, preview, retrieval, retention, backup, and GC ordering |
-| L15 | Retry delivery without rerunning model or Tools | [DeliveryOwner](../design/loop-interface.md#deliveryowner) | **Open verification.** `final_message_id`, delivery_unknown, durable handoff, and writer-release ordering |
-| L16 | Prove consumer independence through public adapters | [ADR-0001](../adr/0001-embeddable-agent-loop.md) | **Open.** Fake and nika adapters pass the same contract suite with no Feishu/Wiki dependency |
-| L17 | Package and release only after protocol verification | [Development plan](development-plan.md) | **Open.** Language, CI, migrations, API/event versions, compatibility notes, and consumer smoke |
+| L1 | Drive chat and coding through one DSH-aligned Loop | [AgentLoop](../design/agent-loop.md) | **Design closed.** Turn/Step, cancellation, finalization and recovery contract tests |
+| L2 | Convert every model response into a valid action or exit | [ReAct](../design/react-protocol.md) | **Design closed.** Complete/partial/mixed/empty/terminal cases and correction limits |
+| L3 | Accept and order steer without a second task queue | [Input and steer](../design/agent-loop.md#4-input-steer-and-cancellation) | **Design closed.** Ingress/final races, recovery and later-Turn routing tests |
+| L4 | Reject malformed Tool proposals before any side effect | [Tool admission](../design/agent-loop.md#6-tool-admission-and-parallel-scheduling) | **Design closed.** Zero execution and legal correction feedback for every invalid class |
+| L5 | Continue after ordinary Tool errors without hiding failure | [Observation](../design/agent-loop.md#7-observation-contract) | **Design closed.** Actual results, independent continuation and dependent-action tests |
+| L6 | Handle parallel calls, timeout and unknown effects without duplicate work | [Scheduling](../design/agent-loop.md#6-tool-admission-and-parallel-scheduling) | **Design closed.** Pool/barrier, unknown close, admission, persistent restrictions and no replay |
+| L7 | Preserve prior provider-visible content and maximize cache reuse | [ContextBuilder](../design/context-builder.md) | **Design closed.** Canonical serialization, frozen requests, exact retry and cache-plan tests |
+| L8 | Keep one active WorkingContext and reconstruct it after compaction | [WorkingContext](../design/context-builder.md#workingcontext-is-append-versioned) | **Design closed.** Idempotency, expiry, event order and compaction-position tests |
+| L9 | Prevent oversized requests and compact only when useful | [Usage and compaction](../design/context-builder.md#usage-and-preflight) | **Design closed.** Usage fallbacks, thresholds, summary validation and continuation tests |
+| L10 | Adjust optimization guidance without forced termination | [Budgets](../design/context-builder.md#budget-profiles-and-change-boundaries) | **Design closed.** Effective timing, result content and Run/Session defaults tests |
+| L11 | Make Tool implementations replaceable behind one contract | [ToolRuntime](../design/loop-interface.md#toolruntime) | **Generic design closed.** Consumer Schemas, resources, cancellation, unknown and assets conformance |
+| L12 | Keep one append-only event authority and derive Conversation | [Event model](../design/agent-loop.md#8-event-model-and-transaction-groups) | **Design closed.** Field schema, seq, idempotency, lease/fence, transactions and malformed history |
+| L13 | Recover from every commit window without replaying side effects | [Recovery](../design/agent-loop.md#9-recovery-and-delivery) | **Design closed.** Process-exit matrix, stale leases and persistent resource tests |
+| L14 | Preserve large outputs and their references | [Content access](../design/context-builder.md#content-access-and-task-performance) | **Open implementation.** Asset identity, preview, retrieval, retention, backup and GC |
+| L15 | Retry delivery without rerunning model or Tools | [DeliveryOwner](../design/loop-interface.md#deliveryowner) | **Design closed.** `final_message_id`, delivery_unknown, durable handoff and writer-release tests |
+| L16 | Prove consumer independence through public Adapters | [Loop interface](../design/loop-interface.md) | **Open.** Fake and nika Adapters pass the same suite with no Feishu/Wiki dependency |
+| L17 | Package and release only after protocol verification | [Development plan](development-plan.md) | **Open.** Language, CI, migrations, versions, compatibility and consumer smoke |
 
 ## Independence rule
 
-nextloop requirements are designed, implemented, tested, and released independently. Only L16 concerns consumer integration. nextloop does not depend on nika's internal documents, roadmap, personal agent, superagent, or product acceptance.
+nextloop requirements are designed, implemented, tested and released independently. Only L16 concerns consumer integration. nextloop does not depend on nika's internal documents, roadmap, personal agent, superagent or product acceptance.
 
-Cross-repository integration depends only on the versioned public Loop interface and event schema, not on a shared discussion or consumer implementation. Consumer requirements and acceptance remain in the consumer repository.
+Cross-repository integration depends only on the versioned public Loop interface and event schema, not shared discussions or consumer implementation.

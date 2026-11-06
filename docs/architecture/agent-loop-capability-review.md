@@ -1,5 +1,7 @@
 # AgentLoop 能力分类与架构收敛分析
 
+> 历史评审记录。2026-11-06 起，当前权威架构为 [DSH-aligned AgentLoop](../design/agent-loop.md) 与 [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md)；本文保留当时的缺口分析和候选比较，不再代表当前进度或纯串行 Tool 决策。
+
 日期：2026-11-02。对照基线：`57713e41124e2b085fc781c993cfebeb7156fc6a`，加本次 [AgentLoop 内部拆分工作稿](../design/agent-loop.md#12-internal-structure-and-module-interfaces)。来源为用户提供的 Agent Loop / DSH / Super-agent 综述，以及本轮公开一手来源核验。本文是分析与候选清单，不把外部机制直接改为 Nika 已确认需求；功能状态仍由 [roadmap](discussion-roadmap.md)、[worklist](feature-worklist.md) 和各设计文件承载。
 
 用户要求是：完整记录输入，按综述的标准和分类检查现有设计，判断哪些能力有必要补充；整体架构简单，完整功能范围内的细节打磨到位。当前仓库仍无 runtime，实现和运行验收均未开始。下文的“已有”统一指已有设计。

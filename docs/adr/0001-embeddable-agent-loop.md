@@ -8,7 +8,7 @@
 
 nika began with one native AgentLoop alongside Feishu, AgentWiki, Skills, concrete Tools, deployment, and product policy. The execution protocol has value beyond nika, but mixing those responsibilities in one repository makes the Loop harder to reuse and verify independently.
 
-The execution design was evaluated against open-source AgentLoop candidates in [open-source-agent-loops.md](../research/2026-11-06-open-source-agent-loops.md). No candidate was suitable as a complete kernel. nextloop therefore uses a reference-and-self-build approach, with DSH as the primary structural reference and Hermes as a secondary lifecycle reference.
+The execution design was evaluated against open-source AgentLoop candidates in [open-source-agent-loops.md](../research/2026-11-06-open-source-agent-loops.md). No candidate was suitable as a complete kernel. nextloop therefore uses an independent implementation, with DSH as the primary structural reference and Hermes as a secondary lifecycle reference. [ADR-0002](0002-dsh-aligned-agent-loop.md) later refined this into directly following DSH's AgentLoop structure with explicit execution deltas.
 
 ## Decision
 

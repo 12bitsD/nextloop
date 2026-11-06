@@ -1,30 +1,34 @@
 # nextloop
 
-A small, embeddable AgentLoop library with explicit execution, recovery, and delivery semantics.
+A small, embeddable AgentLoop library with explicit execution, recovery and delivery semantics.
 
-Status: **architecture and interface design**. There is no runtime implementation or release yet.
+Status: **DSH-aligned architecture accepted; implementation and verification pending**. There is no accepted runtime package or release yet.
 
-## What it owns
+## Architecture
 
-- `Session / Turn / Run / ModelCall / Attempt` identities and legal state transitions;
-- append-only event envelopes and deterministic Conversation projection;
-- ordered steer injection and final-response commit ordering;
-- model invocation, bounded retries, and partial-output classification;
-- whole-batch Tool validation, serial execution, correlated results, and unknown outcomes;
-- cancellation, finalization, recovery, and delivery-only retry;
-- provider-neutral contracts and a failure-injection verification suite.
+nextloop follows DSH's event-sourced Session, Turn/Step driver, derived Conversation, next-step input and crash closers. It does not fork DSH or adopt Cordis.
 
-It is a library, not an HTTP service, multi-agent framework, Router, EventBus, or product bot.
+Its agreed execution rules are:
+
+- `Session / Turn / Run / Step / ModelCall / Attempt` identities and deterministic transitions;
+- append-only Trajectory and Conversation projection;
+- durable steer acceptance and atomic final-response ordering;
+- configured OpenAI-compatible and Anthropic Provider Adapters with externally managed connection configuration;
+- whole-batch Tool validation, bounded parallel/exclusive scheduling and model-order Observations;
+- honest cancellation and unknown effects without automatic replay;
+- one finalization path, crash closers and delivery-only recovery.
+
+It is a library, not an HTTP service, multi-agent framework, Router, EventBus or product bot.
 
 ## What it deliberately does not own
 
-- nika's personal agent or superagent architecture, including goals, verification, Proactive behavior, and any future supervision or multi-agent collaboration;
+- nika's personal agent or superagent architecture, goals, verification, Proactive behavior or future coordination;
 - Feishu or other channel implementations;
-- Wiki, Skills, personas, or a memory service;
+- Wiki, Skills, personas or a memory service;
 - concrete Browser/Computer/document Tools and their resource locks;
-- credentials, deployment, proactive product policy, or automatic self-improvement.
+- Provider connection-configuration persistence, credentials, deployment or automatic self-improvement.
 
-[nika](https://github.com/12bitsD/nika) is the first intended consumer. nika keeps its complete personal agent and superagent architecture, channels, knowledge, concrete Tools, and product behavior behind adapters. The name superagent does not itself adopt Router/Worker, background jobs, or a multi-agent framework.
+[nika](https://github.com/12bitsD/nika) is the first intended consumer and keeps its product behavior behind versioned Adapters. Provider response data needed for execution may be persisted in Trajectory; model ID, base URL, credentials and connection defaults are managed outside the Loop.
 
 ## Public interface direction
 
@@ -34,34 +38,25 @@ AgentLoop.steer(input)
 AgentLoop.cancel(cause)
 ```
 
-Adapters provide `EventStore`, `ModelProvider`, `ContextBuilder`, `Compactor`, `ToolRuntime`, and `DeliveryOwner`. The Loop owns legal transitions and commit ordering; adapters own actual model, storage, execution, and delivery behavior.
+SessionManager owns Session resolution, writer leases and process-start recovery. Adapters provide `EventStore`, `ModelProvider`, `ContextBuilder`, `Compactor`, `ToolRuntime` and `DeliveryOwner`.
 
 ## Documentation
 
-Start with [VISION.md](VISION.md) for goals, scope, and design values, and [requirements.md](docs/architecture/requirements.md) for protocol ownership and acceptance.
+Start with [VISION.md](VISION.md) and the [requirements map](docs/architecture/requirements.md).
 
-- [Loop interface](docs/design/loop-interface.md) — public shape, adapter seams, and ownership.
-- [AgentLoop core design](docs/design/agent-loop.md) — execution state, Tool protocol, cancellation, finalization, and recovery.
-- [ContextBuilder design](docs/design/context-builder.md) — request assembly, WorkingContext, cache, usage, compaction, and budgets.
-- [Discussion roadmap](docs/architecture/discussion-roadmap.md) — current protocol topics and close conditions.
-- [Feature worklist](docs/architecture/feature-worklist.md) — reusable Loop capabilities and remaining decisions.
-- [Capability review](docs/architecture/agent-loop-capability-review.md) — ReAct/Harness comparison and G0–G13 ownership.
-- [ADR-0001](docs/adr/0001-embeddable-agent-loop.md) — repository boundary and documentation ownership.
+- [DSH-aligned AgentLoop](docs/design/agent-loop.md) — canonical execution, Tool, event and recovery design.
+- [Loop interface](docs/design/loop-interface.md) — public shape, Adapter seams and ownership.
+- [ReAct protocol](docs/design/react-protocol.md) — response decisions and bounded correction.
+- [ContextBuilder](docs/design/context-builder.md) — request assembly, cache, WorkingContext, usage and compaction.
+- [Verification matrix](docs/design/verification-matrix.md) — required protocol, Provider, concurrency and crash evidence.
+- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md) — DSH alignment and explicit deltas.
 - [Development plan](docs/architecture/development-plan.md) — implementation and release sequence.
-- [Research](docs/research/) — DSH, Hermes, Yomi, Provider, Tool, and open-source Loop evaluations.
+- [Research](docs/research/) — DSH, Hermes, Yomi, Provider, Tool and open-source evaluations.
 
-Loop documents are maintained only here. nika keeps product-specific Prompt, AgentWiki, Feishu, deployment, and Proactive design in its own repository.
+Loop documents are maintained only here. nika keeps product-specific Prompt, AgentWiki, Feishu, deployment and Proactive design in its own repository.
 
 ## Release conditions
 
-A release requires more than a successful model → Tool → model path. The verification matrix must cover:
-
-- final-response commit versus steer races;
-- whole-batch validation failure with zero Tool invocations;
-- ordinary Tool errors and dependent actions;
-- timeout and unknown effects without automatic replay;
-- exact-byte retry only when allowed;
-- cancellation and process death at each commit window;
-- delivery-only recovery and persistent resource restrictions.
+The initial release requires the complete [verification matrix](docs/design/verification-matrix.md), including final/steer races, zero-side-effect validation, parallel scheduling, unknown outcomes, exact-byte retry, process death, SQLite recovery and delivery-only recovery.
 
 API versions and event-schema versions are tracked separately. No release is claimed by this repository setup.

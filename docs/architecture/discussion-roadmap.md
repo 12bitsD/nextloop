@@ -1,49 +1,53 @@
-# nextloop discussion roadmap
+# nextloop discussion and delivery roadmap
 
-Purpose: finish the reusable execution protocol without duplicating nika's product roadmap. This file tracks nextloop's remaining contracts and release conditions.
+Purpose: track reusable execution contracts and release work without duplicating nika's product roadmap.
 
-Current entry: **T1 ReAct execution protocol jointly with T3 Tool contracts**. There is no runtime implementation or release yet.
+Current entry: **implementation contracts and verification planning**. The architecture discussion is closed; there is no accepted runtime implementation or release.
 
 ## Fixed guardrails
 
+- Follow DSH Session/Turn/Step, projection and crash-closer structure without forking DSH or adopting Cordis.
 - One embeddable Loop, not a service or multi-agent framework.
-- Append-only events are authoritative; Conversation is derived.
-- Whole-batch validation before any Tool side effect.
-- Unknown effects are not automatically replayed.
-- Every exit has one finalization path.
-- No Feishu, Wiki, concrete product Tools, or proactive product policy in this repository.
+- Append-only Trajectory is authoritative; Conversation is derived.
+- Whole-batch validation precedes every Tool side effect.
+- Bounded parallel/exclusive scheduling preserves model-order results.
+- Unknown effects stop new dispatch and are never automatically replayed.
+- Every exit has one finalization path; committed finals recover by delivery only.
+- Provider connection configuration is external; execution Trajectory is persistent.
+- No Feishu, Wiki, concrete product Tools or Proactive product policy here.
 
 ## Topics
 
-| Topic | Remaining work | Close condition | Status |
-|---|---|---|---|
-| T1 Execution and ReAct | Response classification, valid actions, observations, continuation, exits, input ownership, finalization | Complete/partial/mixed/empty/terminal responses have deterministic behavior and commit ownership | **Current**, jointly with T3; lifecycle baseline in [agent-loop.md](../design/agent-loop.md), G0 in [capability review](../architecture/agent-loop-capability-review.md) |
-| T2 Model and Context | Provider wire mapping, partial output, retries, cache plans, usage/preflight, compaction | Each candidate has an admitted-request contract and provider examples with byte/retry/cache verification | Mostly closed design in [context-builder.md](../design/context-builder.md); implementation contracts remain |
-| T3 Tool contracts | Schemas, descriptions, results, errors, cancellation, timeouts, unknown effects, large results | Every Tool has a complete contract and failure examples, with validation and observation verification | **Current**, jointly with T1 |
-| T4 Durable state | Event schema, seq, idempotency, lease/fence, transactions, projection, recovery, assets | Crash windows and malformed history have deterministic recovery with no hidden second truth | Pending; implementation-level |
-| T5 Adapter integration | Consumer EventStore/Provider/Tool/Delivery adapters and conformance evidence; nika is the first example, not a protocol dependency | Fake and consumer adapters satisfy the same protocol with no private bypass | Pending; after core contracts |
-| T6 Release and maintenance | Versioning, migrations, packaging, CI, compatibility, release notes | Public API and event schema are versioned and the full failure matrix passes | Pending |
+| Topic | Accepted design | Status |
+|---|---|---|
+| T1 Execution and ReAct | DSH Turn/Step driver, response decision table, two-correction bound, ordered steer and common finalization | **Design closed** in [AgentLoop](../design/agent-loop.md) and [ReAct](../design/react-protocol.md); verification pending |
+| T2 Model and Context | Configured OpenAI/Anthropic Adapters, frozen in-memory requests, external Provider configuration, append-only context, usage/preflight and compaction | **Design closed**; Adapter contracts and wire tests pending |
+| T3 Tool contracts | Whole-batch admission, parallel/exclusive scheduling, model-order Observations, ordinary errors, unknown/cancellation close rules | **Generic design closed**; resource mechanisms and per-consumer Tool Schemas pending |
+| T4 Durable state | Event types, transaction groups, seq/idempotency/lease guards, projection, crash closers and delivery-only recovery | **Design closed**; field-level schema, migrations and fault tests pending |
+| T5 Adapter integration | Public versioned Adapters; nika is the first consumer example, not a protocol dependency | Pending after core contracts |
+| T6 Release and maintenance | Language/package, CI, versioning, migrations, examples and release notes | Pending; the full verification matrix is the gate |
 
-## Current remaining protocol questions
+## Remaining implementation contracts
 
-- Classify complete, mixed, empty, truncated, malformed, and terminal model responses.
-- Define Provider-valid rejection feedback and correction triggers/limits after whole-batch validation failure.
-- Finalize per-Tool result and Observation schemas, including unknown execution evidence and large assets.
-- Specify event fields and transaction groups for final-response commit, input acceptance, and delivery handoff.
-- Define resource restriction persistence, responsibility transfer, and verified release after unknown effects.
-- Choose implementation language and package layout only after these contracts stop changing.
+- Field-level event payloads, schema migration and malformed-history handling.
+- Resource-restriction persistence, responsibility transfer, numeric cleanup deadlines and verified release.
+- Deterministic OpenAI/Anthropic request/response fixtures and exact-byte retry evidence.
+- Implementation language, package layout and dependency policy.
+- Fake-adapter conformance, real SQLite process-exit tests and one consumer Adapter.
 
-## Required close packet per topic
+These are implementation and verification tasks, not new architecture topics.
+
+## Required evidence per topic
 
 1. Accepted input and behavior.
 2. Interface and unique commit owner.
-3. Normal, failure, cancellation, and recovery scenarios.
-4. Verification evidence and remaining implementation work.
+3. Normal, failure, cancellation and recovery scenarios.
+4. Verification evidence and explicit remaining consumer work.
 
-Every accepted decision updates the owning design document and this roadmap. Do not copy the full protocol into this file.
+The accepted [verification matrix](../design/verification-matrix.md) is the release checklist. Do not mark a requirement implemented from documentation alone.
 
 ## Integration links
 
-- [nika](https://github.com/12bitsD/nika) independently owns personal agent and superagent behavior, Feishu, AgentWiki, Skills, product Prompt, deployment, and Proactive. It is a consumer example, not a milestone dependency.
-- [Open-source AgentLoop evaluation](../research/2026-11-06-open-source-agent-loops.md) records why nextloop is reference-and-self-build rather than a fork.
-- [ADR-0001](../adr/0001-embeddable-agent-loop.md) records the repository boundary and versioned-contract rule.
+- [nika](https://github.com/12bitsD/nika) independently owns personal agent and superagent behavior, Feishu, AgentWiki, Skills, Prompts, deployment and Proactive behavior.
+- [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md) records the DSH-aligned decision and deltas.
+- [Open-source evaluation](../research/2026-11-06-open-source-agent-loops.md) preserves the earlier candidate comparison.

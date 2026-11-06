@@ -1,52 +1,52 @@
 # nextloop feature worklist
 
-Purpose: track reusable Loop capabilities. **Open** means a material design or verification choice remains; no row implies runtime implementation.
+Purpose: track reusable Loop capabilities. No row implies runtime implementation; accepted designs still require the linked verification.
 
 ## Execution and context
 
-| Feature | Current approach | Remaining decision |
+| Feature | Accepted approach | Remaining work |
 |---|---|---|
-| AgentLoop | On-demand driver with explicit state, model/Tool ordering, cancellation, finalization, and recovery. Internal flows are separated by responsibility | ReAct follow-up, concrete interfaces/layout, event schema, numeric timeouts, implementation tests |
-| ReAct execution protocol | Native model → Tool → Observation → model cycle, with whole-batch admission and evidence-bounded final delivery | **Open:** complete/partial/mixed/empty/terminal responses, correction protocol, continuation/exits, Provider-required fields |
-| SessionManager | Resolve Session, enforce single-writer execution, create/end Runs | Lease recovery and stale-run detection after process failure |
-| Mailbox and steer | Ordered Session buffer; pending steer before final commit continues the current Turn; later input starts a new Turn | Durable ingress/final-commit ordering and pending-input recovery/start conditions |
-| WaitingRequest | At most one runtime-created pending request per Session; validated answers resume the original operation | Presentation, timeout UX, and exact result schema |
-| Cancellation and finalization | Settle incomplete calls, persist, release safe resources, retain restrictions for unknown effects, then deliver | Cleanup deadlines, resource transfer and recovery protocols |
-| Tool call validation | Any name, arguments/schema, completeness, or identity error rejects the entire batch before execution | Provider-valid error feedback, correction triggers/limits, identity mapping and error fields |
-| Ordinary Tool errors | Commit actual errors and return them to the model; independent admitted calls may continue; dependent actions require separate model calls | Per-Tool error formats and model-scenario verification |
-| Tool timeout and unknown outcomes | Bounded cleanup; unknown closes the batch; inspection only under Runtime admission; restrictions survive Run closure | Isolation/admission mechanisms, numeric deadlines, result fields and verification |
-| ContextBuilder | Immutable, append-only provider-visible content within fixed revisions; explicit cache planning and complete preflight | Detailed Tool schemas and provider implementation contracts |
-| WorkingContext | One active reminder per Session; append-only set/clear/expiry; latest active version follows the task summary | Implementation tests for idempotency, expiry, event order, and compaction position |
-| Compaction | Dedicated prompt supplied by the consumer; normal Agent summary with no Tool execution; validated reduction and new Conversation boundary | Implementation tests and live continuation evaluation |
-| Provider cache planning | OpenAI/Kimi implicit caching; Anthropic explicit breakpoints after committed immutable content; exact retry only when allowed | Serialization, revision, retry identity, and provider cache-plan verification |
-| Content access | Large results become assets with previews; pagination limits one response, not total access; Provider capacity is enforced | Asset retrieval, pagination, and oversized fixed-content behavior |
-| Usage and preflight | Provider usage, count_tokens, or complete local estimate; 75% or capacity violation triggers compaction | Usage fallbacks, output reserves, thresholds, and post-compaction admission |
-| Budget profiles | `lite/pro/promax` as soft guidance; changes apply after commit to the next operation | Result content, effective timing, over-budget guidance, Run versus Session defaults |
+| AgentLoop | DSH Session/Turn/Step driver, append-only projection, next-step input and crash closers | Concrete interfaces/layout and implementation tests |
+| ReAct execution protocol | Response decision table; one correction per abnormal response, at most two per Run | Provider mapping and protocol-exhaustion tests |
+| SessionManager | Resolve Session, enforce single writer, create/end Runs and recover incomplete history | Lease recovery and stale-run detection |
+| Mailbox and steer | Durable ordered next-step buffer; final-before/after routing through Store guards | Concurrency and pending-input recovery tests |
+| WaitingRequest | At most one runtime-created pending request per Session | Presentation, timeout UX and result schema |
+| Cancellation and finalization | Stop new work, settle started calls, persist, retain unknown restrictions, then deliver | Cleanup deadlines and resource-transfer protocols |
+| Tool validation | Any format, Schema, completeness or identity error rejects the whole batch | Provider fixtures and zero-side-effect tests |
+| Tool scheduling | Bounded parallel pool with exclusive barriers; `max_parallel=4` by default; model-order results | Deterministic concurrency and failure-injection tests |
+| Unknown outcomes | Stop new dispatch, settle started work, correlate skipped calls, restrict unsafe continuation | Isolation/admission mechanisms, deadlines and recovery tests |
+| ContextBuilder | Frozen in-memory requests, append-only provider-visible content and complete preflight | Serialization and capacity tests |
+| WorkingContext | One active reminder per Session; append-versioned; latest follows compaction summary | Idempotency, expiry and event-order tests |
+| Compaction | Consumer Prompt, no Tools, validated reduction and new Conversation boundary | Implementation and live continuation evaluation |
+| Provider configuration | Consumer-configured OpenAI/Anthropic protocol, model ID, base URL and credentials; not persisted by Loop | Adapter fixtures and configuration-leak checks |
+| Provider response data | Streaming assembly, usage and required opaque response data may enter Trajectory | OpenAI/Anthropic contract tests |
+| Budget profiles | `lite/pro/promax` soft guidance; changes apply after commit | Result and effective-timing tests |
 
 ## Tool and durable contracts
 
-| Feature | Current approach | Remaining decision |
+| Feature | Accepted approach | Remaining work |
 |---|---|---|
-| Tool Catalog and ToolRuntime | Static catalog, serial execution, intent before effect, correlated results, cancellation and timeout evidence | **Open:** detailed per-Tool contracts and complete resource ownership |
-| Trajectory and event envelope | Append-only, versioned events with Session/Turn/Run/ModelCall/Attempt and monotonic seq | Field-level schema, migration, malformed-event handling |
-| Conversation projection | Derive from latest compaction and subsequent events; no second persistent truth | Exact fold and validation rules for interrupted or malformed events |
-| Assets | External, content-addressed large observations with references and previews | Lifecycle, deduplication, access, backup format, GC ordering |
-| SessionCatalog and export | Cursor-based reads and explicit `trace/v1`, `aift/v1`, or compatible exports | Filters, access, incomplete records, manifest and partial-failure behavior |
-| Persistent storage | SQLite WAL and `synchronous=FULL`, synchronous authoritative writes, no persistent Snapshot | Exact schema, migration, transactions, corruption recovery |
-| Backup and GC | Online backup plus assets; manual, dry-run capable GC with active/pinned exclusions | Schedule, destination, encryption, retention, restore drills, disk-full handling |
+| Observation | Correlated status, content/assets, execution state, effect state and continuation admission | Field-level Provider mappings and malformed-history tests |
+| Trajectory | Versioned append-only events with Session/Turn/Run/Step/ModelCall/Attempt and seq | Concrete schema and migrations |
+| Event transactions | Atomic Turn/Step/final/recovery groups; separate Tool call/result commits | Real Store concurrency and commit-window tests |
+| Conversation projection | Latest compaction plus subsequent events; no second persistent truth | Exact fold and validation rules |
+| Assets | External large Observations with references and previews | Lifecycle, retrieval, backup and GC ordering |
+| SessionCatalog and export | Cursor reads and explicit `trace/v1`, `aift/v1` or compatible exports | Filters, manifests and partial-failure behavior |
+| Persistent storage | SQLite WAL and `synchronous=FULL`, synchronous authoritative writes | Schema, migration, corruption and process-exit tests |
+| Backup and GC | Online backup plus assets; manual dry-run GC with active/pinned exclusions | Destination, encryption, retention and restore drills |
 
 ## Engineering
 
-| Feature | Current approach | Remaining decision |
+| Feature | Current approach | Remaining work |
 |---|---|---|
-| Adapter conformance | Fake Provider, Tool, Store, and Delivery adapters with a shared failure matrix | Complete commit-window, cancellation, recovery, and Provider wire verification |
-| Deployment | Library consumed by a single-container product such as nika | Package layout, dependency policy, health and resource metrics |
-| Language | Python is preferred for ecosystem fit; no final selection yet | **Open:** language, concrete interfaces, package layout |
-| Release and CI | API and event-schema versions tracked separately; release only after the full failure matrix | Formatting, unit, integration, compatibility, consumer smoke, and release requirements |
+| Adapter conformance | Shared fake-adapter failure matrix and real Store tests | Complete V1–V6 evidence |
+| Deployment | Library consumed by a single-container product such as nika | Package layout, dependency policy and metrics |
+| Language | Python preferred for ecosystem fit; no final selection | **Open:** language, concrete interfaces and package layout |
+| Release and CI | API/event versions tracked separately; release only after the matrix | Formatting, tests, compatibility, examples and consumer smoke |
 
 ## Explicitly out of scope
 
 - Feishu or other product channels and their UX.
-- Wiki, Skills, personas, Memory services, and automatic self-improvement.
+- Wiki, Skills, personas, Memory services and automatic self-improvement.
 - Concrete Browser/Computer/document Tools and their resource locks.
-- Router/Worker, generic EventBus, background jobs, and a supervisory Agent.
+- Router/Worker, generic EventBus, background jobs and supervisory Agents.
