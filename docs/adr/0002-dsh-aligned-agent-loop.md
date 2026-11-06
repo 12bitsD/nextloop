@@ -1,48 +1,42 @@
 # ADR-0002: Follow DSH's AgentLoop with explicit execution deltas
 
-- Status: Accepted
+- Status: Accepted (refined 2026-11-06)
 - Date: 2026-11-06
-- Scope: driver structure, Tool scheduling, Provider ownership, Trajectory and recovery
+- Scope: coordinates, driver structure, Tool scheduling, closed `ToolOutcome` ADT, surface watermark projection, and recovery
 
 ## Context
 
-The earlier reference-and-self-build direction left too much room for a separate custom driver. DSH already provides the closest structural model: event-sourced Sessions, derived messages, Turn/Step execution, next-step input, frozen request context and crash closers.
+DSH provides the cleanest structural model for an event-sourced AgentLoop: append-only Session logs, surface-folded message derivation, integer `(turn, step)` coordinates, `next-step` inbox checks before Turn completion, parallel/exclusive Tool barriers, and pure crash-closer functions (`repair.ts`).
 
-The project values remain deterministic commits, small interfaces, Provider independence, whole-batch Tool admission, honest unknown effects, and no automatic replay of side effects.
+At the same time, an early draft of nextloop accumulated defensive spec bloat: six nested UUID identities (`session/turn/run/step/model_call/attempt`), four orthogonal Tool status fields yielding 80 state combinations, and database exception-driven control flow for in-process `steer` versus `final` races.
 
 ## Decision
 
-nextloop follows DSH's AgentLoop structure rather than inventing a separate state-machine architecture. It retains Session/Turn/Step identities and adds Run only for writer fencing, recovery and resource responsibility.
+nextloop directly adopts DSH's Turn/Step driver and surface-projection architecture, paired with five high-leverage simplifications:
 
-The following DSH mechanisms are adopted conceptually:
+1. **4D integer coordinates (`session_id`, `turn: int`, `step: int`, `attempt: int`) + `writer_epoch: int`:**
+   - Because interrupted Turns are sealed by crash closers and never replayed in place, `Turn` and `Run` are unified into `turn: int`.
+   - Because one `Step` is always one logical model request and its Tool batch, `Step` and `ModelCall` are unified into `step: int`.
+   - `writer_epoch` fences stale writers without introducing another execution hierarchy.
 
-- append-only Session log and derived Conversation;
-- Turn and Step driver boundaries;
-- next-step input checks during Turn stopping;
-- assistant response before Tool dispatch;
-- `tool/call` before effects and correlated `tool/result` facts;
-- model-ordered batch settlement and crash closers;
-- frozen in-memory request messages and append-only request content.
+2. **Closed 5-variant `ToolOutcome` ADT (Make illegal states unrepresentable):**
+   - Replaces orthogonal `status × execution_state × effect_state × continuation_allowed` fields with five closed variants: `Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, and `UncertainHanging`.
+   - `UncertainSettled` closes the batch and permits a same-Turn inspection Step; `UncertainHanging` closes the batch, locks resources, and blocks the Turn.
 
-The implementation is independent and does not fork DSH or adopt Cordis.
+3. **In-memory single-actor serialization + DB crash invariants:**
+   - One active `SessionDriver` per Session serializes `steer`, Step transitions, and `final` commitment in memory.
+   - SQLite `PRIMARY KEY (session_id, seq)` and `writer_epoch` checks act strictly as fail-closed crash and split-brain invariants, never as normal `try/except` control flow.
 
-## Agreed deltas
+4. **`surface_op` (`append | epoch | none`) watermark projection:**
+   - Log-only events (`turn/start`, `step/start`, `assistant/attempt`, `tool/call`, `delivery/*`) use `surface_op = 'none'`.
+   - Model-visible messages use `surface_op = 'append'`.
+   - `compaction` uses `surface_op = 'epoch'`, acting as a watermark so ContextBuilder loads only events since the latest epoch in O(Δ) time.
 
-- Any call-format, identity or Schema error rejects the whole batch before dispatch.
-- ToolRuntime supports bounded parallel calls and exclusive barriers; `max_parallel` defaults to 4. Observations commit in model order.
-- Unknown or cancellation stops new dispatch, settles started work and correlates unstarted calls as `not_executed`.
-- Unknown effects close the batch. Continuation requires stopped/isolated execution and explicit Runtime admission.
-- Input acceptance and final commitment are durable Store transactions, not only in-memory inbox checks.
-- Public ordinary input remains `steer`; next-step/next-turn routing is internal.
-- Exact-byte Provider retry requires no assistant output and no new input. Partial output is not blindly retried.
-- Final facts precede delivery; recovery retries only delivery by `final_message_id`.
-- Provider connection configuration is external and is not persisted by the Loop.
-- Provider response data needed for execution may be persisted in Trajectory.
+5. **Whole-batch admission, CPU-style barriers, and external Provider config:**
+   - Any malformed call or Schema error rejects the whole batch before dispatch.
+   - Admitted calls use bounded `parallel` pools (`max_parallel = 4`) and `exclusive` barriers, committing `tool/result` in model order.
+   - Provider connection config (`openai | anthropic`, `model_id`, `base_url`, credentials) stays external; Trajectory persists only execution facts.
 
 ## Consequences
 
-The design is smaller than a custom driver and easier to compare against DSH source and tests. Parallel execution requires deterministic scheduling and failure tests, but does not change event or recovery semantics.
-
-DSH's per-item malformed-argument diagnostics, generic plugin hooks, Provider configuration persistence and hidden retry policies are not adopted. Product channels, knowledge, concrete Tools, deployment and Proactive behavior remain consumer responsibilities.
-
-The canonical protocol is [agent-loop.md](../design/agent-loop.md), and the release gate is [verification-matrix.md](../design/verification-matrix.md).
+The conceptual surface shrinks dramatically while preserving every safety invariant. Traces are human-readable by integer `(turn, step, attempt, seq)`, illegal Tool states are impossible to construct, and context assembly scales with current epoch length rather than total Session age.

@@ -1,56 +1,53 @@
 # ReAct execution protocol
 
-Status: accepted design, 2026-11-06. This closes T1 response-to-action semantics. Implementation and Provider verification remain pending.
+Status: accepted design, 2026-11-06. Closes T1 response-to-action semantics and the closed 5-variant `ToolOutcome` model.
 
 ## 1. One response, one explicit action
 
-The Loop follows DSH's Step model and native Tool Calls. It does not require visible `Thought:` text, parse hidden reasoning, or add a Planner module.
+The Loop uses DSH's `(turn, step, attempt)` coordinates and native Tool Calls. A Provider Adapter maps its wire stream into one logical `ModelResponse`; the driver then takes exactly one branch:
 
-| Logical response | Durable fact | Next action |
+| Logical response | Durable fact committed | Driver action |
 |---|---|---|
-| Complete nonempty text, no Tool Calls | Commit assistant response and usage | Pending steer continues the same Turn/Run with another Step; otherwise commit final. |
-| Complete explicit refusal, no Tool Calls | Commit refusal as the assistant response | Same final/steer rule as ordinary text. |
-| Complete Tool Calls, with or without text | Commit text, proposed calls, response data and usage | Validate the whole batch. Mixed text is not delivered separately. |
-| Empty complete response | Commit response facts and protocol diagnostic | Append one protocol correction; never deliver an empty final. |
-| Length/token truncation | Commit partial facts and completeness status | Execute no calls and request one complete correction. |
-| Invalid call identity, JSON, name or arguments | Commit raw facts and rejection | Execute zero calls and append correction feedback. |
-| Provider content filter or terminal response | Commit terminal and partial facts | Finalize as failed; do not redeliver partial text. |
-| Retryable Provider failure before output | Commit Attempt failure | Retry identical frozen bytes only within bounds and with no new input. |
-| Provider failure after partial output | Commit partial/Attempt facts | Do not retry unchanged or deliver partial text as complete. |
-| Cancellation | Commit cancellation and partial facts | Enter common finalization; retain pending steer for a later Turn. |
+| Complete nonempty text, no Tool Calls | `assistant/message` (`surface_op='append'`) + usage | Check in-memory Inbox under Session lock: if `next_step` steer is pending, advance to `step + 1`; otherwise atomically commit `final/message + step/end + turn/end`. |
+| Complete explicit refusal, no Tool Calls | `assistant/message` (refusal) + usage | Same Inbox check and final/steer rule as ordinary text. |
+| Complete Tool Calls (with or without text) | `assistant/message` + usage | Validate whole batch. Mixed text stays in Conversation history as process context and is never delivered as a standalone final reply. |
+| Empty complete response | `assistant/message` (empty) + diagnostic | Request bounded protocol correction (`step + 1`); never deliver an empty final reply. |
+| Length/token truncation (`finish_reason=length`) | `assistant/message` (`surface_op='none'`, incomplete) | Execute zero Tool Calls; append protocol correction user message and advance to `step + 1`. |
+| Invalid call identity, JSON, name, or Schema | `assistant/message` (`surface_op='none'`) + `tool/batch-rejected` | Execute zero calls; append protocol correction user message naming all validation errors and advance to `step + 1`. |
+| Provider content filter or terminal error | `assistant/attempt` failure | Enter finalization as `Failed`; do not redeliver partial text. |
+| Retryable Provider error before any output | `assistant/attempt` failure | If no new steer arrived in Inbox, retry identical frozen request bytes in the same `(turn, step)` with `attempt + 1`. If steer arrived, advance to `step + 1`. |
+| Provider disconnect after partial output | `assistant/attempt` partial diagnostic | Never retry unchanged bytes and never deliver partial text as final; finalize as `Failed`. |
+| Cancellation (`/stop`) | `cancellation/requested` + partial facts | Enter common finalization as `Cancelled`; retain unclaimed Inbox steer for the next Turn. |
 
-A model stop signal is not proof of business success.
+## 2. Protocol correction bound
 
-## 2. Correction protocol
+- Each empty, truncated, or batch-rejected response triggers at most one correction Step.
+- A Turn permits at most **two protocol corrections** (`max_protocol_corrections = 2`); exceeding the limit finalizes the Turn as `Failed`.
+- Provider network retries (`attempt = 1..max_attempts`) are tracked per Step and are separate from protocol corrections.
+- Invalid assistant Tool batches are logged with `surface_op = 'none'` (or stripped of invalid tool_calls in projection) so subsequent Provider requests never contain dangling or malformed tool_call wire structures. Correction feedback is appended as a clean `user/message`.
 
-- Each empty, truncated or invalid response triggers at most one correction.
-- A Run permits at most **two protocol corrections**; exceeding the limit finalizes as failed.
-- Provider transport attempts use a separate retry limit.
-- Correction feedback is appended as a user-level protocol message. Old assistant bytes and raw proposed calls remain immutable.
-- Invalid raw calls are not projected as apparently valid assistant Tool Calls. The feedback identifies the errors and states that no call executed.
-- Provider-native Tool errors are optional Adapter mappings only when valid assistant/call/result association can be preserved. The Loop never invents identities.
-- Cancellation, Provider-terminal responses and partial stream failure do not enter protocol correction.
+## 3. Closed 5-variant `ToolOutcome` contract
 
-## 3. Observation and scheduling
+Whole-batch validation completes before any `tool/call` is committed. Admitted calls run through the parallel/exclusive barrier scheduler ([AgentLoop §6](agent-loop.md#6-tool-admission-and-parallel-scheduling)). Every call resolves to one of five closed variants:
 
-Whole-batch validation finishes before any dispatch. `tool/call` precedes each side effect; `tool/result` follows its outcome. Parallel and exclusive calls are scheduled under the bounded rules in [AgentLoop](agent-loop.md#6-tool-admission-and-parallel-scheduling), while Observations commit in model order.
+```python
+ToolOutcome = (
+    Completed          # (content, is_error=False, structured=None, assets=())
+    | Skipped          # (reason)
+    | Cancelled        # (settled, partial_content="", resource_locks=())
+    | UncertainSettled # (content, assets=())
+    | UncertainHanging # (content, resource_locks)
+)
+```
 
-Every Observation contains `call_id`, `name`, `status`, readable content, optional structured content/assets, execution state, effect state and Runtime continuation admission.
+- **`Completed`:** Normal success (`is_error=False`) or ordinary execution failure (`is_error=True`, e.g., file not found, command exit code != 0). Both have known effects and stopped execution. Remaining independent calls in the batch continue.
+- **`Skipped`:** Never dispatched because an earlier call closed the batch. Paired with its `call_id` in model order.
+- **`Cancelled`:** Stopped by `/stop`. Closes the batch and enters cancellation finalization; if `settled=False`, `resource_locks` remain restricted.
+- **`UncertainSettled`:** Timeout/disconnect where the process/request is confirmed stopped or isolated, but external effects are unknown. Closes the current batch (unstarted calls become `Skipped`) and **advances to `step + 1`** with explicit `[UNCERTAIN_EFFECT_SETTLED]` observation text so the model can inspect state before acting.
+- **`UncertainHanging`:** Process/resource is still running or unverified with unknown effects. Closes the batch, records `resource_locks`, and **immediately finalizes the Turn as `Blocked`**.
 
-`status` is `success | error | cancelled | unknown | not_executed`. Ordinary errors may continue independent admitted calls. Unknown or cancellation stops new dispatch and closes the batch with correlated not-executed results. Unknown permits a later inspection Step only when execution is stopped or isolated and Runtime admits continuation. No status authorizes automatic replay.
+No variant ever triggers automatic replay of a side-effecting call.
 
 ## 4. Provider-private response data
 
-Reasoning summaries, opaque signatures and continuation fields remain Provider response data. They may be persisted and projected when required by a later request, but are not final text, WorkingContext, hidden chain-of-thought export or executable Tool semantics.
-
-Provider connection configuration is not part of Trajectory.
-
-## 5. Commit ownership
-
-- Model invocation owns Step, Attempt, response and usage facts.
-- Tool scheduling owns call, result and batch-disposition facts.
-- The driver owns correction, input injection, final and Turn/Run closing decisions.
-- DeliveryOwner owns external delivery; the Loop owns its receipt or `delivery_unknown` fact.
-- EventStore owns atomic sequence, idempotency and final/steer guards.
-
-The [verification matrix](verification-matrix.md) defines required evidence. No real-model or product acceptance is claimed by this design.
+Reasoning summaries, opaque signatures, and continuation tokens returned by a Provider are stored on `assistant/message` as `provider_data` and re-projected when required by subsequent Steps. Provider connection settings (`base_url`, `api_key`, `model_id`) are never stored in Trajectory.

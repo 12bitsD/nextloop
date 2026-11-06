@@ -45,13 +45,13 @@ Tools use a small static catalog with clear semantics. The runtime resolves Sess
 
 WorkingContext is a short, user-level self-reminder maintained by the Agent. A Session has at most one active WorkingContext at a time; Run and Session are lifetime scopes, not two parallel reminder slots.
 
-- `set_working_context(content, scope="run" | "session")` appends a new active version. The newest version supersedes the previous active version, including across scopes. Identical content and scope return `WorkingContext unchanged` without appending a message.
+- `set_working_context(content, scope="turn" | "session")` appends a new active version. The newest version supersedes the previous active version, including across scopes. Identical content (by hash) and rapid consecutive updates without a phase change are damped (`WorkingContext unchanged`) without appending a message, preventing reminder spam from polluting the prompt prefix.
 - `clear_working_context()` clears the current active version. Clearing an already empty context returns `WorkingContext is already empty` without appending a message.
 - No `reason` field is required. Tool Results are short success or error text, not a lifecycle-state schema. Revisions remain internal to Runtime and Trajectory.
-- Active messages use `[WorkingContext · run]` or `[WorkingContext · session]` followed by the reminder. Clear and Run expiry append `[WorkingContext cleared · scope]` or `[WorkingContext expired · scope]`; old bytes are never rewritten.
+- Active messages use `[WorkingContext · turn]` or `[WorkingContext · session]` followed by the reminder. Clear and Turn expiry append `[WorkingContext cleared · scope]` or `[WorkingContext expired · scope]`; old bytes are never rewritten.
 - Content is trimmed and nonempty. 2 KiB is a soft readability guideline, not a rejection limit; the Agent may keep more when the task needs it. Long-term knowledge, large plans, and hidden reasoning still do not belong here.
 - After a valid set or clear, Runtime commits the Tool Result and state event, appends the corresponding user-level message, then appends pending steer before the next model call. Actual user input therefore follows the Agent's self-reminder.
-- Run-scoped context expires at Run finalization. Recovery from an interrupted Run appends the missing expiry before a new Turn. Session-scoped context expires only through replacement or an explicit clear.
+- Turn-scoped context expires at Turn finalization. Recovery from an interrupted Turn appends the missing expiry before a new Turn. Session-scoped context expires only through replacement or an explicit clear.
 - Compaction preserves only the latest active WorkingContext, immediately after the latest task summary and before subsequent messages. Older versions and clear/expiry markers are omitted; if no active context exists, none is injected.
 - The user-level role provides salience, not user authorization. WorkingContext cannot override system rules, actual user instructions, or Tool permissions.
 

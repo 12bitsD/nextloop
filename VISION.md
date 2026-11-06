@@ -22,15 +22,12 @@ Do not fork DSH or adopt Cordis. Keep explicit deltas for whole-batch Tool valid
 
 ## What the library should provide
 
-- Clear `Session / Turn / Run / Step / ModelCall / Attempt` identities.
-- Deterministic execution and safe steer injection.
-- Complete request assembly, usage preflight, compaction and cache planning.
-- Whole-batch Tool validation and bounded parallel/exclusive scheduling.
-- Correlated Observations and explicit execution/effect states.
-- Append-only event envelopes and deterministic Conversation projection.
-- One finalization path for success, cancellation, failure and blocked unknown outcomes.
-- Recovery from committed facts without automatically replaying side effects.
-- Delivery-only retry and explicit resource restrictions.
+- 4D integer coordinates (`session_id`, `turn`, `step`, `attempt`) + `writer_epoch` fencing (no UUID maze).
+- In-memory single-actor `Inbox` serialization with SQLite constraints reserved for crash invariants.
+- O(Δ) `surface_op` watermark projection, WorkingContext damping, usage preflight, and compaction.
+- Whole-batch Tool validation and CPU-style parallel/exclusive barrier scheduling.
+- Closed 5-variant `ToolOutcome` ADT (`Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`) that makes illegal states unrepresentable.
+- One finalization path, pure crash closers, and delivery-only retry.
 - Consumer-configured OpenAI/Anthropic Provider Adapters and fake-adapter verification.
 
 ## Design values

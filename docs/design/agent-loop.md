@@ -1,202 +1,161 @@
 # DSH-aligned AgentLoop core design
 
 - Status: accepted design, implementation and verification pending
-- Last decisions: 2026-11-06
-- Structural reference: [DSH ReactLoopAgent](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/agent-loop/src/agent.ts)
+- Last decisions: 2026-11-06 — refined with 4D integer coordinates, closed 5-variant `ToolOutcome` ADT, in-memory actor serialization with DB crash invariants, and `surface_op` epoch watermark projection
+- Structural reference: [DSH ReactLoopAgent](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/agent-loop/src/agent.ts) and [DSH Surface/Repair](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/session/src/repair.ts)
 
 ## 1. Direction
 
-nextloop follows DSH's Session, Turn, Step, projection, next-step input and crash-closer design. It does not fork DSH or adopt Cordis, its plugin system, its Provider configuration persistence, or its complete product lifecycle.
+nextloop follows DSH's Session, Turn, Step, surface projection, next-step inbox, and crash-closer design. It does not fork DSH or adopt Cordis, its plugin system, its Provider configuration persistence, or its complete product lifecycle.
 
-The agreed deltas are whole-batch Tool validation, bounded parallel/exclusive scheduling, explicit unknown-outcome rules, durable input/final ordering, one finalization path, delivery-only recovery, and externally managed Provider configuration.
+The agreed engineering principles and deltas are:
 
-The library is an on-demand execution procedure, not a long-lived product service. SessionManager resolves Sessions, writer ownership and recovery; the Loop drives execution. Chat and coding use the same Loop.
+- **4D integer coordinates (`session_id`, `turn`, `step`, `attempt`) + `writer_epoch`** instead of nested UUIDs;
+- **closed 5-variant `ToolOutcome` ADT** instead of orthogonal boolean/enum combinations;
+- **in-memory single-actor control flow** with SQLite constraints reserved strictly as crash/split-brain invariants;
+- **`surface_op` (`append | epoch | none`) watermark projection** for O(Δ) context assembly;
+- whole-batch Tool validation, bounded parallel/exclusive barrier scheduling, one finalization path, delivery-only recovery, and externally managed Provider configuration.
 
-## 2. Identities
+The library is an on-demand execution procedure, not a long-lived product service. Chat and coding use the same Loop.
 
-| Identity | Meaning |
-|---|---|
-| Session | Durable conversation identity and append-only Trajectory |
-| Turn | One input-driven execution cycle, including any steer accepted before final commitment |
-| Run | One concrete writer/execution attempt used for fencing, recovery and resource responsibility; normally one per Turn |
-| Step | One logical ModelCall and its corresponding Tool batch; Provider retries stay in the same Step |
-| ModelCall | The logical request identity associated with a Step |
-| Attempt | One Provider attempt within that request |
-| final_message_id | Stable delivery identity of a committed final response |
+## 2. Coordinates and fencing (No UUID maze)
 
-A new ordinary input after final commitment or cancellation belongs to a later Turn and Run. Provider retry creates neither a new Step nor a new Run.
+Because interrupted executions never resume an old instruction pointer in place—they are sealed by crash closers and followed by a new Turn—`turn_id`/`run_id` and `step_id`/`model_call_id` are 1:1 synonyms. Removing redundant UUIDs yields a total-ordered coordinate system:
 
-## 3. DSH-style driver
+| Coordinate | Type | Meaning |
+|---|---|---|
+| `session_id` | `str` | Durable conversation identity |
+| `seq` | `int >= 1` | Session-wide monotonically increasing event sequence |
+| `turn` | `int >= 1` | Monotonic execution cycle from initiating input through finalization (including any steer absorbed before final commitment) |
+| `step` | `int >= 1` | Monotonic model reasoning cycle within `turn`: one logical model request and its Tool batch |
+| `attempt` | `int >= 1` | Monotonic Provider network attempt within `(turn, step)`; exact-byte retries increment `attempt` without advancing `step` |
+| `writer_epoch` | `int >= 1` | Monotonic writer lease fencing token acquired when a driver attaches to a Session; rejects stale background callbacks |
+| `final_message_id` | `str` | Stable idempotency key for external final-response delivery |
+
+Every event in `session_events` carries `(session_id, seq, turn, step, writer_epoch)`. Logs and traces sort naturally by integer coordinates without UUID cross-referencing.
+
+## 3. DSH-style Turn/Step driver
 
 ```text
-Session: append-only events + derived Conversation
-  → turn/start
-  → step/start
-  → assemble and freeze an in-memory CandidateRequest
-  → Provider Attempt(s)
-  → assistant/message
-  → no Tool Calls:
-       pending steer → next Step in the same Turn
-       no pending steer → final/message + turn/end
-  → Tool Calls:
-       validate the whole batch
-       dispatch admitted calls with parallel/exclusive scheduling
-       commit ordered Observations
-       step/end → next Step
-  → finalization
-  → delivery or durable delivery handoff
+Session: append-only events + O(Δ) surface projection from last epoch watermark
+  → turn/start (turn = last_turn + 1, step = 0)
+  → loop Step (step = step + 1):
+       claim pending input from in-memory Inbox → commit step/start + user/message*
+       assemble and freeze in-memory CandidateRequest from surface projection
+       Provider Attempt(s) (attempt = 1..N) → commit assistant/message
+       if no Tool Calls:
+           check in-memory Inbox for pending next-step steer (under Session actor lock)
+           if pending steer exists → continue to step + 1 in the same Turn
+           if Inbox is empty      → atomically commit final/message + turn/end, exit loop
+       if Tool Calls:
+           validate whole batch against Tool Catalog + JSON Schema
+           if invalid → commit tool/batch-rejected + correction user/message, continue to step + 1
+           if valid   → run parallel/exclusive barrier scheduler, commit ordered tool/result, step/end
+  → mandatory finalization (settle resources, persist terminal facts)
+  → deliver final_message_id via DeliveryOwner
 ```
 
-Every request is derived from the Session projection and admitted input. Previously derived provider-visible messages remain frozen in memory during the request. New facts are appended rather than used to rewrite earlier requests.
+Every request is derived from the Session's surface projection. Previously derived provider-visible messages remain frozen in memory across Steps within the same compaction epoch.
 
-A model stop signal permits finalization; it does not prove business-task success. Task evidence belongs to the consumer's Prompts, Skills, Tools and acceptance.
+A model stop signal permits finalization; it does not prove business-task success.
 
-## 4. Input, steer and cancellation
+## 4. In-memory Inbox & control flow vs. DB crash invariants
 
-The public input model remains small: `run`, `steer`, and `cancel`. DSH's next-step and next-turn distinction is internal routing, not three public input commands.
+In a single-container runtime, each active Session is driven by a single in-memory `SessionDriver` serialized by a per-Session lock and fenced by `writer_epoch`:
 
-- Idle input starts a new Turn.
-- Active-Turn input is durably accepted into the ordered next-step buffer.
-- During model streaming, steer waits for the response; it does not mutate the in-flight request.
-- During Tool execution, steer waits for the required Observation commits and is admitted at the next Step.
-- During retry backoff, new steer requires a newly assembled Step/request rather than an exact-byte retry.
-- Before final commitment, accepted pending steer continues the same Turn/Run.
-- After final commitment, input belongs to a later Turn.
-- `/stop` cancels only the current Turn. Pending, not-yet-injected steer is retained for a later Turn.
-
-Input acceptance and final commitment are serialized by EventStore. A queue-empty read followed by an unprotected final write is not sufficient.
-
-Cancellation stops new Tool dispatch and model calls, requests cancellation of started work, and enters the common finalization path. It does not erase writes or prove that external effects stopped.
+- **No database exceptions as `if/else` control flow:** `steer()` and `final` commitment do not race blindly against SQLite to catch `PendingSteer` exceptions. Instead, `steer()` acquires the Session's in-memory intake lock, verifies the Turn has not sealed its final decision, commits `input/accepted`, and appends to the in-memory `next_step` Inbox.
+- **Deterministic Step boundary:** When a Step produces a final candidate (no Tool Calls), the driver checks `inbox.has_next_step()` under the same in-memory lock. If non-empty, it immediately opens `step + 1` in the same `turn`. If empty, it seals the Turn and commits `final/message + turn/end` in one atomic SQLite transaction.
+- **SQLite as the safety net:** `PRIMARY KEY (session_id, seq)`, `UNIQUE (session_id, event_id)`, and `writer_epoch` checks in SQLite act strictly as **crash and split-brain invariants**. A violation indicates a bug or a zombie process and fails closed immediately.
+- **Stop semantics:** `/stop` sets the current Turn's cancellation signal and records `cancellation/requested`. Unclaimed steer in the Inbox is preserved for the next Turn.
 
 ## 5. Model responses and Provider ownership
 
-The response-to-action table and the two-correction limit are maintained in [ReAct execution protocol](react-protocol.md).
+The response-to-action table and the two-correction limit per Turn are maintained in [ReAct execution protocol](react-protocol.md).
 
-Provider configuration is supplied by the consumer for the current Run:
+Provider connection configuration (`protocol = openai | anthropic`, `model_id`, `base_url`, credentials, request defaults) is injected by the consumer for the active Turn and is **never persisted in Trajectory**. Trajectory persists only execution facts, including token usage and Provider-returned opaque continuation/signature fields required by subsequent Steps.
 
-```text
-protocol = openai | anthropic
-model_id
-base_url
-credential or credential reference
-optional request defaults
-```
+Streaming deltas are ephemeral UI previews. Exact-byte retry is admitted within the same `(turn, step)` (incrementing `attempt`) only when zero assistant output was emitted and the in-memory Inbox has no new steer.
 
-The Loop uses a configured Provider but does not persist its connection configuration, model profiles, credentials, base URL or request defaults. Those belong to the outer Runtime. A Run uses one configured Provider without silent fallback.
-
-Trajectory may persist execution facts returned by the Provider, including usage and opaque continuation/signature data required by later model calls. That is response data, not connection configuration.
-
-Streaming deltas are ephemeral previews. Complete logical responses and failed/partial Attempt facts are durable. Exact-byte retry is admitted only when no assistant output and no new input exist; the frozen in-memory request is reused. Partial output is never blindly retried.
-
-## 6. Tool admission and parallel scheduling
+## 6. Tool admission and parallel/exclusive barrier scheduling
 
 ### Whole-batch admission
 
-Any response-completeness, call-identity, Tool-name, argument-encoding or Schema error rejects the entire batch before dispatch. No otherwise valid sibling call executes. The Loop does not repair names, JSON, arguments or identities.
+Any response-completeness, call-identity, Tool-name, argument-encoding, or JSON Schema error rejects the entire batch before dispatch. Zero calls execute. The Loop commits `tool/batch-rejected` and a user-role protocol correction message for `step + 1`.
 
-After admission, an ordinary execution error is committed as the correlated Observation and does not by itself prevent independent admitted calls. Calls whose parameters or execution decision depend on an earlier result must be proposed in a later Step.
+### CPU-style barrier scheduling
 
-### DSH-style parallel/exclusive scheduling
+Admitted Tool Calls are scheduled using DSH's parallel pool + exclusive barrier model:
 
-The baseline supports bounded parallel Tool scheduling:
+- ToolRuntime classifies each admitted call as `parallel` or `exclusive` (default `exclusive`).
+- Consecutive `parallel` calls run in a bounded rolling pool (`max_parallel = 4` by default).
+- An `exclusive` call acts as a barrier: it waits for all prior in-flight calls to drain, executes alone, and settles before any subsequent call starts.
+- Every `tool/call` event is committed before its handler is invoked.
+- Regardless of completion order inside a parallel pool, `tool/result` events are committed strictly in **model-proposed order** so Conversation projection stays deterministic.
 
-- Each call is classified by ToolRuntime as `parallel` or `exclusive`; the default is `exclusive`.
-- `max_parallel` defaults to 4 and is configurable as a resource limit.
-- Parallel calls use a bounded rolling pool. An exclusive call is a barrier and runs only after earlier started work settles.
-- Runtime re-evaluates admission before each dispatch. It must not infer safety from a Tool name alone.
-- Every `tool/call` is committed before its actual dispatch.
-- Observations are committed in model order, not completion order.
-- This is not a background-job interface: the next Step waits for the batch to settle.
+## 7. Closed 5-variant `ToolOutcome` ADT
 
-On unknown outcome or cancellation, the scheduler stops starting new calls, performs bounded cleanup of started work, preserves actual results, and gives every unstarted call a correlated `not_executed` Observation.
+Instead of combining separate `status`, `execution_state`, `effect_state`, and `continuation_allowed` fields (which creates decenas of invalid state combinations), Tool outcomes are represented as a **closed 5-variant algebraic data type (ADT)**:
 
-Unknown effects close the batch. Another Step is allowed only when every unresolved execution is stopped or reliably isolated and Runtime explicitly admits continuation. Otherwise the Run finalizes as blocked with resource restrictions retained. No outcome authorizes blind replay.
+| Variant | Physical meaning | Scheduler & Turn behavior |
+|---|---|---|
+| `Completed(content, is_error=False, structured=None, assets=())` | Execution exited cleanly and effects are known (both normal success and ordinary execution errors like missing file or failed test use `Completed` with `is_error`). | Commit `tool/result`; continue remaining independent calls in the batch; proceed to `step + 1`. |
+| `Skipped(reason)` | Call never started because an earlier call in the batch triggered `Uncertain*` or cancellation. Zero side effects. | Commit correlated `tool/result` in model order so every `tool_call_id` is paired. |
+| `Cancelled(settled, partial_content="", resource_locks=())` | Interrupted by `/stop`. `settled=True` means process exited cleanly; `settled=False` retains `resource_locks` in Runtime restrictions. | Stop new dispatches; mark unstarted calls `Skipped`; enter cancellation finalization. |
+| `UncertainSettled(content, assets=())` | Timeout or transport drop where **execution has confirmed exited or isolated**, but external side effects are unknown. | Close batch (unstarted calls become `Skipped`). **Permit `step + 1`** so the model can inspect actual state before deciding. |
+| `UncertainHanging(content, resource_locks)` | Execution cannot be confirmed stopped/isolated and holds shared resources with unknown effects. | Close batch (unstarted calls become `Skipped`). Retain `resource_locks`, forbid `step + 1`, and finalize Turn as **`Blocked`**. |
 
-## 7. Observation contract
+Every admitted Tool Call produces exactly one `tool/result` containing its serialized `ToolOutcome`. Large outputs are written to the asset store before their reference is committed in `Completed` or `UncertainSettled`.
 
-Each Tool Observation contains:
+## 8. Surface watermark projection & event transactions
 
-- `call_id`, `name`, `status`, model-readable `content`;
-- optional structured content and asset references;
-- `execution_state = not_started | stopped | isolated | unknown`;
-- `effect_state = known | unknown`;
-- `continuation_allowed` from ToolRuntime;
-- optional normalized error details.
+`session_events` is the sole authority. To avoid scanning full Session history on every Step, each event carries a `surface_op` tag inspired by DSH's surface fold:
 
-`status` is `success | error | cancelled | unknown | not_executed`. Execution state and effect state are independent: stopping a process does not undo a write or prove that a remote comment was not created.
+- **`surface_op = 'none'` (Log-only):** `input/accepted`, `turn/start`, `step/start`, `assistant/attempt`, `tool/call`, `tool/batch-rejected`, `step/end`, `turn/end`, `delivery/committed`, `delivery/unknown`. Used for audit, metrics, and crash repair.
+- **`surface_op = 'append'` (Model-visible):** `user/message` (carries `input_id` + `turn` + `step`), `assistant/message`, `tool/result`.
+- **`surface_op = 'epoch'` (Compaction watermark):** `compaction`. Marks a new projection baseline (`epoch_seq = seq`).
 
-Every admitted call has exactly one correlated terminal Observation. Unknown evidence must remain visible to the model after Provider mapping. Large results are saved as assets before their references are committed. Old Observations are never rewritten.
-
-Tool and time budgets remain soft guidance. `over_budget` requests an efficiency review and does not force termination; per-call deadlines and resource limits are separate.
-
-## 8. Event model and transaction groups
-
-`session_events` is the only execution-history authority. There is no persistent Snapshot or second truth. Conversation is projected from the latest valid compaction and subsequent events, or all events when no compaction exists.
-
-Core event types are:
-
-```text
-input/accepted
-turn/start
-step/start
-user/message
-assistant/attempt
-assistant/message
-tool/call
-tool/result
-tool/batch-rejected
-compaction
-final/message
-step/end
-turn/end
-delivery/committed | delivery/unknown
+**O(Δ) Projection:** Building the Conversation for a Step queries only:
+```sql
+SELECT * FROM session_events
+WHERE session_id = ?
+  AND seq >= COALESCE((SELECT MAX(seq) FROM session_events WHERE session_id = ? AND surface_op = 'epoch'), 1)
+  AND surface_op != 'none'
+ORDER BY seq ASC;
 ```
 
-`user/message` carries its source `input_id` and Turn/Step, so it is also the durable injection record. Provider configuration does not require a durable request-header event.
+### Atomic transaction groups
 
-| Transaction | Atomic contents | Guard |
-|---|---|---|
-| New Turn | `input/accepted + turn/start` | Valid Session and writer ownership |
-| New Step | `step/start + user/message*` | Valid Run and admitted input order |
-| Tool rejection | `tool/batch-rejected + protocol-correction user/message` | Valid Run; zero dispatch |
-| Final commitment | `final/message + turn/end` | `no_pending_steer` and valid Run |
-| Compaction | One `compaction` event | Valid summary and Run |
-| Recovery closing | Missing Tool closers + `step/end + turn/end` | No replay; valid recovery ownership |
-
-`tool/call` and `tool/result` deliberately use separate transactions because the side effect occurs between them. Assets precede result-reference commitment. A required commit failure prevents another dispatch or model request.
-
-EventStore provides monotonic Session `seq`, multi-event atomic commits, event-ID idempotency, expected-sequence checks, final/steer guards, and writer lease/fencing. Execution writes require valid ownership; late old-Run callbacks cannot commit new facts.
-
-## 9. Recovery and delivery
-
-Recovery rebuilds facts and closes incomplete history without continuing an old instruction pointer.
-
-| Committed tail | Recovery |
+| Boundary | Atomic events committed together |
 |---|---|
-| Open Step, no committed assistant response | Append interrupted closers; do not replay the model |
-| Assistant Tool proposal without `tool/call` | Record that it did not enter Runtime dispatch; do not auto-execute |
-| `tool/call` without `tool/result` | Append `unknown`; retain resource restrictions |
-| Partial parallel batch | Preserve existing results, close unresolved and unstarted calls in model order |
-| Uncommitted compaction | Keep the previous projection |
-| Committed final without delivery | Retry only delivery with the same `final_message_id` |
-| External delivery without a committed receipt | Record `delivery_unknown`; use idempotency or lookup, never rerun execution |
+| Turn start | `input/accepted` (if idle start) + `turn/start` |
+| Step start | `step/start` + claimed `user/message*` (initial input, steer, WorkingContext, or protocol feedback) |
+| Tool rejection | `tool/batch-rejected` + protocol-correction `user/message` |
+| Final decision | `final/message` + `step/end` + `turn/end` |
+| Compaction | Single `compaction` (`surface_op = 'epoch'`) + folded active `WorkingContext` `user/message` (if any) |
+| Crash repair | Synthetic `tool/result` closers (`Skipped` / `Uncertain*`) + `step/end` + `turn/end(interrupted)` |
 
-Recovery closers complete missing Observations before `step/end` and `turn/end`. Ending a Run or releasing a writer lease does not clear unresolved resource restrictions. Concrete resource ownership, transfer and verified release remain adapter contracts.
+`tool/call` and `tool/result` are committed in separate transactions around the actual side effect.
 
-Delivery starts only after final facts are committed. Delivery failure never reruns the model or Tools. The Session writer is released only after delivery closes or a durable DeliveryOwner accepts ordering responsibility.
+## 9. Crash closers and delivery-only recovery
 
-## 10. Context, compaction and waiting
+On startup or Session attach, `SessionManager` inspects the tail of `session_events` for any `turn/start` without a matching `turn/end`:
 
-ContextBuilder owns complete request assembly, cache-preserving append-only content, usage estimation and capacity preflight. Compaction starts at 75% input occupancy, an `I + O` capacity violation, or `/compact`.
+1. Increments `writer_epoch` to fence off any zombie writer.
+2. Runs a pure `interrupted_turn_closers(tail_events)` fold (following DSH's `repair.ts`):
+   - Assistant proposed a Tool Call with no `tool/call` event → `Skipped("Interrupted before dispatch")`.
+   - `tool/call` committed with no `tool/result` event → `UncertainHanging` / `UncertainSettled` according to Runtime resource check (`TOOL_OUTCOME_UNKNOWN`).
+   - Appends missing `step/end` and `turn/end(reason="interrupted")`.
+3. Never replays an old Step or re-executes an interrupted Tool.
+4. If `final/message` was committed without `delivery/committed`, retries external delivery only via `DeliveryOwner` using `final_message_id`.
 
-The consumer supplies a dedicated Compactor and Prompt. It produces a normal model summary without Tool execution. A valid, smaller summary is appended as one compaction event; old Trajectory is immutable. The latest active WorkingContext follows the new task summary. Failed or uncommitted compaction leaves the previous projection unchanged.
+## 10. Context physics, WorkingContext damping, and Compaction
 
-WaitingRequest remains a Session-coordinated state for runtime-created questions, not an ordinary model question in text. Each Session has at most one pending request, with validated, idempotent answers and stale-answer rejection. Its channel presentation belongs to the consumer.
+- **Prefix cache immutability:** Within an epoch, `surface_op = 'append'` events are strictly append-only. System Prompt and initial `AGENTS.md` bytes never mutate mid-Turn.
+- **WorkingContext damping:** `set_working_context(content, scope="turn" | "session")` appends a user-level reminder. To prevent models from spamming reminders on every Step and polluting context, Runtime enforces **hash deduplication** (identical content is a no-op) and **step damping** (prompts and soft guidance restrict updates to genuine phase transitions). On `compaction`, only the latest active `WorkingContext` is re-emitted right after the `compaction` epoch event; historical reminders stay behind the watermark.
+- **Compaction trigger:** Evaluates at Step preflight when input `I >= 75%` of context window, `I + O > capacity`, or user `/compact`. Compaction runs as a Tool-less model call using the consumer's Compaction Prompt and commits a single `surface_op = 'epoch'` event.
 
 ## 11. Ownership and verification
 
-The Loop owns transitions, Step sequencing, retry admission, Tool scheduling, event decisions, projection/recovery algorithms and finalization. Adapters own actual Provider wire mapping, atomic storage, Tool execution/resource evidence, compaction and delivery.
+The Loop owns coordinates, Turn/Step transitions, in-memory Inbox serialization, retry admission, Tool barrier scheduling, `ToolOutcome` enforcement, surface projection, crash closers, and finalization. Adapters own Provider wire mapping, SQLite storage, concrete Tool execution, compaction prompt content, and channel delivery.
 
-Feishu, Wiki, Skills, product Prompts, concrete Browser/Computer Tools, credentials, deployment, Proactive behavior and RSI remain outside nextloop.
-
-The accepted [verification matrix](verification-matrix.md) is the release gate. This document is an accepted design, not an implementation or release claim.
+The [verification matrix](verification-matrix.md) is the release gate.

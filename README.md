@@ -10,13 +10,12 @@ nextloop follows DSH's event-sourced Session, Turn/Step driver, derived Conversa
 
 Its agreed execution rules are:
 
-- `Session / Turn / Run / Step / ModelCall / Attempt` identities and deterministic transitions;
-- append-only Trajectory and Conversation projection;
-- durable steer acceptance and atomic final-response ordering;
+- 4D integer coordinates (`session_id`, `turn`, `step`, `attempt`) + `writer_epoch` fencing;
+- append-only Trajectory with `surface_op` (`append | epoch | none`) O(Δ) watermark projection;
+- in-memory single-actor `Inbox` serialization with SQLite crash/split-brain invariants;
 - configured OpenAI-compatible and Anthropic Provider Adapters with externally managed connection configuration;
-- whole-batch Tool validation, bounded parallel/exclusive scheduling and model-order Observations;
-- honest cancellation and unknown effects without automatic replay;
-- one finalization path, crash closers and delivery-only recovery.
+- whole-batch Tool validation, bounded parallel/exclusive barrier scheduling, and a closed 5-variant `ToolOutcome` ADT (`Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`);
+- one finalization path, pure crash closers, and delivery-only recovery.
 
 It is a library, not an HTTP service, multi-agent framework, Router, EventBus or product bot.
 

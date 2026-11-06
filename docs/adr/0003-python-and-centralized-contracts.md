@@ -1,80 +1,53 @@
 # ADR-0003: Use Python and centralize public contracts
 
-- Status: Accepted
+- Status: Accepted (refined 2026-11-06)
 - Date: 2026-11-06
-- Scope: implementation language, dependencies, package layout and public Schema ownership
+- Scope: implementation language, dependencies, package layout, and `contracts.py` discipline
 
 ## Context
 
-The AgentLoop protocol is closed as design. The implementation needs a small engineering structure that does not recreate the protocol through layers of handlers, managers, plugins and pass-through modules.
-
-Public types are also the integration contract. Scattering them across Provider, Tool, Store and driver modules would make version review and consumer integration unnecessarily difficult.
+The AgentLoop protocol is closed as design. To keep the implementation small and readable, public contracts must live in one place and internal modules must avoid framework ceremony (handler registries, manager layers, per-state classes, or deep inheritance).
 
 ## Decision
 
 ### Language and dependencies
 
-- Python 3.11+ with native `asyncio`; CI should cover Python 3.11, 3.12 and 3.13.
-- Standard-library `dataclasses`, `typing` and `sqlite3`.
+- Python 3.11+ with native `asyncio` (CI covers 3.11, 3.12, 3.13).
+- Standard-library `dataclasses`, `typing`, and `sqlite3`.
 - `httpx` for Provider HTTP/SSE and `jsonschema` for Tool argument validation.
 - `pytest` and `pytest-asyncio` for tests; `ruff` and `mypy` for static checks.
-- No Pydantic model layer, asynchronous framework, official Agent SDK or generic plugin framework is required by the core.
 
-OpenAI-compatible and Anthropic support consists of thin protocol Adapters. Their private wire types remain inside those Adapters.
+### Centralized `src/nextloop/contracts.py`
 
-### One public contract location
+All public schemas, protocols, and algebraic types live in `src/nextloop/contracts.py` (target < 250 lines):
 
-All public contracts live in `src/nextloop/contracts.py`:
+- **Coordinates & Envelope:** `EventCoord(session_id, turn, step, attempt, writer_epoch)`, `SurfaceOp` (`append | epoch | none`), `Event`, `NewEvent`.
+- **Messages & Requests:** `Message`, `ToolCall`, `ToolSpec`, `CandidateRequest`, `ModelUsage`, `ModelResponse`, `FinishReason`.
+- **Closed 5-variant `ToolOutcome` ADT:** `Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`, and `ToolExecutionMode` (`parallel | exclusive`).
+- **Turn lifecycle:** `TurnContext`, `TurnOutcome`, `TurnStatus` (`Succeeded | Failed | Cancelled | Blocked | DeliveryUnknown`), `RecoveryOutcome`.
+- **Adapter Protocols:** `EventStore`, `ModelProvider`, `ContextBuilder`, `Compactor`, `ToolRuntime`, `DeliveryOwner`.
+- **Errors & Versions:** `API_VERSION`, `EVENT_SCHEMA_VERSION`, `NextloopError`, `InvariantViolation`, `ProviderError`, `CapacityError`, `ProtocolExhausted`.
 
-- public dataclasses, enums and typed aliases;
-- Session/Turn/Run/Step/ModelCall/Attempt identities;
-- CandidateRequest, ModelResponse, ToolSpec, ToolObservation, RunContext and RunOutcome;
-- event envelopes and typed event payload Schemas;
-- EventStore, ModelProvider, ContextBuilder, Compactor, ToolRuntime and DeliveryOwner Protocols;
-- public error types and API/event-schema version constants.
+`src/nextloop/__init__.py` explicitly re-exports `contracts.py` and `AgentLoop`.
 
-`src/nextloop/__init__.py` explicitly re-exports the supported public surface. Consumers should not import private driver, scheduler or projection internals.
-
-The file contains declarations and contract validation only, not execution orchestration. Public API and event-schema versions are still reviewed independently.
-
-Provider-private wire Schemas, SQLite row representations and consumer-owned product Schemas do not belong in `contracts.py`.
-
-### Consolidated implementation layout
+### Consolidated package layout
 
 ```text
 src/nextloop/
-  contracts.py         # all public Schemas, Protocols, errors and versions
-  loop.py              # public AgentLoop/SessionManager and private Turn/Step driver
-  events.py            # private projection, transaction helpers and recovery folds
-  tools.py             # private whole-batch validation and parallel/exclusive scheduler
-  context.py           # default append-only ContextBuilder and preflight
-  sqlite.py            # SQLite EventStore Adapter
+  contracts.py         # 4D coordinates, 5-variant ToolOutcome ADT, Event/SurfaceOp, Protocols, errors
+  loop.py              # AgentLoop public API + single-actor Turn/Step driver + crash recovery
+  events.py            # O(Δ) surface watermark projection and pure crash-closer fold
+  tools.py             # whole-batch JSON Schema validation + parallel/exclusive barrier scheduler
+  context.py           # AppendOnlyContextBuilder, WorkingContext damping, and preflight
+  sqlite.py            # SQLite EventStore with (session_id, seq) and epoch watermark index
   providers/
-    openai.py          # OpenAI-compatible protocol Adapter
-    anthropic.py       # Anthropic protocol Adapter
+    openai.py          # OpenAI-compatible SSE Adapter
+    anthropic.py       # Anthropic SSE Adapter
   __init__.py          # explicit public exports
 ```
 
-A shared Provider HTTP helper may be added only when both Adapters have real duplicated behavior. It is not created preemptively.
-
-Tests are organized by behavior—Loop, Tool scheduling, recovery, SQLite and Provider contracts—with recorded Provider fixtures. They do not need to mirror every internal file.
-
 ## No generic handler layer
 
-There is no handler registry for execution states or Session events:
-
-- `loop.py` reads as the explicit Turn/Step protocol.
-- `events.py` uses a deterministic projection/fold for event interpretation.
-- `tools.py` owns scheduling, not an event-processing pipeline.
-- Concrete Tool handlers remain consumer-owned functions registered by Tool name inside a ToolRuntime Adapter; they are not Loop lifecycle handlers.
-- Provider parsing stays in the owning protocol Adapter.
-
-No per-state classes, per-event handler classes, universal action interpreter, middleware chain, EventBus or pass-through manager layer is introduced.
-
-A module may be split later only when it owns a coherent new rule or a real Adapter seam. A function does not need its own class, and an internal helper is not automatically a public module.
-
-## Consequences
-
-Contract review has one location, while execution logic remains localized behind a small interface. The structure is intentionally smaller than the earlier proposed layout.
-
-This ADR selects engineering direction only. It does not claim that the package, CI, implementation or release exists.
+- `loop.py` is written as a direct `while` loop over Turns and Steps, using an in-memory `Inbox` under the Session actor lock and pattern matching (`match outcome:`) over the 5 `ToolOutcome` variants.
+- `events.py` uses pure functions (`project_surface(events)`, `interrupted_turn_closers(events)`).
+- No EventBus, middleware pipeline, per-state class hierarchy, or database-exception control flow is permitted.

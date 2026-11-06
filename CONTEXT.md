@@ -5,17 +5,17 @@ This file defines the public domain vocabulary. Names describe execution semanti
 | Term | Definition |
 |---|---|
 | AgentLoop | The on-demand execution procedure that coordinates input, model calls, Tools, compaction, cancellation, and finalization. It is not a long-lived product service. |
-| Session | A durable conversation identity and its append-only event history. |
-| Turn | One input-driven execution cycle through finalization. A Turn may contain multiple ordered steer inputs. |
-| Run | One concrete execution attempt within a Turn. Provider retries stay in the same Run. |
-| ModelCall | One logical model request. Exact retries of that request share this identity. |
-| Attempt | One Provider attempt within a ModelCall. |
-| AgentState | The current execution activity: `Idle`, `Streaming`, `ExecutingTool`, `Compacting`, `WaitingRequest`, or `WindingDown`. |
-| Steer | Additional user guidance accepted during an active Turn and injected only at a legal model boundary. It is not a second task queue. |
-| Trajectory | The append-only factual event history of a Session. Preview deltas are not authoritative events. |
-| Conversation projection | The model-facing view derived from the latest compaction and subsequent events. It is not a second persistent fact source. |
-| WorkingContext | A short-lived, user-level Agent reminder. It is not long-term knowledge or user authorization. |
-| Compaction | A model-generated task summary used to rebuild a smaller Conversation while leaving Trajectory unchanged. |
+| Session | A durable conversation identity (`session_id`) and its append-only event history. |
+| Turn | Monotonic integer (`turn: int >= 1`) identifying one input-driven execution cycle through finalization. Because interrupted Turns close via crash closers without in-place replay, `turn` is the sole cycle coordinate (no separate `run_id`). |
+| Step | Monotonic integer (`step: int >= 1`) within a Turn identifying one logical model request and its Tool batch (no separate `model_call_id`). |
+| Attempt | Monotonic integer (`attempt: int >= 1`) within a Step identifying one Provider network attempt. Retries increment `attempt` within the same `(turn, step)`. |
+| WriterLease | Monotonic fencing token (`writer_epoch: int` or `lease_id`) held by the single active in-memory Session driver to reject stale callbacks and split-brain writes. |
+| Steer | Additional user guidance accepted during an active Turn into the in-memory `next_step` inbox and injected only at a legal Step boundary. |
+| Trajectory | The append-only factual event history of a Session (`seq: int >= 1`). Preview deltas are ephemeral and never enter Trajectory. |
+| SurfaceOp | Event classification (`append | epoch | none`) separating model-visible surface events from log-only audit events, enabling O(Δ) projection from the latest compaction epoch watermark. |
+| Conversation projection | The model-facing view derived from the latest `epoch` (compaction) watermark and subsequent `append` surface events. |
+| ToolOutcome | Closed 5-variant algebraic type (`Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`) that makes illegal state combinations unrepresentable. |
+| WorkingContext | A short-lived, turn- or session-scoped self-reminder appended as user-level context with hash deduplication and update damping, folded right after the summary on compaction. |
+| Compaction | A model-generated task summary committed as an `epoch` event to establish a new Conversation projection watermark while leaving Trajectory immutable. |
 | Finalization | The mandatory settlement path for success, cancellation, and failure, including facts, resources, and delivery responsibility. |
-| DeliveryOwner | The durable party responsible for delivering a committed final response. Delivery failure never causes model or Tool replay. |
-| Unknown outcome | An execution whose effects cannot be established. Unknown effects are not automatically retried or treated as successful. |
+| DeliveryOwner | The durable party responsible for delivering a committed `final_message_id`. Delivery failure never causes model or Tool replay. |
