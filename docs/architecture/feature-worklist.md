@@ -41,7 +41,7 @@ Purpose: track reusable Loop capabilities. No row implies runtime implementation
 |---|---|---|
 | Adapter conformance | Shared fake-adapter failure matrix and real Store tests | Complete V1–V6 evidence |
 | Deployment | Library consumed by a single-container product such as nika | Package layout, dependency policy and metrics |
-| Language | Python preferred for ecosystem fit; no final selection | **Open:** language, concrete interfaces and package layout |
+| Language and package | Python 3.11+, centralized `contracts.py`, one Turn/Step driver and no generic handler layer; see [ADR-0003](../adr/0003-python-and-centralized-contracts.md) | Concrete implementation and CI |
 | Release and CI | API/event versions tracked separately; release only after the matrix | Formatting, tests, compatibility, examples and consumer smoke |
 
 ## Explicitly out of scope

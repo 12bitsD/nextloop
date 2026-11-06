@@ -50,6 +50,7 @@ Start with [VISION.md](VISION.md) and the [requirements map](docs/architecture/r
 - [ContextBuilder](docs/design/context-builder.md) — request assembly, cache, WorkingContext, usage and compaction.
 - [Verification matrix](docs/design/verification-matrix.md) — required protocol, Provider, concurrency and crash evidence.
 - [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md) — DSH alignment and explicit deltas.
+- [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md) — Python 3.11+, centralized public contracts and the single-driver package layout.
 - [Development plan](docs/architecture/development-plan.md) — implementation and release sequence.
 - [Research](docs/research/) — DSH, Hermes, Yomi, Provider, Tool and open-source evaluations.
 

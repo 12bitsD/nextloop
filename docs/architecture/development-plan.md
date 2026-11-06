@@ -1,18 +1,28 @@
 # nextloop development and verification plan
 
-This plan defines order and evidence. Architecture discussion is closed; implementation has not been accepted or released.
+This plan defines order and evidence. Architecture and engineering direction are closed; implementation has not been accepted or released.
 
 ## Phase 0 — Contracts
 
 Deliver the DSH-aligned public domain model, Adapter seams, event envelope, transaction groups and ownership rules. Keep the interface small and reject server, Router, EventBus, Wiki and multi-agent expansion.
 
-Current evidence: [AgentLoop](../design/agent-loop.md), [ReAct](../design/react-protocol.md), [Loop interface](../design/loop-interface.md), [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md) and the [verification matrix](../design/verification-matrix.md) are accepted as design.
+Current evidence: [AgentLoop](../design/agent-loop.md), [ReAct](../design/react-protocol.md), [Loop interface](../design/loop-interface.md), [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) and the [verification matrix](../design/verification-matrix.md) are accepted as design.
 
 Stop if an interface requires Feishu, Wiki, a concrete desktop, Provider credentials or a specific product Prompt to explain the core protocol.
 
+## Engineering baseline
+
+- Python 3.11+ and native `asyncio`.
+- Standard-library dataclasses and SQLite; `httpx` and `jsonschema` as the only planned runtime dependencies.
+- All public Schemas, Adapter Protocols, errors and versions in `src/nextloop/contracts.py`.
+- One explicit Turn/Step driver in `loop.py`; no generic handler, middleware, EventBus or manager layer.
+- Small internal modules for projection/recovery, Tool scheduling, Context, SQLite and the two Provider Adapters.
+
+See [ADR-0003](../adr/0003-python-and-centralized-contracts.md) for the package layout and ownership rules.
+
 ## Phase 1 — Minimal executable driver
 
-Implement one in-process DSH-style Turn/Step driver with fake Adapters: one Session, one model response, one Tool call and one final response. Prove call before effect, result before the next Step, and final facts before delivery.
+Implement `contracts.py` and one in-process DSH-style Turn/Step driver with fake Adapters: one Session, one model response, one Tool call and one final response. Prove call before effect, result before the next Step, and final facts before delivery.
 
 Then add bounded parallel/exclusive scheduling without changing model-order Observation commits.
 
@@ -55,4 +65,4 @@ A release includes:
 
 DSH is the primary AgentLoop, Session/projection, request-freezing and crash-closer reference. Hermes remains a secondary steer/finalization reference. PydanticAI and OpenAI Agents SDK are Provider/schema/testing references only.
 
-No complete upstream Runner, fork, Cordis plugin system, Provider-configuration persistence or durable replay model is adopted. The accepted deltas are recorded in [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md); the earlier candidate survey remains in [open-source evaluation](../research/2026-11-06-open-source-agent-loops.md).
+No complete upstream Runner, fork, Cordis plugin system, Provider-configuration persistence or durable replay model is adopted. The accepted execution deltas are recorded in [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md); the earlier candidate survey remains in [open-source evaluation](../research/2026-11-06-open-source-agent-loops.md).

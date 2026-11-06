@@ -61,8 +61,8 @@ Cross-repository reuse is through `EventStore`, `ModelProvider`, `ContextBuilder
 
 ## Current state and release definition
 
-Architecture topics T1–T4 are closed as design. Implementation language, concrete package layout, Adapter implementations, CI and runtime evidence remain open.
+Architecture topics T1–T4 are closed as design. Python 3.11+ and the consolidated package direction are selected in [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md): public contracts live in one `contracts.py`, execution uses one Turn/Step driver, and there is no generic handler layer. Adapter implementations, CI and runtime evidence remain open.
 
 An initial release requires versioned public API and event schema, migration notes, the complete [verification matrix](docs/design/verification-matrix.md), fake-adapter examples and one consumer Adapter. Consumer product acceptance remains independent.
 
-See [requirements](docs/architecture/requirements.md), [development plan](docs/architecture/development-plan.md) and [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md).
+See [requirements](docs/architecture/requirements.md), [development plan](docs/architecture/development-plan.md), [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md) and [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md).

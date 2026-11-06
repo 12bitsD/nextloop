@@ -20,6 +20,8 @@ SessionManager owns Session resolution, writer leases and process-start recovery
 
 The Loop owns DSH-style Turn/Step transitions and safe input boundaries. Callers do not orchestrate private model, Tool-scheduling or finalization flows.
 
+All public dataclasses, enums, event payload Schemas, Adapter Protocols, errors and version constants are maintained together in `src/nextloop/contracts.py` and explicitly re-exported from `nextloop`. Provider-private wire types and internal driver/projection helpers are not public contracts. See [ADR-0003](../adr/0003-python-and-centralized-contracts.md).
+
 ## Adapter seams
 
 ### EventStore

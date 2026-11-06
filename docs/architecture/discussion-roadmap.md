@@ -25,14 +25,14 @@ Current entry: **implementation contracts and verification planning**. The archi
 | T3 Tool contracts | Whole-batch admission, parallel/exclusive scheduling, model-order Observations, ordinary errors, unknown/cancellation close rules | **Generic design closed**; resource mechanisms and per-consumer Tool Schemas pending |
 | T4 Durable state | Event types, transaction groups, seq/idempotency/lease guards, projection, crash closers and delivery-only recovery | **Design closed**; field-level schema, migrations and fault tests pending |
 | T5 Adapter integration | Public versioned Adapters; nika is the first consumer example, not a protocol dependency | Pending after core contracts |
-| T6 Release and maintenance | Language/package, CI, versioning, migrations, examples and release notes | Pending; the full verification matrix is the gate |
+| T6 Release and maintenance | Python 3.11+, centralized `contracts.py`, single-driver layout, CI, versioning, migrations, examples and release notes | **Engineering direction closed** in [ADR-0003](../adr/0003-python-and-centralized-contracts.md); implementation and the full verification matrix pending |
 
 ## Remaining implementation contracts
 
-- Field-level event payloads, schema migration and malformed-history handling.
+- Field-level event payloads in `contracts.py`, schema migration and malformed-history handling.
 - Resource-restriction persistence, responsibility transfer, numeric cleanup deadlines and verified release.
 - Deterministic OpenAI/Anthropic request/response fixtures and exact-byte retry evidence.
-- Implementation language, package layout and dependency policy.
+- Package implementation and CI using the accepted Python/dependency baseline.
 - Fake-adapter conformance, real SQLite process-exit tests and one consumer Adapter.
 
 These are implementation and verification tasks, not new architecture topics.
