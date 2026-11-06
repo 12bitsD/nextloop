@@ -20,7 +20,7 @@ Purpose: track reusable Loop capabilities. No row implies runtime implementation
 | Compaction | Consumer Prompt, no Tools, validated reduction and new Conversation boundary | Implementation and live continuation evaluation |
 | Provider configuration | Consumer-configured OpenAI/Anthropic protocol, model ID, base URL and credentials; not persisted by Loop | Adapter fixtures and configuration-leak checks |
 | Provider response data | Streaming assembly, usage and required opaque response data may enter Trajectory | OpenAI/Anthropic contract tests |
-| Budget profiles | `lite/pro/promax` soft guidance; changes apply after commit | Result and effective-timing tests |
+| Step pacing watermark | Deterministic hint injected at every 15 Steps in a Turn (replaces `lite/pro/promax` and `configure_budget`) | Interval and hint injection tests |
 
 ## Tool and durable contracts
 

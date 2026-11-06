@@ -111,11 +111,11 @@ The value of proactive behavior is accepted: the Bot should reduce the user's co
 
 That behavior is not implemented by WorkingContext or ContextBuilder alone. Task-phase detection, update triggers, user-facing distillation, and interruption policy require a separate design topic after the M5 context baseline is closed.
 
-### Budget profiles and change boundaries
+### Step pacing watermark (Replaces `lite/pro/promax` budget profiles)
 
-`lite/pro/promax` are soft optimization profiles, with `pro` as default. Tool-call counts and time budgets guide efficiency rather than stopping a Run. `configure_budget(scope=run|session)` commits the Tool Result and `budget_changed` event, then applies to the next Tool/model operation. Run scope affects only the current Run; Session scope changes future Run defaults. In-flight operations keep their original limits.
+Separate `lite/pro/promax` budget profiles and a `configure_budget` Tool are removed by Occam's Razor: spending a model Step and Tool Call to reconfigure a soft counter that never halts execution is pure overhead.
 
-The configuration Tool Result returns `cap`, `used`, `remaining`, and a short efficiency hint: prefer precise queries, avoid repeated reads, and verify before wrapping up. `over_budget` marks rather than blocks execution. Run time guidance is separate from per-request and per-Tool timeouts and does not reset on configuration changes or process restart.
+Instead, Runtime applies a zero-configuration **Step Pacing Watermark**: whenever an active Turn reaches a multiple of `pacing_step_interval` (default 15 Steps), Runtime appends a concise one-line pacing hint (`[Runtime: Step 15 reached; verify progress, converge, or ask the user if blocked]`) to the latest Tool Result. Per-request and per-Tool timeouts remain separate hard guards.
 
 ## Remaining M5 decision
 
