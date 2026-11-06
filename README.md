@@ -37,7 +37,7 @@ AgentLoop.steer(input)
 AgentLoop.cancel(cause)
 ```
 
-SessionManager owns Session resolution, writer leases and process-start recovery. Adapters provide `EventStore`, `ModelProvider`, `ContextBuilder`, `Compactor`, `ToolRuntime` and `DeliveryOwner`.
+SessionManager owns Session resolution, writer leases and process-start recovery. Adapters provide `EventStore`, `ModelProvider`, `ToolRuntime` and `DeliveryOwner` (while context projection and compaction are built-in mechanisms configured via `LoopConfig`).
 
 ## Documentation
 

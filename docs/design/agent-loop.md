@@ -98,7 +98,7 @@ Instead of combining separate `status`, `execution_state`, `effect_state`, and `
 
 | Variant | Physical meaning | Scheduler & Turn behavior |
 |---|---|---|
-| `Completed(content, is_error=False, structured=None, assets=())` | Execution exited cleanly and effects are known. | Commit `tool/result`. If `is_error=False` or the call is `parallel`, continue the batch; if `is_error=True` on an `exclusive` barrier call, mark remaining unstarted calls `Skipped` and return to `step + 1`. |
+| `Completed(content, is_error=False, concludes_turn=False, structured=None, assets=())` | Execution exited cleanly and effects are known. | Commit `tool/result`. If `concludes_turn=True` (e.g., `ask_user`), deliver `content` as the Turn's final reply and conclude the Turn immediately. If `is_error=False` or the call is `parallel`, continue the batch; if `is_error=True` on an `exclusive` barrier call, mark remaining unstarted calls `Skipped` and return to `step + 1`. |
 | `Skipped(reason)` | Call never started because an earlier call in the batch triggered `Uncertain*` or cancellation. Zero side effects. | Commit correlated `tool/result` in model order so every `tool_call_id` is paired. |
 | `Cancelled(settled, partial_content="", resource_locks=())` | Interrupted by `/stop`. `settled=True` means process exited cleanly; `settled=False` retains `resource_locks` in Runtime restrictions. | Stop new dispatches; mark unstarted calls `Skipped`; enter cancellation finalization. |
 | `UncertainSettled(content, assets=())` | Timeout or transport drop where **execution has confirmed exited or isolated**, but external side effects are unknown. | Close batch (unstarted calls become `Skipped`). **Permit `step + 1`** so the model can inspect actual state before deciding. |
@@ -152,10 +152,11 @@ On startup or Session attach, `SessionManager` inspects the tail of `session_eve
 
 - **Prefix cache immutability:** Within an epoch, `surface_op = 'append'` events are strictly append-only. System Prompt and initial `AGENTS.md` bytes never mutate mid-Turn.
 - **WorkingContext damping:** `set_working_context(content, scope="turn" | "session")` appends a user-level reminder. To prevent models from spamming reminders on every Step and polluting context, Runtime enforces **hash deduplication** (identical content is a no-op) and **step damping** (prompts and soft guidance restrict updates to genuine phase transitions). On `compaction`, only the latest active `WorkingContext` is re-emitted right after the `compaction` epoch event; historical reminders stay behind the watermark.
-- **Compaction trigger:** Evaluates at Step preflight when input `I >= 75%` of context window, `I + O > capacity`, or user `/compact`. Compaction runs as a Tool-less model call using the consumer's Compaction Prompt and commits a single `surface_op = 'epoch'` event.
+- **Compaction trigger:** Evaluates at Step preflight when input `I >= 75%` of context window, `I + O > capacity`, or user `/compact`. Compaction is an internal `nextloop` mechanism (not a separate Adapter): it invokes the same `ModelProvider` with `config.compaction_prompt` and Tools disabled, committing a single `surface_op = 'epoch'` event.
+- **No `WaitingRequest` suspension state:** Interactive questions (`ask_user`) return `Completed(..., concludes_turn=True)`, which delivers the prompt as the Turn's final message and cleanly closes the Turn. The user's reply naturally starts the next Turn with full history preserved.
 
 ## 11. Ownership and verification
 
-The Loop owns coordinates, Turn/Step transitions, in-memory Inbox serialization, retry admission, Tool barrier scheduling, `ToolOutcome` enforcement, surface projection, crash closers, and finalization. Adapters own Provider wire mapping, SQLite storage, concrete Tool execution, compaction prompt content, and channel delivery.
+The Loop owns coordinates, Turn/Step transitions, in-memory Inbox serialization, context projection/compaction, retry admission, Tool barrier scheduling, `ToolOutcome` enforcement, crash closers, and finalization. The 4 Adapters (`EventStore`, `ModelProvider`, `ToolRuntime`, `DeliveryOwner`) own SQLite storage, Provider wire mapping, concrete Tool execution, and channel delivery.
 
 The [verification matrix](verification-matrix.md) is the release gate.

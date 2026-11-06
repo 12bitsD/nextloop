@@ -1,6 +1,6 @@
 # Loop interface and ownership
 
-Status: **v1-draft accepted design**, not an implemented or released API.
+Status: **v1-draft accepted design**, with public contracts implemented in `src/nextloop/contracts.py`.
 
 ## Independence and version dependency
 
@@ -15,8 +15,6 @@ AgentLoop.cancel(session_id, cause?)
 AgentLoop.recover(session_id, store, tools, delivery) -> RecoveryOutcome
 ```
 
-All public types, `ToolOutcome` variants, event envelopes, Adapter Protocols, and errors are defined in `src/nextloop/contracts.py` ([ADR-0003](../adr/0003-python-and-centralized-contracts.md)).
-
 ### Coordinate system
 
 Every execution fact is indexed by 4D integer coordinates plus a writer fence:
@@ -28,42 +26,37 @@ Every execution fact is indexed by 4D integer coordinates plus a writer fence:
 - `attempt: int` (1-based per Step; Provider retry counter)
 - `writer_epoch: int` (monotonic fencing token per Session writer attachment)
 
-Separate `run_id` and `model_call_id` UUIDs are omitted.
+## The Only 4 Adapter Seams
 
-## Adapter seams
+Context assembly (`surface_op` watermark projection) and Compaction (calling `ModelProvider` with `LoopConfig.compaction_prompt` and Tools disabled) are built-in `nextloop` mechanisms configured via `LoopConfig`. Only four real Adapter Protocols exist:
 
-### EventStore
+### 1. EventStore
 
-- Appends batches of events atomically with `(session_id, expected_seq, writer_epoch)` verification and `event_id` idempotency.
-- Supports `surface_op` (`append | epoch | none`) indexing so ContextBuilder can load only events from the latest `epoch` watermark (`seq >= last_epoch_seq AND surface_op != 'none'`).
-- Treats sequence and `writer_epoch` conflicts as fatal crash/split-brain invariants; normal in-process `steer` vs. `final` ordering is serialized by the in-memory `SessionDriver` lock.
+- `attach_writer(session_id) -> (writer_epoch, last_seq, last_turn)`
+- `append(session_id, writer_epoch, expected_seq, events) -> Sequence[Event]`
+- `load_surface(session_id) -> Sequence[Event]` (O(Δ) query from latest `SurfaceOp.EPOCH` watermark where `surface_op != NONE`)
+- `load_tail_for_recovery(session_id) -> Sequence[Event]`
 
-### ModelProvider
+### 2. ModelProvider
 
-- Configured externally by the consumer (`openai` or `anthropic` protocol, `model_id`, `base_url`, credentials, request defaults).
-- Streams one frozen `CandidateRequest` for `(turn, step, attempt)` and returns a logical `ModelResponse` or classified `ProviderError`.
-- Never persists connection configuration into Trajectory, never executes Tools, and never runs a hidden retry loop.
+- `complete(request, *, attempt, cancel) -> ModelResponse`
+- Configured externally (`openai` or `anthropic` protocol, `model_id`, `base_url`, credentials). Never persists connection configuration into Trajectory, never executes Tools, and never runs a hidden retry loop.
 
-### ContextBuilder & Compactor
+### 3. ToolRuntime
 
-- `ContextBuilder` projects Conversation from the latest `epoch` watermark + subsequent `append` surface events, keeping prior `Message` objects frozen in memory.
-- Applies hash deduplication and step damping to `WorkingContext` updates, and folds only the latest active `WorkingContext` immediately after a `compaction` epoch event.
-- `Compactor` runs a Tool-less summary call when preflight hits the 75% input threshold, `I + O` capacity limit, or `/compact`, committing one `surface_op = 'epoch'` event.
-
-### ToolRuntime
-
-- Supplies the `ToolSpec` catalog, validates whole batches before any dispatch, and classifies calls as `parallel` or `exclusive` (`max_parallel = 4` default).
-- Executes admitted calls and returns one of the **5 closed `ToolOutcome` ADT variants**:
-  - `Completed(content, is_error, structured, assets)`
+- `catalog() -> Sequence[ToolSpec]` (each spec declares `mode = PARALLEL | EXCLUSIVE`)
+- `execute(call, arguments, *, session_id, turn, step, cancel) -> ToolOutcome`
+- Returns one of the **5 closed `ToolOutcome` ADT variants**:
+  - `Completed(content, is_error=False, concludes_turn=False, structured=None, assets=())` — `concludes_turn=True` (e.g. `ask_user`) delivers `content` as the Turn's final reply and ends the Turn cleanly without an in-memory `WaitingRequest` state.
   - `Skipped(reason)`
-  - `Cancelled(settled, partial_content, resource_locks)`
-  - `UncertainSettled(content, assets)`
-  - `UncertainHanging(content, resource_locks)`
+  - `Cancelled(settled, partial_content="", resource_locks=())`
+  - `UncertainSettled(content, assets=())`
+  - `UncertainHanging(content, resource_locks=())`
 
-### DeliveryOwner
+### 4. DeliveryOwner
 
-- Delivers a committed `final_message_id` after `final/message + turn/end` are durable.
-- Retries only external delivery on recovery; never reruns the model or Tools.
+- `deliver(message: FinalMessage) -> None`
+- Delivers a committed `final_message_id` after `final/message + turn/end` are durable. Retries only external delivery on recovery.
 
 ## Canonical documents
 

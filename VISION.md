@@ -45,7 +45,7 @@ Do not fork DSH or adopt Cordis. Keep explicit deltas for whole-batch Tool valid
 
 [nika](https://github.com/12bitsD/nika) is the first consumer and owns its complete personal agent and superagent architecture, channels, knowledge, concrete Tools and product behavior. nextloop does not own goals, verification policy, Proactive behavior, Wiki, Skills, Prompt content, deployment or future multi-agent coordination.
 
-Cross-repository reuse is through `EventStore`, `ModelProvider`, `ContextBuilder`, `Compactor`, `ToolRuntime` and `DeliveryOwner` Adapters.
+Cross-repository reuse is through `EventStore`, `ModelProvider`, `ToolRuntime` and `DeliveryOwner` Adapters plus `LoopConfig`.
 
 ## Non-goals
 

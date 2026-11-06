@@ -23,9 +23,9 @@ All public schemas, protocols, and algebraic types live in `src/nextloop/contrac
 
 - **Coordinates & Envelope:** `EventCoord(session_id, turn, step, attempt, writer_epoch)`, `SurfaceOp` (`append | epoch | none`), `Event`, `NewEvent`.
 - **Messages & Requests:** `Message`, `ToolCall`, `ToolSpec`, `CandidateRequest`, `ModelUsage`, `ModelResponse`, `FinishReason`.
-- **Closed 5-variant `ToolOutcome` ADT:** `Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`, and `ToolExecutionMode` (`parallel | exclusive`).
-- **Turn lifecycle:** `TurnContext`, `TurnOutcome`, `TurnStatus` (`Succeeded | Failed | Cancelled | Blocked | DeliveryUnknown`), `RecoveryOutcome`.
-- **Adapter Protocols:** `EventStore`, `ModelProvider`, `ContextBuilder`, `Compactor`, `ToolRuntime`, `DeliveryOwner`.
+- **Closed 5-variant `ToolOutcome` ADT:** `Completed` (including `concludes_turn=True` to conclude a Turn on user questions without a `WaitingRequest` suspension state), `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`, and `ToolExecutionMode` (`parallel | exclusive`).
+- **Turn lifecycle:** `LoopConfig`, `TurnContext`, `TurnOutcome`, `TurnStatus` (`Succeeded | Failed | Cancelled | Blocked | DeliveryUnknown`), `RecoveryOutcome`.
+- **The 4 Adapter Protocols:** `EventStore`, `ModelProvider`, `ToolRuntime`, `DeliveryOwner` (`ContextBuilder` and `Compactor` are internal mechanisms configured via `LoopConfig`).
 - **Errors & Versions:** `API_VERSION`, `EVENT_SCHEMA_VERSION`, `NextloopError`, `InvariantViolation`, `ProviderError`, `CapacityError`, `ProtocolExhausted`.
 
 `src/nextloop/__init__.py` explicitly re-exports `contracts.py` and `AgentLoop`.
