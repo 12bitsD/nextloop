@@ -51,4 +51,4 @@ A release includes:
 
 DSH is the primary structural reference for append-only Sessions, projections, final-input checks, and crash closing. Hermes is a secondary reference for steer and finalization. PydanticAI and OpenAI Agents SDK are Provider/schema/testing references only.
 
-No complete upstream Runner, fork, or durable replay model is adopted by default. See nika's [open-source AgentLoop evaluation](https://github.com/12bitsD/nika/blob/main/docs/research/2026-11-06-open-source-agent-loops.md).
+No complete upstream Runner, fork, or durable replay model is adopted by default. See [open-source AgentLoop evaluation](../research/2026-11-06-open-source-agent-loops.md).

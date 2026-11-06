@@ -94,6 +94,13 @@ Consumers own:
 
 The split is wrong if nextloop needs a Feishu ID, a Wiki path, or a particular desktop lock to run its contract tests. It is also wrong if replacing a channel requires changing the Loop.
 
+## Canonical design documents
+
+- [AgentLoop core design](agent-loop.md) — execution state, input and Tool protocol, cancellation, finalization, and recovery.
+- [ContextBuilder design](context-builder.md) — request assembly, WorkingContext, cache, usage, compaction, and budgets.
+- [Discussion roadmap](../architecture/discussion-roadmap.md) — protocol topics and close conditions.
+- [ADR-0001](../adr/0001-embeddable-agent-loop.md) — repository and documentation ownership.
+
 ## Compatibility and testing
 
 Public API compatibility and event-schema compatibility are versioned independently. Contract tests use fake Providers, Tools, Stores, and DeliveryOwners, with no real channel or model dependency.
