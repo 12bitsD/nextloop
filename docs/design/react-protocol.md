@@ -40,7 +40,7 @@ ToolOutcome = (
 )
 ```
 
-- **`Completed`:** Normal success (`is_error=False`) or ordinary execution failure (`is_error=True`, e.g., file not found, command exit code != 0). Both have known effects and stopped execution. Remaining independent calls in the batch continue.
+- **`Completed`:** Normal success (`is_error=False`) or ordinary execution failure (`is_error=True`, e.g., file not found, command exit code != 0). Both have known effects and stopped execution. In `parallel` (read-only) calls, `is_error=True` allows sibling calls to continue; in an `exclusive` (mutating) barrier call, `is_error=True` truncates the remaining unstarted calls in the batch as `Skipped` so the model must re-evaluate before running follow-up actions.
 - **`Skipped`:** Never dispatched because an earlier call closed the batch. Paired with its `call_id` in model order.
 - **`Cancelled`:** Stopped by `/stop`. Closes the batch and enters cancellation finalization; if `settled=False`, `resource_locks` remain restricted.
 - **`UncertainSettled`:** Timeout/disconnect where the process/request is confirmed stopped or isolated, but external effects are unknown. Closes the current batch (unstarted calls become `Skipped`) and **advances to `step + 1`** with explicit `[UNCERTAIN_EFFECT_SETTLED]` observation text so the model can inspect state before acting.

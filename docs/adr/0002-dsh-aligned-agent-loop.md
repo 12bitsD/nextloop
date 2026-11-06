@@ -32,9 +32,9 @@ nextloop directly adopts DSH's Turn/Step driver and surface-projection architect
    - Model-visible messages use `surface_op = 'append'`.
    - `compaction` uses `surface_op = 'epoch'`, acting as a watermark so ContextBuilder loads only events since the latest epoch in O(Δ) time.
 
-5. **Whole-batch admission, CPU-style barriers, and external Provider config:**
+5. **Whole-batch admission, symmetric barrier truncation, and external Provider config:**
    - Any malformed call or Schema error rejects the whole batch before dispatch.
-   - Admitted calls use bounded `parallel` pools (`max_parallel = 4`) and `exclusive` barriers, committing `tool/result` in model order.
+   - Admitted calls use bounded `parallel` pools (`max_parallel = 4`) and `exclusive` barriers, committing `tool/result` in model order. An error on a `parallel` call continues the pool; any error or uncertainty on an `exclusive` barrier call truncates remaining unstarted calls as `Skipped`, structurally preventing broken write chains.
    - Provider connection config (`openai | anthropic`, `model_id`, `base_url`, credentials) stays external; Trajectory persists only execution facts.
 
 ## Consequences

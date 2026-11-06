@@ -82,15 +82,15 @@ Streaming deltas are ephemeral UI previews. Exact-byte retry is admitted within 
 
 Any response-completeness, call-identity, Tool-name, argument-encoding, or JSON Schema error rejects the entire batch before dispatch. Zero calls execute. The Loop commits `tool/batch-rejected` and a user-role protocol correction message for `step + 1`.
 
-### CPU-style barrier scheduling
+### CPU-style barrier scheduling & failure symmetry
 
-Admitted Tool Calls are scheduled using DSH's parallel pool + exclusive barrier model:
+Admitted Tool Calls are scheduled using DSH's parallel pool + exclusive barrier model, exploiting the symmetry between concurrency mode and side-effect safety:
 
-- ToolRuntime classifies each admitted call as `parallel` or `exclusive` (default `exclusive`).
-- Consecutive `parallel` calls run in a bounded rolling pool (`max_parallel = 4` by default).
+- ToolRuntime classifies each admitted call as `parallel` (read-only/side-effect-free) or `exclusive` (mutating/side-effecting; default `exclusive`).
+- Consecutive `parallel` calls run in a bounded rolling pool (`max_parallel = 4` by default). An ordinary error (`Completed(is_error=True)`) in a `parallel` call does not stop sibling `parallel` calls.
 - An `exclusive` call acts as a barrier: it waits for all prior in-flight calls to drain, executes alone, and settles before any subsequent call starts.
-- Every `tool/call` event is committed before its handler is invoked.
-- Regardless of completion order inside a parallel pool, `tool/result` events are committed strictly in **model-proposed order** so Conversation projection stays deterministic.
+- **Exclusive-barrier truncation:** If an `exclusive` call fails (`Completed(is_error=True)`), times out (`Uncertain*`), or is cancelled, the scheduler **immediately truncates the remainder of the batch**, marking all subsequent unstarted calls as `Skipped("Truncated after exclusive tool failure")`. Control returns to the model in `step + 1` to inspect the failure before issuing dependent actions. This enforces dependent-action safety in the scheduler rather than relying on prompt rules alone.
+- Every `tool/call` event is committed before its handler is invoked, and `tool/result` events are committed strictly in **model-proposed order**.
 
 ## 7. Closed 5-variant `ToolOutcome` ADT
 
@@ -98,7 +98,7 @@ Instead of combining separate `status`, `execution_state`, `effect_state`, and `
 
 | Variant | Physical meaning | Scheduler & Turn behavior |
 |---|---|---|
-| `Completed(content, is_error=False, structured=None, assets=())` | Execution exited cleanly and effects are known (both normal success and ordinary execution errors like missing file or failed test use `Completed` with `is_error`). | Commit `tool/result`; continue remaining independent calls in the batch; proceed to `step + 1`. |
+| `Completed(content, is_error=False, structured=None, assets=())` | Execution exited cleanly and effects are known. | Commit `tool/result`. If `is_error=False` or the call is `parallel`, continue the batch; if `is_error=True` on an `exclusive` barrier call, mark remaining unstarted calls `Skipped` and return to `step + 1`. |
 | `Skipped(reason)` | Call never started because an earlier call in the batch triggered `Uncertain*` or cancellation. Zero side effects. | Commit correlated `tool/result` in model order so every `tool_call_id` is paired. |
 | `Cancelled(settled, partial_content="", resource_locks=())` | Interrupted by `/stop`. `settled=True` means process exited cleanly; `settled=False` retains `resource_locks` in Runtime restrictions. | Stop new dispatches; mark unstarted calls `Skipped`; enter cancellation finalization. |
 | `UncertainSettled(content, assets=())` | Timeout or transport drop where **execution has confirmed exited or isolated**, but external side effects are unknown. | Close batch (unstarted calls become `Skipped`). **Permit `step + 1`** so the model can inspect actual state before deciding. |
