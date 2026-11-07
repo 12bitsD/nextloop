@@ -2,11 +2,13 @@
 
 Status: accepted release gate, 2026-11-06. No scenario is marked passing until executable evidence exists.
 
-## Current 0.1.0rc1 evidence
+## Current 0.1.0rc2 evidence
 
 The current suite has 30 passing tests plus passing `ruff` and `mypy` checks. It includes deterministic parallel gates, recovered-resource conflict prevention, real subprocess exits during Tool execution and final delivery, SQLite close/reopen, and recorded OpenAI/Anthropic streams. Wheel and sdist pass `twine check`; a clean virtual environment installs the wheel and completes the fake-Provider Tool round trip.
 
-Hosted-model smoke, nika consumer acceptance, multi-process writer coordination, and large-asset lifecycle are explicitly outside this release candidate's evidence.
+All 12 live Kimi scenarios pass. They cover OpenAI and Anthropic text, Tool rounds, real parallel execution, exclusive truncation, unknown/resource recovery, steer, cancellation, Compaction, protocol correction, WorkingContext, `concludes_turn`, and delivery-only recovery. Live smoke also caught and now guards the rejected-Tool projection bug that previously emitted dangling assistant `tool_calls`.
+
+nika consumer acceptance, multi-process writer coordination, and large-asset lifecycle remain outside this release candidate's evidence.
 
 ## Evidence rules
 

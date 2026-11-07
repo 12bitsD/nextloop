@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from ..contracts import (
     Event,
+    EventType,
     InvariantViolation,
     NewEvent,
     SurfaceOp,
@@ -69,7 +70,11 @@ class InMemoryEventStore:
             return tuple(
                 copy.deepcopy(event)
                 for event in events
-                if event.seq >= epoch_seq and event.surface_op != SurfaceOp.NONE
+                if event.seq >= epoch_seq
+                and (
+                    event.surface_op != SurfaceOp.NONE
+                    or event.event_type == EventType.TOOL_BATCH_REJECTED
+                )
             )
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:

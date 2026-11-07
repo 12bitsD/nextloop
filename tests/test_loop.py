@@ -117,6 +117,9 @@ async def test_invalid_batch_executes_nothing_then_corrects():
     events = await store.load_recovery("s")
     assert any(event.event_type == EventType.TOOL_BATCH_REJECTED for event in events)
     assert not any(event.event_type == EventType.TOOL_CALL for event in events)
+    second_request = provider.requests[1]
+    assert all(not message.tool_calls for message in second_request.messages)
+    assert second_request.messages[-1].content.startswith("[Protocol correction]")
 
 
 @pytest.mark.asyncio

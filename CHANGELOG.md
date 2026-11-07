@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0rc2 - 2026-11-08
+
+### Fixed
+
+- Rejected Tool batches no longer project dangling assistant `tool_calls` into the next Provider request. Rejection facts remain in Trajectory while subsequent requests contain only legal assistant text and protocol correction messages.
+
+### Verified
+
+- Added 12 live Kimi scenarios covering OpenAI and Anthropic text, Tool rounds, real parallel execution, exclusive truncation, unknown/resource recovery, steer, cancellation, Compaction, protocol correction, WorkingContext, `concludes_turn`, and delivery-only recovery.
+- All 30 offline tests, `ruff`, and `mypy` remain green.
+
 ## 0.1.0rc1 - 2026-11-07
 
 ### Added

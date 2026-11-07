@@ -2,7 +2,7 @@
 
 Purpose: distinguish implemented release-candidate capabilities from remaining product work. Verification evidence is in [verification-matrix.md](../design/verification-matrix.md).
 
-## Implemented for 0.1.0rc1
+## Implemented for 0.1.0rc2
 
 | Feature | Implementation | Evidence |
 |---|---|---|

@@ -1,6 +1,6 @@
 # ADR-0003: Use Python and centralize public contracts
 
-- Status: Accepted and implemented for 0.1.0rc1
+- Status: Accepted and implemented for 0.1.0rc2
 - Date: 2026-11-06
 - Scope: implementation language, dependencies, package layout, and `contracts.py` discipline
 

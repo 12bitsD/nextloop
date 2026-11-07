@@ -2,12 +2,12 @@
 
 A small, embeddable Python AgentLoop with explicit execution, recovery, and delivery semantics.
 
-Current version: **0.1.0rc1**.
+Current version: **0.1.0rc2**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.1.0rc1
+python -m pip install nextloop==0.1.0rc2
 ```
 
 For local development:
@@ -95,11 +95,12 @@ The release-candidate checks cover:
 - resource-lock recovery, conflict prevention, and explicit release;
 - real subprocess exits during Tool execution and final delivery, followed by SQLite recovery;
 - recorded OpenAI and Anthropic SSE streams;
+- 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
 - `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 
-- Hosted-model smoke and nika integration are separate acceptance work.
+- nika integration is separate acceptance work.
 - Concurrent writers across multiple processes fail closed; they are not coordinated.
 - Large-asset lifecycle, backup, and GC are not part of this release candidate.
 

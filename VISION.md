@@ -1,6 +1,6 @@
 # nextloop vision
 
-Status: DSH-aligned library implemented for 0.1.0rc1; release-candidate verification is passing, hosted-model and consumer acceptance remain separate.
+Status: DSH-aligned library implemented for 0.1.0rc2; release-candidate verification is passing, hosted-model and consumer acceptance remain separate.
 
 ## Goal
 

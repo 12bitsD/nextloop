@@ -173,7 +173,7 @@ class SQLiteEventStore:
                       SELECT MAX(seq) FROM session_events
                       WHERE session_id = ? AND surface_op = 'epoch'
                   ), 1)
-                  AND surface_op != 'none'
+                  AND (surface_op != 'none' OR event_type = 'tool/batch-rejected')
                 ORDER BY seq
                 """,
                 (session_id, session_id),

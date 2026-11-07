@@ -93,6 +93,11 @@ def project_events(
     config: LoopConfig,
     tools: Sequence[ToolSpec],
 ) -> Projection:
+    rejected_steps = {
+        (event.turn, event.step)
+        for event in events
+        if event.event_type == EventType.TOOL_BATCH_REJECTED
+    }
     messages = [Message(role="system", content=config.system_prompt)]
     messages.extend(config.bootstrap_messages)
     for event in events:
@@ -105,7 +110,19 @@ def project_events(
             EventType.ASSISTANT_MESSAGE,
             EventType.TOOL_RESULT,
         ):
-            messages.append(message_from_data(event.payload["message"]))
+            message = message_from_data(event.payload["message"])
+            if (
+                event.event_type == EventType.ASSISTANT_MESSAGE
+                and (event.turn, event.step) in rejected_steps
+            ):
+                if not message.content:
+                    continue
+                message = Message(
+                    role=message.role,
+                    content=message.content,
+                    provider_data=message.provider_data,
+                )
+            messages.append(message)
     request = CandidateRequest(
         session_id=session_id,
         turn=turn,

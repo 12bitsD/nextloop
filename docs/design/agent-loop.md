@@ -1,6 +1,6 @@
 # DSH-aligned AgentLoop core design
 
-- Status: implemented for 0.1.0rc1; the current failure suite and package checks pass
+- Status: implemented for 0.1.0rc2; the current failure suite and package checks pass
 - Last decisions: 2026-11-06 — refined with 4D integer coordinates, closed 5-variant `ToolOutcome` ADT, in-memory actor serialization with DB crash invariants, and `surface_op` epoch watermark projection
 - Structural reference: [DSH ReactLoopAgent](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/agent-loop/src/agent.ts) and [DSH Surface/Repair](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/session/src/repair.ts)
 

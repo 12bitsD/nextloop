@@ -2,7 +2,7 @@
 
 Purpose: track reusable execution contracts and release work without duplicating nika's product roadmap.
 
-Current entry: **0.1.0rc1 release-candidate validation and publication**. The DSH-aligned runtime and failure suite are implemented; hosted-model smoke and nika consumer acceptance remain separate.
+Current entry: **0.1.0rc2 release-candidate validation and publication**. The DSH-aligned runtime and failure suite are implemented; hosted-model smoke and nika consumer acceptance remain separate.
 
 ## Fixed guardrails
 

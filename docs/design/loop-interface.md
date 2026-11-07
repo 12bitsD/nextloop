@@ -1,6 +1,6 @@
 # Loop interface and ownership
 
-Status: **v1-draft implemented for 0.1.0rc1**, with public contracts in `src/nextloop/contracts.py`.
+Status: **v1-draft implemented for 0.1.0rc2**, with public contracts in `src/nextloop/contracts.py`.
 
 ## Independence and version dependency
 
