@@ -216,3 +216,52 @@ async def test_close_waits_for_gated_process_creation(monkeypatch: pytest.Monkey
             await driver.start()
         entered.clear()
         release.clear()
+
+
+async def test_broken_pipe_waits_for_delayed_exit_status() -> None:
+    class Stdin:
+        def write(self, data: bytes) -> None:
+            pass
+
+        async def drain(self) -> None:
+            raise BrokenPipeError()
+
+    class Process:
+        stdin = Stdin()
+        returncode = None
+
+        async def wait(self) -> int:
+            await asyncio.sleep(0.01)
+            self.returncode = 0
+            return 0
+
+    driver = StdioDriver(config((sys.executable, "-c", "")))
+    process = Process()
+    driver._process = process  # type: ignore[assignment]
+    with pytest.raises(ConnectionError, match="exited with status 0"):
+        await driver._send({"jsonrpc": "2.0", "method": "ping"})
+
+
+async def test_real_drain_timeout_preserves_backpressure() -> None:
+    class Stdin:
+        def write(self, data: bytes) -> None:
+            pass
+
+        async def drain(self) -> None:
+            await asyncio.sleep(30)
+
+    class Process:
+        stdin = Stdin()
+        returncode = None
+        waited = False
+
+        async def wait(self) -> int:
+            self.waited = True
+            return 0
+
+    driver = StdioDriver(config((sys.executable, "-c", "")))
+    process = Process()
+    driver._process = process  # type: ignore[assignment]
+    with pytest.raises(ConnectionError, match="backpressured"):
+        await driver._send({"jsonrpc": "2.0", "method": "ping"}, send_timeout=0.01)
+    assert not process.waited
