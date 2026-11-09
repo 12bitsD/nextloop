@@ -52,7 +52,7 @@ nextloop tools call python_worker.echo '{"text":"hello"}' examples/harness.toml
 nextloop skills view echo-guide examples/harness.toml
 ```
 
-The example Python module is found when running from a source checkout with `PYTHONPATH=examples`. No API key is needed for these diagnostic commands.
+The example Python module is found when running from a source checkout with `PYTHONPATH=examples`. Examples and reference workers ship in the repository and sdist; wheels contain the library and CLI. No API key is needed for these diagnostic commands.
 
 `ToolRegistry` is the built-in `ToolRuntime` implementation:
 

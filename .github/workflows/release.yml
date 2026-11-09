@@ -18,9 +18,9 @@ jobs:
       - run: uv python install 3.11
       - run: uv venv --python 3.11 .venv
       - run: uv pip install --python .venv/bin/python -e '.[dev]'
-      - run: .venv/bin/ruff check src tests
-      - run: .venv/bin/ruff format --check src tests
-      - run: .venv/bin/mypy src/nextloop
+      - run: .venv/bin/ruff check src tests examples
+      - run: .venv/bin/ruff format --check src tests examples
+      - run: .venv/bin/mypy --strict src/nextloop
       - run: .venv/bin/pytest -q
       - run: .venv/bin/python -m build
       - run: .venv/bin/twine check dist/*
@@ -28,6 +28,11 @@ jobs:
       - run: uv pip install --python .release-venv/bin/python dist/*.whl
       - run: .release-venv/bin/python examples/basic.py
       - run: .release-venv/bin/python examples/skills_demo.py
+      - run: PYTHONPATH=examples .release-venv/bin/nextloop check examples/harness.toml --json
+      - run: PYTHONPATH=examples .release-venv/bin/nextloop tools list examples/harness.toml --json
+      - run: PYTHONPATH=examples .release-venv/bin/nextloop tools call python_worker.echo '{"text":"wheel"}' examples/harness.toml --json
+      - run: PYTHONPATH=examples .release-venv/bin/nextloop skills list examples/harness.toml --json
+      - run: PYTHONPATH=examples .release-venv/bin/nextloop skills view echo-guide examples/harness.toml --json
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true

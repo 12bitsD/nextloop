@@ -103,9 +103,7 @@ async def main() -> None:
     while not shutdown.is_set():
         reading = asyncio.create_task(reader.readline())
         stopping = asyncio.create_task(shutdown.wait())
-        done, _ = await asyncio.wait(
-            {reading, stopping}, return_when=asyncio.FIRST_COMPLETED
-        )
+        done, _ = await asyncio.wait({reading, stopping}, return_when=asyncio.FIRST_COMPLETED)
         if stopping in done:
             reading.cancel()
             await asyncio.gather(reading, return_exceptions=True)

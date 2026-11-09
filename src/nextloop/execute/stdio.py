@@ -7,6 +7,8 @@ import signal
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import jsonschema
+
 from ..contracts import (
     STDIO_PROTOCOL_VERSION,
     Cancelled,
@@ -18,6 +20,8 @@ from ..contracts import (
     ToolOutcome,
     ToolSpec,
     UncertainHanging,
+    ValidatedCall,
+    ValidationIssue,
 )
 
 
@@ -83,6 +87,41 @@ class StdioDriver:
     def catalog(self) -> Sequence[ToolSpec]:
         return self._specs
 
+    def validate(
+        self, calls: Sequence[ToolCall]
+    ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
+        validated: list[ValidatedCall] = []
+        issues: list[ValidationIssue] = []
+        seen_ids: set[str] = set()
+        for index, call in enumerate(calls):
+            call_id = call.call_id or f"unidentified_call_{index}"
+            if not call.call_id:
+                issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is empty"))
+            elif call.call_id in seen_ids:
+                issues.append(
+                    ValidationIssue(call_id, call.name, "Tool Call identity is duplicated")
+                )
+            seen_ids.add(call.call_id)
+            spec = next((item for item in self._specs if item.name == call.name), None)
+            if spec is None:
+                issues.append(ValidationIssue(call_id, call.name, "Unknown Tool name"))
+                continue
+            try:
+                arguments = json.loads(call.arguments)
+            except (json.JSONDecodeError, TypeError) as exc:
+                issues.append(ValidationIssue(call_id, call.name, f"Invalid argument JSON: {exc}"))
+                continue
+            if not isinstance(arguments, dict):
+                issues.append(
+                    ValidationIssue(call_id, call.name, "Tool arguments must be an object")
+                )
+                continue
+            validator = jsonschema.Draft202012Validator(spec.parameters)
+            for error in validator.iter_errors(arguments):
+                issues.append(ValidationIssue(call_id, call.name, error.message))
+            validated.append(ValidatedCall(call=call, spec=spec, arguments=arguments))
+        return tuple(validated), tuple(issues)
+
     async def execute(
         self,
         call: ToolCall,
@@ -124,25 +163,19 @@ class StdioDriver:
                 response = await operation
                 return self._outcome(response)
             timed_out = cancellation not in done
-            operation.cancel()
-            await asyncio.gather(operation, return_exceptions=True)
-            await self._cancel_request(call.name, remote_name)
-            await asyncio.sleep(self.config.cancel_grace_seconds)
-            if self._process is not None and self._process.returncode is None:
-                self._process.terminate()
-                try:
-                    await asyncio.wait_for(
-                        self._process.wait(), timeout=self.config.cancel_grace_seconds
-                    )
-                except TimeoutError:
-                    self._process.kill()
-                    await self._process.wait()
-            self._broken = True
+            await self._abort_call(operation, call.name, remote_name)
             if timed_out:
                 return self._hanging(call.name, spec.resources, "stdio Tool call timed out")
             return Cancelled(
                 settled=False,
                 partial_content=f"stdio Tool {call.name} was cancelled; effects are unknown",
+                resource_locks=spec.resources,
+            )
+        except asyncio.CancelledError:
+            await self._abort_call(operation, call.name, remote_name)
+            return Cancelled(
+                settled=False,
+                partial_content=f"stdio Tool {call.name} task was cancelled; effects are unknown",
                 resource_locks=spec.resources,
             )
         except (StdioProtocolError, ConnectionError, asyncio.IncompleteReadError) as exc:
@@ -163,6 +196,23 @@ class StdioDriver:
             except (Exception, TimeoutError):
                 pass
         await self._terminate()
+
+    async def _abort_call(
+        self, operation: asyncio.Task[dict[str, Any]], name: str, remote_name: str
+    ) -> None:
+        operation.cancel()
+        await asyncio.gather(operation, return_exceptions=True)
+        await self._cancel_request(name, remote_name)
+        await asyncio.sleep(self.config.cancel_grace_seconds)
+        process = self._process
+        if process is not None and process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=self.config.cancel_grace_seconds)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+        self._broken = True
 
     async def _cancel_request(self, name: str, remote_name: str) -> None:
         with contextlib.suppress(ConnectionError, StdioProtocolError):
@@ -273,35 +323,60 @@ class StdioDriver:
         self._reader = None
 
     def _parse_specs(self, raw: Any) -> tuple[ToolSpec, ...]:
+        worker = " ".join(self.config.command)
         if not isinstance(raw, list):
-            raise StdioProtocolError("tools/list result.tools must be an array")
+            raise StdioProtocolError(
+                f"stdio worker {worker}: tools/list result.tools must be an array"
+            )
         specs = []
         for item in raw:
-            if not isinstance(item, dict):
-                raise StdioProtocolError("Tool specification must be an object")
             try:
-                remote_name = str(item["name"])
+                if not isinstance(item, dict):
+                    raise TypeError("Tool specification must be an object")
+                remote_name = item["name"]
+                description = item.get("description", "")
+                parameters = item.get("parameters", {"type": "object"})
+                resources = item.get("resources", list(self.config.resources))
+                if not isinstance(remote_name, str) or not remote_name:
+                    raise TypeError("name must be a nonempty string")
+                if not isinstance(description, str):
+                    raise TypeError("description must be a string")
+                if not isinstance(parameters, dict):
+                    raise TypeError("parameters must be an object")
+                if not isinstance(resources, list) or not all(
+                    isinstance(resource, str) for resource in resources
+                ):
+                    raise TypeError("resources must be an array of strings")
+                jsonschema.Draft202012Validator.check_schema(parameters)
+                remote_timeout = item.get("timeout_seconds")
+                if remote_timeout is not None and (
+                    not isinstance(remote_timeout, (int, float))
+                    or isinstance(remote_timeout, bool)
+                    or remote_timeout <= 0
+                ):
+                    raise TypeError("timeout_seconds must be a positive number")
+                timeout = self.config.timeout_seconds or remote_timeout
                 name = (
                     f"{self.config.namespace}.{remote_name}"
                     if self.config.namespace
                     else remote_name
                 )
-                resources = tuple(item.get("resources", self.config.resources))
-                remote_timeout = item.get("timeout_seconds")
-                timeout = self.config.timeout_seconds or remote_timeout
                 specs.append(
                     ToolSpec(
                         name=name,
-                        description=str(item.get("description", "")),
-                        parameters=item.get("parameters", {"type": "object"}),
+                        description=description,
+                        parameters=parameters,
                         mode=ToolExecutionMode(item.get("mode", "exclusive")),
-                        resources=resources,
+                        resources=tuple(resources),
                         timeout_seconds=float(timeout) if timeout is not None else None,
                     )
                 )
                 self._remote_names[name] = remote_name
-            except (KeyError, TypeError, ValueError) as exc:
-                raise StdioProtocolError(f"Invalid stdio Tool specification: {item!r}") from exc
+            except (KeyError, TypeError, ValueError, jsonschema.SchemaError) as exc:
+                tool_name = item.get("name", "<unknown>") if isinstance(item, dict) else "<unknown>"
+                raise StdioProtocolError(
+                    f"stdio worker {worker}: invalid Tool '{tool_name}': {exc}"
+                ) from exc
         return tuple(specs)
 
     @staticmethod

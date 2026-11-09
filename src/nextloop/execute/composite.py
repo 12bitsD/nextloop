@@ -28,49 +28,66 @@ class CompositeToolRuntime:
         runtimes: Sequence[ToolRuntime] = (),
         *,
         stdio: Sequence[StdioDriver] = (),
+        origins: Sequence[str] = (),
+        stdio_origins: Sequence[str] = (),
     ) -> None:
         self._runtimes = tuple(runtimes)
         self._stdio = tuple(stdio)
+        self._origins = tuple(origins) or tuple("Python runtime" for _ in self._runtimes)
+        self._stdio_origins = tuple(stdio_origins) or tuple(
+            f"stdio worker {' '.join(driver.config.command)}" for driver in self._stdio
+        )
         self._owners: dict[str, ToolRuntime] = {}
         self._specs: dict[str, ToolSpec] = {}
         self._started = False
         self._start_lock = asyncio.Lock()
-        for runtime in self._runtimes:
-            self._add_catalog(runtime)
+        for runtime, origin in zip(self._runtimes, self._origins, strict=True):
+            self._add_catalog(runtime, origin)
 
     @classmethod
     def from_configs(cls, configs: Sequence[ToolConfig]) -> CompositeToolRuntime:
         runtimes: list[ToolRuntime] = []
+        origins: list[str] = []
         stdio: list[StdioDriver] = []
+        stdio_origins: list[str] = []
         for config in configs:
             if config.driver == "python":
                 if config.target is None:
                     raise HarnessError("Python Tool requires target")
                 runtimes.append(load_python_tools(config.target))
+                origins.append(f"Python target {config.target}")
             elif config.driver == "stdio":
                 stdio.append(StdioDriver(config))
+                stdio_origins.append(f"stdio worker {' '.join(config.command)}")
             else:
                 raise HarnessError(f"Unsupported Tool driver: {config.driver}")
-        return cls(runtimes, stdio=stdio)
+        return cls(
+            runtimes,
+            stdio=stdio,
+            origins=origins,
+            stdio_origins=stdio_origins,
+        )
 
     async def start(self) -> None:
         async with self._start_lock:
             if self._started:
                 return
-            for driver in self._stdio:
+            for driver, origin in zip(self._stdio, self._stdio_origins, strict=True):
                 await driver.start()
-                self._add_catalog(driver)
+                self._add_catalog(driver, origin)
             self._started = True
 
     async def start_eager(self, configs: Sequence[ToolConfig]) -> None:
         eager = [
-            driver
-            for driver, config in zip(self._stdio, _stdio_configs(configs), strict=True)
+            (driver, origin)
+            for driver, config, origin in zip(
+                self._stdio, _stdio_configs(configs), self._stdio_origins, strict=True
+            )
             if config.start == "eager"
         ]
-        for driver in eager:
+        for driver, origin in eager:
             await driver.start()
-            self._add_catalog(driver)
+            self._add_catalog(driver, origin)
 
     def catalog(self) -> Sequence[ToolSpec]:
         return tuple(self._specs.values())
@@ -138,12 +155,18 @@ class CompositeToolRuntime:
         for driver in self._stdio:
             await driver.close()
 
-    def _add_catalog(self, runtime: ToolRuntime) -> None:
+    def _add_catalog(self, runtime: ToolRuntime, origin: str = "Tool runtime") -> None:
         if any(owner is runtime for owner in self._owners.values()):
             return
         for spec in runtime.catalog():
+            try:
+                jsonschema.Draft202012Validator.check_schema(spec.parameters)
+            except jsonschema.SchemaError as exc:
+                raise HarnessError(
+                    f"{origin}: Tool '{spec.name}' has invalid JSON Schema: {exc.message}"
+                ) from exc
             if spec.name in self._specs:
-                raise HarnessError(f"Duplicate Tool name: {spec.name}")
+                raise HarnessError(f"{origin}: Duplicate Tool name: {spec.name}")
             self._specs[spec.name] = spec
             self._owners[spec.name] = runtime
 

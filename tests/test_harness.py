@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,12 @@ def test_load_valid_config_without_credentials(tmp_path: Path) -> None:
         ("unknown = true", "unknown field"),
         ('min_nextloop = "9.0.0"', "requires nextloop"),
         ('min_nextloop = "0.3.0"', "requires nextloop"),
+        ('[provider.default_parameters]\nACCESS_TOKEN = "literal"', "plaintext credentials"),
+        (
+            '[provider.default_parameters.headers]\nAuthorization = "literal"',
+            "plaintext credentials",
+        ),
+        ('[provider.default_parameters]\nclient_secret = "literal"', "plaintext credentials"),
     ],
 )
 def test_invalid_config_fails_before_execution(tmp_path: Path, fragment: str, message: str) -> None:
@@ -165,4 +172,44 @@ async def test_harness_runs_tool_and_skill_turn(
     assert harness.delivery.messages[0].content == "done"
     assert "guide: Guide" in provider.requests[0].messages[0].content
     assert provider.requests[1].messages[-1].content == "hello"
+    await harness.close()
+
+
+def test_invalid_python_tool_schema_has_target_and_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "bad_schema.py").write_text(
+        "from nextloop import ToolSpec\n"
+        "def register(registry):\n"
+        "    registry.register(ToolSpec('broken', 'Broken', {'type': 'not-a-type'}), "
+        "lambda arguments, context: None)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    config = write_config(
+        tmp_path, '[[tools]]\ndriver = "python"\ntarget = "bad_schema:register"\n'
+    )
+    with pytest.raises(HarnessError, match="bad_schema:register.*broken.*invalid JSON Schema"):
+        Harness.load(config)
+
+
+async def test_invalid_stdio_tool_schema_has_worker_and_name(tmp_path: Path) -> None:
+    worker = tmp_path / "bad_worker.py"
+    worker.write_text(
+        "import json, sys\n"
+        "for line in sys.stdin:\n"
+        "    request = json.loads(line)\n"
+        "    result = {'protocolVersion': 'nextloop.stdio/v1'} "
+        "if request['method'] == 'initialize' else {'tools': [{'name': 'broken', "
+        "'parameters': {'type': 'not-a-type'}}]}\n"
+        "    response = {'jsonrpc': '2.0', 'id': request['id'], 'result': result}\n"
+        "    print(json.dumps(response), flush=True)\n",
+        encoding="utf-8",
+    )
+    config = write_config(
+        tmp_path, f'[[tools]]\ndriver = "stdio"\ncommand = ["{sys.executable}", "{worker}"]\n'
+    )
+    harness = Harness.load(config)
+    with pytest.raises(HarnessError, match="stdio worker.*broken"):
+        await harness.check()
     await harness.close()

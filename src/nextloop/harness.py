@@ -5,7 +5,7 @@ import re
 import tomllib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn, cast
 
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
@@ -144,16 +144,21 @@ class Harness:
                 f"{self.spec.source_path}: provider.api_key_env environment variable "
                 f"'{config.api_key_env}' is not set"
             )
-        arguments = {
-            "model_id": config.model_id,
-            "base_url": config.base_url,
-            "api_key": api_key,
-            "default_parameters": config.default_parameters,
-            "timeout_seconds": config.timeout_seconds,
-        }
         if config.protocol == "openai":
-            return OpenAIProvider(**arguments)
-        return AnthropicProvider(**arguments)
+            return OpenAIProvider(
+                model_id=config.model_id,
+                base_url=config.base_url,
+                api_key=api_key,
+                default_parameters=config.default_parameters,
+                timeout_seconds=config.timeout_seconds,
+            )
+        return AnthropicProvider(
+            model_id=config.model_id,
+            base_url=config.base_url,
+            api_key=api_key,
+            default_parameters=config.default_parameters,
+            timeout_seconds=config.timeout_seconds,
+        )
 
     def _runtime_with_skills(self) -> CompositeToolRuntime:
         if self._all_tools is not None:
@@ -344,13 +349,29 @@ def _fields(raw: Mapping[str, Any], allowed: set[str], prefix: str, source: Path
 
 
 def _reject_secrets(raw: Mapping[str, Any], source: Path) -> None:
-    forbidden = {"api_key", "apikey", "secret", "token", "password", "credential", "credentials"}
+    forbidden = {
+        "apikey",
+        "secret",
+        "secretkey",
+        "token",
+        "accesstoken",
+        "refreshtoken",
+        "sessiontoken",
+        "clientsecret",
+        "authorization",
+        "proxyauthorization",
+        "password",
+        "credential",
+        "credentials",
+        "privatekey",
+    }
 
     def visit(value: Any, path: str) -> None:
         if isinstance(value, dict):
             for key, child in value.items():
                 child_path = f"{path}.{key}" if path else str(key)
-                if str(key).lower() in forbidden:
+                normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
+                if normalized in forbidden:
                     _fail(
                         source, child_path, "plaintext credentials are forbidden; use api_key_env"
                     )
@@ -408,7 +429,7 @@ def _table(raw: Mapping[str, Any], name: str, source: Path) -> Mapping[str, Any]
     value = raw.get(name)
     if not isinstance(value, dict):
         _fail(source, name, "must be a table")
-    return value
+    return cast(Mapping[str, Any], value)
 
 
 def _optional_table(
@@ -417,7 +438,7 @@ def _optional_table(
     value = raw.get(name, {})
     if not isinstance(value, dict):
         _fail(source, f"{prefix + '.' if prefix else ''}{name}", "must be a table")
-    return value
+    return cast(Mapping[str, Any], value)
 
 
 def _optional_string(raw: Mapping[str, Any], name: str, source: Path, prefix: str) -> str:
@@ -467,5 +488,5 @@ def _number(
     return float(value)
 
 
-def _fail(source: Path, field: str, reason: str) -> None:
+def _fail(source: Path, field: str, reason: str) -> NoReturn:
     raise HarnessError(f"{source}: {field}: {reason}")

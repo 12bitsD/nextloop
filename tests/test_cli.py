@@ -49,3 +49,12 @@ def test_cli_commands(
     assert json.loads(capsys.readouterr().out)[0]["name"] == "demo"
     assert main(["--json", "skills", "view", "demo", str(config)]) == 0
     assert json.loads(capsys.readouterr().out)["body"] == "Read only."
+
+
+def test_json_argparse_errors(capsys: pytest.CaptureFixture[str]) -> None:
+    for arguments in (["check", "--json"], ["unknown", "--json"]):
+        assert main(arguments) == 1
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["ok"] is False and payload["error"]
+        assert captured.err == ""

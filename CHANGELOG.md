@@ -10,6 +10,13 @@
 - Python, Rust, and C++ reference workers plus an offline debugging CLI.
 - Harness Skill discovery, dependency validation, on-demand `skill_view`, examples, and extension interface documentation.
 
+### Fixed
+
+- Direct Task cancellation now notifies and reclaims stdio workers with resource-locking outcomes.
+- Rust/C++ workers use real JSON parsing, escaped serialization, and concurrent responses.
+- Catalog Schema validation, normalized secret rejection, strict typing, and JSON CLI usage errors.
+- Shared three-language conformance and clean-wheel CI/release checks; examples are included in sdist.
+
 ### Preserved
 
 - Existing AgentLoop, BatchExecutor, ToolRegistry, whole-batch validation, result ordering, recovery, and delivery semantics remain unchanged.

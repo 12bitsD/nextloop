@@ -6,14 +6,23 @@ import dataclasses
 import json
 import sys
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NoReturn
 
 from .contracts import NextloopError, TurnOutcome
 from .harness import Harness
 
 
+class CliUsageError(ValueError):
+    pass
+
+
+class CliArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        raise CliUsageError(message)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = CliArgumentParser(
         prog="nextloop", description="Inspect and smoke-test a nextloop Harness"
     )
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -43,13 +52,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
-    if "--json" in arguments:
+    json_output = "--json" in arguments
+    if json_output:
         arguments = ["--json", *(item for item in arguments if item != "--json")]
-    args = build_parser().parse_args(arguments)
     try:
+        args = build_parser().parse_args(arguments)
         result = asyncio.run(_dispatch(args))
     except (NextloopError, ValueError, OSError) as exc:
-        if args.json:
+        if json_output:
             print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
         else:
             print(f"error: {exc}", file=sys.stderr)
@@ -88,7 +98,7 @@ async def _dispatch(args: argparse.Namespace) -> Any:
                 raise NextloopError("; ".join(issue.message for issue in issues))
             import asyncio
 
-            outcome = await harness.tools.execute(
+            tool_outcome = await harness.tools.execute(
                 call,
                 json.loads(args.arguments),
                 session_id="cli",
@@ -96,7 +106,7 @@ async def _dispatch(args: argparse.Namespace) -> Any:
                 step=0,
                 cancel=asyncio.Event(),
             )
-            return dataclasses.asdict(outcome)
+            return dataclasses.asdict(tool_outcome)
         if args.command == "skills":
             await harness.check()
             assert harness.skills is not None

@@ -1,0 +1,4 @@
+recursive-include examples *
+recursive-include docs *.md
+global-exclude *.py[cod]
+prune examples/__pycache__

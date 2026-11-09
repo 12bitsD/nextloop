@@ -87,3 +87,19 @@ async def test_cancellation_and_crash_are_uncertain() -> None:
     repeated = await call(driver, "echo", {"text": "must not replay"})
     assert isinstance(repeated, UncertainHanging)
     await driver.close()
+
+
+async def test_direct_task_cancellation_reclaims_worker() -> None:
+    driver = StdioDriver(config())
+    await driver.start()
+    process = driver._process
+    assert process is not None
+    operation = asyncio.create_task(call(driver, "wait", {"seconds": 10}))
+    await asyncio.sleep(0.05)
+    operation.cancel()
+    outcome = await operation
+    assert isinstance(outcome, Cancelled) and not outcome.settled
+    assert outcome.resource_locks == ("python-wait",)
+    assert process.returncode is not None
+    assert not driver._pending
+    await driver.close()
