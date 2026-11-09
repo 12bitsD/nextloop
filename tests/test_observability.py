@@ -50,6 +50,36 @@ class Collector:
         self.records.append(trace)
 
 
+class SlowSyncExporter(Collector):
+    def export(self, trace):
+        time.sleep(0.5)
+        self.records.append(trace)
+
+
+def observed(collector, **kwargs):
+    return ObservingEventStore(InMemoryEventStore(), [collector], **kwargs)
+
+
+def fake_provider(responses):
+    provider = FakeProvider(responses)
+    provider.model_id = "test-model"
+    return provider
+
+
+def write_harness_config(path: Path, exporter: str) -> None:
+    path.write_text(
+        'schema = "nextloop.harness/v1"\n'
+        'min_nextloop = "0.3.0rc2"\n'
+        "[provider]\n"
+        'protocol = "openai"\n'
+        'model_id = "test"\n'
+        'base_url = "https://example.invalid"\n'
+        'api_key_env = "UNUSED_KEY"\n'
+        "[trace]\n"
+        f'exporter = "{exporter}"\n'
+    )
+
+
 def tools():
     registry = ToolRegistry()
     registry.register(
@@ -81,13 +111,17 @@ def context(store, provider, registry, delivery, text="hello", session_id="s", *
 
 
 async def run(store, responses, registry=None, delivery=None, **kwargs):
-    provider = FakeProvider(responses)
-    provider.model_id = "test-model"
     delivery = delivery or FakeDelivery()
     outcome = await AgentLoop().run(
-        context(store, provider, registry or tools(), delivery, **kwargs)
+        context(store, fake_provider(responses), registry or tools(), delivery, **kwargs)
     )
     return outcome, delivery
+
+
+async def run_and_flush(store, responses, **kwargs):
+    result = await run(store, responses, **kwargs)
+    await store.flush(1)
+    return result
 
 
 def response(text="done", **kwargs):
@@ -103,8 +137,8 @@ def echo_call(call_id="call-1", text="hi"):
 
 async def test_live_history_and_tool_fields():
     collector = Collector()
-    store = ObservingEventStore(InMemoryEventStore(), [collector])
-    outcome, delivery = await run(
+    store = observed(collector)
+    outcome, delivery = await run_and_flush(
         store,
         [
             echo_call(),
@@ -112,7 +146,6 @@ async def test_live_history_and_tool_fields():
         ],
     )
     assert outcome.status == TurnStatus.SUCCEEDED
-    await store.flush(1)
     assert [type(record) for record in collector.records] == [
         ModelCallTrace,
         ToolCallTrace,
@@ -147,9 +180,8 @@ async def test_live_history_and_tool_fields():
 
 async def test_retry_has_independent_attempts():
     collector = Collector()
-    store = ObservingEventStore(InMemoryEventStore(), [collector])
-    await run(store, [ProviderError("retry", retryable=True), response()])
-    await store.flush(1)
+    store = observed(collector)
+    await run_and_flush(store, [ProviderError("retry", retryable=True), response()])
     models = [record for record in collector.records if isinstance(record, ModelCallTrace)]
     assert [(model.attempt, model.status) for model in models] == [(1, "error"), (2, "success")]
     assert models[0].retryable is True
@@ -159,8 +191,8 @@ async def test_retry_has_independent_attempts():
 
 async def test_compaction_and_inference_do_not_share_identity():
     collector = Collector()
-    store = ObservingEventStore(InMemoryEventStore(), [collector])
-    outcome, _ = await run(
+    store = observed(collector)
+    outcome, _ = await run_and_flush(
         store,
         [
             response("short", usage=ModelUsage(1, 2, 3)),
@@ -172,7 +204,6 @@ async def test_compaction_and_inference_do_not_share_identity():
         output_reserve=0,
     )
     assert outcome.status == TurnStatus.SUCCEEDED
-    await store.flush(1)
     models = [record for record in collector.records if isinstance(record, ModelCallTrace)]
     assert [(model.purpose, model.output) for model in models] == [
         ("compaction", "short"),
@@ -193,7 +224,7 @@ async def test_exclusive_failure_skips_later_tool_with_arguments():
         lambda arguments, context: Completed("write failed", is_error=True),
     )
     collector = Collector()
-    store = ObservingEventStore(InMemoryEventStore(), [collector])
+    store = observed(collector)
     calls = ModelResponse(
         tool_calls=(
             ToolCall("write-1", "write", "{}"),
@@ -201,8 +232,7 @@ async def test_exclusive_failure_skips_later_tool_with_arguments():
         ),
         finish_reason=FinishReason.TOOL_CALLS,
     )
-    await run(store, [calls, response()], registry=registry)
-    await store.flush(1)
+    await run_and_flush(store, [calls, response()], registry=registry)
     results = [record for record in collector.records if isinstance(record, ToolCallTrace)]
     assert len(results) == 2
     assert results[0].is_error is True
@@ -216,13 +246,12 @@ async def test_exclusive_failure_skips_later_tool_with_arguments():
 
 async def test_rejected_batch_has_no_tool_trace():
     collector = Collector()
-    store = ObservingEventStore(InMemoryEventStore(), [collector])
+    store = observed(collector)
     invalid = ModelResponse(
         tool_calls=(ToolCall("bad", "echo", "{}"),),
         finish_reason=FinishReason.TOOL_CALLS,
     )
-    await run(store, [invalid, response()])
-    await store.flush(1)
+    await run_and_flush(store, [invalid, response()])
     assert not any(isinstance(record, ToolCallTrace) for record in collector.records)
     turn = await store.get_turn("s", 1)
     assert turn is not None and turn.rejected_batch_count == 1
@@ -286,7 +315,7 @@ async def test_close_timeout_and_idempotence():
 
 async def test_idempotent_append_and_multi_session():
     collector = Collector()
-    store = ObservingEventStore(InMemoryEventStore(), [collector])
+    store = observed(collector)
     for session_id in ("s1", "s2"):
         epoch, seq, _ = await store.attach_writer(session_id)
         drafts = [
@@ -380,17 +409,7 @@ async def test_history_without_observing_store_and_stdout(tmp_path: Path):
     assert output["data"]["final_content"] == "done"
 
     config_path = tmp_path / "harness.toml"
-    config_path.write_text(
-        'schema = "nextloop.harness/v1"\n'
-        'min_nextloop = "0.3.0rc2"\n'
-        "[provider]\n"
-        'protocol = "openai"\n'
-        'model_id = "test"\n'
-        'base_url = "https://example.invalid"\n'
-        'api_key_env = "UNUSED_KEY"\n'
-        "[trace]\n"
-        'exporter = "stdout"\n'
-    )
+    write_harness_config(config_path, "stdout")
     harness = Harness.load(config_path, session_id="s")
     assert isinstance(harness.store, ObservingEventStore)
     harness.store = raw
@@ -425,17 +444,7 @@ async def test_module_exporter_and_runtime_exporter(
         "records = []\ndef collect(trace):\n    records.append(trace)\n"
     )
     config_path = tmp_path / "harness.toml"
-    config_path.write_text(
-        'schema = "nextloop.harness/v1"\n'
-        'min_nextloop = "0.3.0rc2"\n'
-        "[provider]\n"
-        'protocol = "openai"\n'
-        'model_id = "test"\n'
-        'base_url = "https://example.invalid"\n'
-        'api_key_env = "UNUSED_KEY"\n'
-        "[trace]\n"
-        'exporter = "trace_sink:collect"\n'
-    )
+    write_harness_config(config_path, "trace_sink:collect")
     runtime_collector = Collector()
     harness = Harness.load(config_path, session_id="s", exporter=runtime_collector)
     assert isinstance(harness.store, ObservingEventStore)
@@ -449,11 +458,6 @@ async def test_module_exporter_and_runtime_exporter(
 
 
 async def test_blocking_sync_exporter_does_not_block_loop_and_still_exports():
-    class SlowSyncExporter(Collector):
-        def export(self, trace):
-            time.sleep(0.5)
-            self.records.append(trace)
-
     exporter = SlowSyncExporter()
     store = ObservingEventStore(InMemoryEventStore(), [exporter])
     outcome, delivery = await asyncio.wait_for(run(store, [response()]), timeout=0.2)
@@ -514,7 +518,7 @@ def trace_event(event_type, seq, turn, step, payload, attempt=0):
 
 async def test_live_recovery_read_does_not_duplicate_open_turn():
     collector = Collector()
-    store = ObservingEventStore(InMemoryEventStore(), [collector])
+    store = observed(collector)
     epoch, seq, _ = await store.attach_writer("s")
     started_at = utc_now()
     drafts = [
@@ -757,15 +761,9 @@ async def test_sync_exporter_residual_is_reported_not_hidden():
 
 
 async def test_slow_sync_exporter_does_not_block_steer_or_cancel():
-    class SlowSyncExporter(Collector):
-        def export(self, trace):
-            time.sleep(0.5)
-            self.records.append(trace)
-
     exporter = SlowSyncExporter()
     store = ObservingEventStore(InMemoryEventStore(), [exporter])
-    provider = FakeProvider([echo_call(), response()])
-    provider.model_id = "test-model"
+    provider = fake_provider([echo_call(), response()])
     registry = tools()
     started = asyncio.Event()
     release = asyncio.Event()
@@ -793,8 +791,7 @@ async def test_slow_sync_exporter_does_not_block_steer_or_cancel():
         return Cancelled(settled=True)
 
     registry._handlers["echo"] = wait_for_cancel
-    provider = FakeProvider([echo_call()])
-    provider.model_id = "test-model"
+    provider = fake_provider([echo_call()])
     running = asyncio.create_task(loop.run(context(store, provider, registry, FakeDelivery())))
     await asyncio.wait_for(cancel_started.wait(), timeout=0.2)
     assert await loop.cancel("s") is True
