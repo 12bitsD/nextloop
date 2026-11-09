@@ -6,7 +6,7 @@
 
 ```toml
 schema = "nextloop.harness/v1"
-min_nextloop = "0.3.0rc1"
+min_nextloop = "0.3.0rc2"
 
 [provider]
 protocol = "openai" # or anthropic

@@ -2,12 +2,12 @@
 
 A small, embeddable Python AgentLoop with explicit execution, recovery, and delivery semantics.
 
-Current version: **0.3.0rc1**.
+Current version: **0.3.0rc2**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.3.0rc1
+python -m pip install nextloop==0.3.0rc2
 ```
 
 For local development:

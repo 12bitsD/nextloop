@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0rc2 - 2026-11-09
+
+### Fixed
+
+- Broken stdio pipes now confirm delayed process exits with a bounded wait instead of misreporting EOF as backpressure; true drain timeouts retain backpressure semantics.
+
+### Release note
+
+- The public `v0.3.0rc1` tag was blocked before PyPI/GitHub Release artifacts by this EOF race. It is not moved or reused; rc2 supersedes it for release verification.
+
 ## 0.3.0rc1 - 2026-11-09
 
 ### Added

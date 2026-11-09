@@ -105,7 +105,7 @@ class StdioDriver:
                     "initialize",
                     {
                         "protocolVersion": STDIO_PROTOCOL_VERSION,
-                        "clientInfo": {"name": "nextloop", "version": "0.3.0rc1"},
+                        "clientInfo": {"name": "nextloop", "version": "0.3.0rc2"},
                     },
                     request_timeout=10.0,
                 )
@@ -337,13 +337,18 @@ class StdioDriver:
             try:
                 process.stdin.write(data)
                 await asyncio.wait_for(process.stdin.drain(), timeout=send_timeout)
-            except (BrokenPipeError, ConnectionResetError, TimeoutError) as exc:
+            except (BrokenPipeError, ConnectionResetError) as exc:
                 self._broken = True
-                if process.returncode is not None:
-                    raise ConnectionError(
-                        f"stdio worker exited with status {process.returncode}"
-                    ) from exc
-                raise ConnectionError("stdio worker stdin is closed or backpressured") from exc
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=0.1)
+                except TimeoutError:
+                    raise ConnectionError("stdio worker stdin is closed") from exc
+                raise ConnectionError(
+                    f"stdio worker exited with status {process.returncode}"
+                ) from exc
+            except TimeoutError as exc:
+                self._broken = True
+                raise ConnectionError("stdio worker stdin is backpressured") from exc
 
     async def _read_messages(self) -> None:
         process = self._process
