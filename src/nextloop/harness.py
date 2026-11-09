@@ -32,6 +32,7 @@ from .contracts import (
     new_id,
     parse_version,
 )
+from .execute.cleanup import wait_for_cleanup
 from .execute.composite import CompositeToolRuntime
 from .execute.tools import ToolRegistry
 from .loop import AgentLoop
@@ -134,17 +135,7 @@ class Harness:
         return await self.loop.recover(self.session_id, self.store, self.delivery)
 
     async def close(self) -> None:
-        closing = asyncio.create_task(self._close())
-        current = asyncio.current_task()
-        cancelled = False
-        while not closing.done():
-            try:
-                await asyncio.shield(closing)
-            except asyncio.CancelledError:
-                cancelled = True
-                if current is not None:
-                    current.uncancel()
-        await closing
+        cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
         if cancelled:
             raise asyncio.CancelledError()
 

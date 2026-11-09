@@ -25,6 +25,7 @@ from ..contracts import (
     ValidationIssue,
     is_positive_number,
 )
+from .cleanup import wait_for_cleanup
 from .tools import validate_calls
 
 MAX_FRAME_BYTES = 16 * 1024 * 1024
@@ -115,7 +116,7 @@ class StdioDriver:
                 listed = await self._request("tools/list", {}, request_timeout=10.0)
                 self._specs = self._parse_specs(listed.get("tools"))
             except BaseException:
-                await self._wait_for_cleanup(asyncio.create_task(self._terminate()))
+                await wait_for_cleanup(asyncio.create_task(self._terminate()))
                 raise
 
     def catalog(self) -> Sequence[ToolSpec]:
@@ -221,7 +222,7 @@ class StdioDriver:
                 current.uncancel()
             starting.cancel()
             waiting = asyncio.create_task(self._await_start_cleanup(starting))
-            await self._wait_for_cleanup(waiting)
+            await wait_for_cleanup(waiting)
             return False
         finally:
             cancellation.cancel()
@@ -232,17 +233,7 @@ class StdioDriver:
         await asyncio.gather(starting, return_exceptions=True)
 
     async def close(self) -> None:
-        closing = asyncio.create_task(self._close())
-        current = asyncio.current_task()
-        cancelled = False
-        while not closing.done():
-            try:
-                await asyncio.shield(closing)
-            except asyncio.CancelledError:
-                cancelled = True
-                if current is not None:
-                    current.uncancel()
-        await closing
+        cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
         if cancelled:
             raise asyncio.CancelledError()
 
@@ -264,18 +255,7 @@ class StdioDriver:
         self, operation: asyncio.Task[dict[str, Any]], name: str, remote_name: str
     ) -> None:
         cleanup = asyncio.create_task(self._abort_call(operation, name, remote_name))
-        await self._wait_for_cleanup(cleanup)
-
-    @staticmethod
-    async def _wait_for_cleanup(cleanup: asyncio.Task[None]) -> None:
-        current = asyncio.current_task()
-        while not cleanup.done():
-            try:
-                await asyncio.shield(cleanup)
-            except asyncio.CancelledError:
-                if current is not None:
-                    current.uncancel()
-        await cleanup
+        await wait_for_cleanup(cleanup)
 
     async def _abort_call(
         self, operation: asyncio.Task[dict[str, Any]], name: str, remote_name: str

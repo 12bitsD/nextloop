@@ -18,6 +18,7 @@ from ..contracts import (
     ValidatedCall,
     ValidationIssue,
 )
+from .cleanup import wait_for_cleanup
 from .stdio import StdioDriver
 from .tools import ToolRegistry, validate_calls
 
@@ -121,17 +122,7 @@ class CompositeToolRuntime:
         )
 
     async def close(self) -> None:
-        closing = asyncio.create_task(self._close())
-        current = asyncio.current_task()
-        cancelled = False
-        while not closing.done():
-            try:
-                await asyncio.shield(closing)
-            except asyncio.CancelledError:
-                cancelled = True
-                if current is not None:
-                    current.uncancel()
-        await closing
+        cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
         if cancelled:
             raise asyncio.CancelledError()
 
