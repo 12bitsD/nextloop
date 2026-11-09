@@ -63,8 +63,10 @@ class ObservingEventStore:
         self._projector = TraceProjector()
         self._projector_lock = asyncio.Lock()
         self._seeded_sessions: set[str] = set()
+        self._live_sessions: set[str] = set()
         self._queue: asyncio.Queue[TraceRecord] = asyncio.Queue(maxsize=max_queue_size)
         self._worker_task: asyncio.Task[None] | None = None
+        self._in_flight: TraceRecord | None = None
         self._close_timeout = close_timeout
         self._on_error = on_error
         self._closed = False
@@ -88,7 +90,8 @@ class ObservingEventStore:
         if session_id not in self._seeded_sessions:
             try:
                 async with self._projector_lock:
-                    self._projector.seed(events)
+                    if session_id not in self._live_sessions:
+                        self._projector.seed(events)
                     self._seeded_sessions.add(session_id)
             except Exception as exc:
                 self._report_error(exc, None)
@@ -105,6 +108,7 @@ class ObservingEventStore:
         try:
             async with self._projector_lock:
                 records = self._projector.feed(committed)
+                self._live_sessions.add(session_id)
             for record in records:
                 self._enqueue(record)
         except Exception as exc:
@@ -127,6 +131,7 @@ class ObservingEventStore:
     async def _worker(self) -> None:
         while True:
             record = await self._queue.get()
+            self._in_flight = record
             try:
                 for exporter in self._exporters:
                     try:
@@ -134,6 +139,7 @@ class ObservingEventStore:
                     except Exception as exc:
                         self._report_error(exc, record)
             finally:
+                self._in_flight = None
                 self._queue.task_done()
 
     def _report_error(self, error: Exception, record: TraceRecord | None) -> None:
@@ -166,11 +172,12 @@ class ObservingEventStore:
         try:
             deadline = asyncio.get_running_loop().time() + self._close_timeout
             flushed = await self.flush(self._close_timeout)
-            if not flushed and self._queue.qsize():
-                pending = self._queue.qsize()
+            pending = self._queue.qsize() + int(self._in_flight is not None)
+            if not flushed and pending:
                 self.dropped_count += pending
                 self._report_error(
-                    RuntimeError(f"Closing trace Store with {pending} unexported records"), None
+                    RuntimeError(f"Closing trace Store with {pending} unexported records"),
+                    self._in_flight,
                 )
             if self._worker_task is not None:
                 self._worker_task.cancel()

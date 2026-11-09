@@ -70,7 +70,7 @@ Or pass a sync/async function directly:
 harness = Harness.load("harness.toml", exporter=my_exporter)
 ```
 
-Use `module.path:function` in TOML for a custom Exporter. No Exporter is enabled by default. Every Exporter receives `ModelCallTrace`, `ToolCallTrace`, or `TurnTrace`; exports are queued asynchronously and flushed by `await harness.close()`.
+Use `module.path:function` in TOML for a custom Exporter. No Exporter is enabled by default. Every Exporter receives `ModelCallTrace`, `ToolCallTrace`, or `TurnTrace`; exports are queued asynchronously and flushed by `await harness.close()`. Close has a bounded wait, but it cannot forcibly stop an already running synchronous Exporter thread; late residual calls are reported through `on_error`.
 
 ```python
 turn = await harness.get_turn(1)

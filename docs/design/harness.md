@@ -72,6 +72,8 @@ Use `module.path:function` for a custom Exporter, or pass `exporter=` to `Harnes
 
 Committed Events are projected to immutable `ModelCallTrace`, `ToolCallTrace`, and `TurnTrace` objects. The underlying Store append succeeds before records enter a bounded asynchronous queue. Exporter errors, slow calls, and queue overflow do not change Turn results; dropped records are counted and reported. `await harness.close()` performs a bounded flush and closes the Store. The queue is not a durable outbox.
 
+The close timeout bounds queue and worker waiting, not arbitrary user code execution. Python cannot forcibly stop a synchronous Exporter already running in a worker thread, so a timed-out synchronous call may still finish and produce late side effects. This residual is reported through `on_error`; it is not a completed flush. Applications that require no side effects after close must use cancellation-aware asynchronous Exporters or wait for their custom calls to finish before closing.
+
 `ModelCallTrace` includes measured Provider timing, `purpose="inference"|"compaction"`, model, output, and usage. `ToolCallTrace` includes arguments, result, outcome, resources, and measured execution timing. `TurnTrace` closes at turn/end rather than delivery and includes final content and aggregate usage. Recovered operations use `timing_source="unknown"` and never invent end times.
 
 Query a closed Turn or a Session's history without configuring an Exporter:
