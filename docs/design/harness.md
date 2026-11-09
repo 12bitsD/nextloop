@@ -59,6 +59,33 @@ await harness.close()
 
 Skills remain instructions only. Their metadata is added to the system prompt, and the read-only `skill_view` Tool loads a body on demand. Loading a Skill never runs adjacent scripts or expands Tool permissions.
 
+## Observability
+
+Observability is disabled by default. Enable the built-in JSON Lines Exporter with:
+
+```toml
+[trace]
+exporter = "stdout"
+```
+
+Use `module.path:function` for a custom Exporter, or pass `exporter=` to `Harness.load()`. Runtime and TOML Exporters are called in configuration order. A callable may be synchronous or asynchronous; an object may implement `export(trace)` instead.
+
+Committed Events are projected to immutable `ModelCallTrace`, `ToolCallTrace`, and `TurnTrace` objects. The underlying Store append succeeds before records enter a bounded asynchronous queue. Exporter errors, slow calls, and queue overflow do not change Turn results; dropped records are counted and reported. `await harness.close()` performs a bounded flush and closes the Store. The queue is not a durable outbox.
+
+`ModelCallTrace` includes measured Provider timing, `purpose="inference"|"compaction"`, model, output, and usage. `ToolCallTrace` includes arguments, result, outcome, resources, and measured execution timing. `TurnTrace` closes at turn/end rather than delivery and includes final content and aggregate usage. Recovered operations use `timing_source="unknown"` and never invent end times.
+
+Query a closed Turn or a Session's history without configuring an Exporter:
+
+```python
+turn = await harness.get_turn(1)
+if turn is not None:
+    tools = turn.tool_calls
+
+history = await harness.history(from_turn=1, to_turn=10)
+```
+
+History reads the complete EventStore log and uses the same TraceProjector as live export. Only new-format Events are supported; missing measured Model/Tool fields produce `timing_source="unknown"`, not estimated durations.
+
 ## Stdio protocol
 
 The protocol version is `nextloop.stdio/v1`. Messages are one JSON-RPC 2.0 object per line on stdout; logs belong on stderr. Supported methods are `initialize`, `tools/list`, `tools/call`, `notifications/cancelled`, `ping`, and `shutdown`.

@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -14,6 +14,7 @@ API_VERSION = "0.3.0rc2"
 EVENT_SCHEMA_VERSION = "1.0"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
+TRACE_SCHEMA = "nextloop.trace/v1"
 
 
 def parse_version(value: str) -> tuple[int, int, int, int, int]:
@@ -198,6 +199,97 @@ class ModelUsage:
     cached_input_tokens: int | None = None
 
 
+class TimingSource(StrEnum):
+    MEASURED = "measured"
+    EVENT_OBSERVED = "event_observed"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class ToolExecutionTiming:
+    started_at: str
+    ended_at: str
+    duration_ms: float
+
+
+@dataclass(frozen=True)
+class ModelCallTrace:
+    session_id: str
+    turn: int
+    step: int
+    attempt: int
+    purpose: str
+    model: str | None
+    status: str
+    started_at: str | None
+    ended_at: str | None
+    duration_ms: float | None
+    timing_source: TimingSource
+    finish_reason: str | None
+    output: str | None
+    usage: ModelUsage | None
+    tool_call_count: int
+    error: str | None
+    retryable: bool | None
+    code: str | None
+    source_seqs: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class ToolCallTrace:
+    session_id: str
+    turn: int
+    step: int
+    call_id: str
+    name: str
+    arguments: str
+    outcome_kind: str
+    result: Any
+    error: str | None
+    is_error: bool
+    concludes_turn: bool
+    recovered: bool
+    started_at: str | None
+    ended_at: str | None
+    duration_ms: float | None
+    timing_source: TimingSource
+    assets: tuple[str, ...] = ()
+    resource_locks: tuple[str, ...] = ()
+    source_seqs: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class TurnTrace:
+    session_id: str
+    turn: int
+    status: str
+    step_count: int
+    model_call_count: int
+    tool_call_count: int
+    rejected_batch_count: int
+    compaction_count: int
+    usage: ModelUsage | None
+    final_content: str | None
+    final_message_id: str | None
+    error: str | None
+    recovered: bool
+    started_at: str | None
+    ended_at: str | None
+    duration_ms: float | None
+    timing_source: TimingSource
+    source_seqs: tuple[int, ...] = ()
+
+
+TraceRecord = ModelCallTrace | ToolCallTrace | TurnTrace
+
+
+class TraceExporter(Protocol):
+    def export(self, trace: TraceRecord) -> Any: ...
+
+
+TraceExporterInput = TraceExporter | Callable[[TraceRecord], Any]
+
+
 @dataclass(frozen=True)
 class ModelResponse:
     content: str = ""
@@ -351,6 +443,11 @@ class SkillConfig:
 
 
 @dataclass(frozen=True)
+class TraceConfig:
+    exporter: str | None = None
+
+
+@dataclass(frozen=True)
 class HarnessSpec:
     schema: str
     min_nextloop: str
@@ -359,6 +456,7 @@ class HarnessSpec:
     loop: LoopConfig
     tools: tuple[ToolConfig, ...] = ()
     skills: SkillConfig = field(default_factory=SkillConfig)
+    trace: TraceConfig = field(default_factory=TraceConfig)
     source_path: str = "<memory>"
 
 

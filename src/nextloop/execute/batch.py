@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+import time
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 
 from ..contracts import (
     Cancelled,
@@ -11,6 +12,7 @@ from ..contracts import (
     NewEvent,
     Skipped,
     ToolCall,
+    ToolExecutionTiming,
     ToolOutcome,
     ToolRuntime,
     ToolSpec,
@@ -18,6 +20,7 @@ from ..contracts import (
     UncertainSettled,
     ValidatedCall,
     ValidationIssue,
+    utc_now,
 )
 
 
@@ -26,6 +29,7 @@ class BatchResult:
     outcomes: tuple[tuple[ToolCall, ToolSpec, ToolOutcome], ...] = ()
     issues: tuple[ValidationIssue, ...] = ()
     blocked_resources: frozenset[str] = frozenset()
+    timings: Mapping[str, ToolExecutionTiming] = field(default_factory=dict)
 
 
 class BatchExecutor:
@@ -67,6 +71,7 @@ class BatchExecutor:
             )
 
         outcomes: list[tuple[ToolCall, ToolSpec, ToolOutcome]] = []
+        timings: dict[str, ToolExecutionTiming] = {}
         index = 0
         truncated = False
         while index < len(validated):
@@ -77,8 +82,11 @@ class BatchExecutor:
                 break
             current = validated[index]
             if current.spec.mode.value == "exclusive":
-                outcome = await self._run_one(current, session_id, turn, step, cancel, commit)
+                outcome, timing = await self._run_one(
+                    current, session_id, turn, step, cancel, commit
+                )
                 outcomes.append((current.call, current.spec, outcome))
+                timings[current.call.call_id] = timing
                 index += 1
                 if self._closes_batch(current.spec, outcome):
                     outcomes.extend(
@@ -98,13 +106,14 @@ class BatchExecutor:
                         self._skip(chunk, "Cancelled or truncated before parallel dispatch")
                     )
                     continue
-                chunk_outcomes = await asyncio.gather(
+                chunk_results = await asyncio.gather(
                     *(self._run_one(item, session_id, turn, step, cancel, commit) for item in chunk)
                 )
-                outcomes.extend(
-                    (item.call, item.spec, outcome)
-                    for item, outcome in zip(chunk, chunk_outcomes, strict=True)
-                )
+                chunk_outcomes = []
+                for item, (outcome, timing) in zip(chunk, chunk_results, strict=True):
+                    outcomes.append((item.call, item.spec, outcome))
+                    timings[item.call.call_id] = timing
+                    chunk_outcomes.append(outcome)
                 if any(self._is_uncertain_or_cancelled(outcome) for outcome in chunk_outcomes):
                     truncated = True
                     outcomes.extend(
@@ -113,7 +122,7 @@ class BatchExecutor:
                             "Truncated after uncertain parallel outcome",
                         )
                     )
-        return BatchResult(outcomes=tuple(outcomes))
+        return BatchResult(outcomes=tuple(outcomes), timings=timings)
 
     async def _run_one(
         self,
@@ -123,7 +132,7 @@ class BatchExecutor:
         step: int,
         cancel: asyncio.Event,
         commit: Callable[[Sequence[NewEvent]], Awaitable[None]],
-    ) -> ToolOutcome:
+    ) -> tuple[ToolOutcome, ToolExecutionTiming]:
         await commit(
             [
                 NewEvent(
@@ -139,13 +148,20 @@ class BatchExecutor:
                 )
             ]
         )
-        return await self.registry.execute(
+        started_at = utc_now()
+        started = time.monotonic()
+        outcome = await self.registry.execute(
             item.call,
             item.arguments,
             session_id=session_id,
             turn=turn,
             step=step,
             cancel=cancel,
+        )
+        return outcome, ToolExecutionTiming(
+            started_at=started_at,
+            ended_at=utc_now(),
+            duration_ms=round((time.monotonic() - started) * 1000, 3),
         )
 
     @staticmethod

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
+import inspect
 import os
 import re
 import tomllib
@@ -10,6 +12,7 @@ from typing import Any, NoReturn, cast
 
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
+from .adapters.observing import ObservingEventStore, StdoutExporter, _query_history
 from .adapters.openai import OpenAIProvider
 from .adapters.sqlite import SQLiteEventStore
 from .contracts import (
@@ -26,8 +29,12 @@ from .contracts import (
     ToolConfig,
     ToolExecutionMode,
     ToolSpec,
+    TraceConfig,
+    TraceExporterInput,
+    TraceRecord,
     TurnContext,
     TurnOutcome,
+    TurnTrace,
     is_positive_number,
     new_id,
     parse_version,
@@ -38,7 +45,8 @@ from .execute.tools import ToolRegistry
 from .loop import AgentLoop
 from .skills import SkillRegistry, skill_view
 
-_ROOT_FIELDS = {"schema", "min_nextloop", "provider", "store", "loop", "tools", "skills"}
+_ROOT_FIELDS = {"schema", "min_nextloop", "provider", "store", "loop", "tools", "skills", "trace"}
+_TRACE_FIELDS = {"exporter"}
 _PROVIDER_FIELDS = {
     "protocol",
     "model_id",
@@ -81,13 +89,21 @@ class MemoryDeliveryOwner:
 
 
 class Harness:
-    def __init__(self, spec: HarnessSpec, *, session_id: str | None = None) -> None:
+    def __init__(
+        self,
+        spec: HarnessSpec,
+        *,
+        session_id: str | None = None,
+        exporter: TraceExporterInput | Sequence[TraceExporterInput] | None = None,
+    ) -> None:
         self.spec = spec
         self.session_id = session_id or new_id("session")
         self.tools = CompositeToolRuntime.from_configs(
             spec.tools, sensitive_env=(spec.provider.api_key_env,)
         )
-        self.store = _make_store(spec.store)
+        base_store = _make_store(spec.store)
+        exporters = _resolve_exporters(spec.trace.exporter, exporter)
+        self.store = ObservingEventStore(base_store, exporters) if exporters else base_store
         self.delivery = MemoryDeliveryOwner()
         self.loop = AgentLoop()
         self.skills: SkillRegistry | None = None
@@ -95,8 +111,14 @@ class Harness:
         self._all_tools: CompositeToolRuntime | None = None
 
     @classmethod
-    def load(cls, path: str | Path, *, session_id: str | None = None) -> Harness:
-        return cls(load_harness_spec(path), session_id=session_id)
+    def load(
+        cls,
+        path: str | Path,
+        *,
+        session_id: str | None = None,
+        exporter: TraceExporterInput | Sequence[TraceExporterInput] | None = None,
+    ) -> Harness:
+        return cls(load_harness_spec(path), session_id=session_id, exporter=exporter)
 
     async def check(self) -> dict[str, Any]:
         await self.tools.start_eager(self.spec.tools)
@@ -134,6 +156,17 @@ class Harness:
     async def recover(self) -> RecoveryOutcome:
         return await self.loop.recover(self.session_id, self.store, self.delivery)
 
+    async def history(
+        self, *, from_turn: int = 1, to_turn: int | None = None
+    ) -> tuple[TraceRecord, ...]:
+        return await _query_history(
+            self.store, self.session_id, from_turn=from_turn, to_turn=to_turn
+        )
+
+    async def get_turn(self, turn: int) -> TurnTrace | None:
+        records = await self.history(from_turn=turn, to_turn=turn)
+        return next((record for record in records if isinstance(record, TurnTrace)), None)
+
     async def close(self) -> None:
         cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
         if cancelled:
@@ -147,7 +180,9 @@ class Harness:
         finally:
             close = getattr(self.store, "close", None)
             if callable(close):
-                close()
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
 
     def _make_provider(self) -> OpenAIProvider | AnthropicProvider:
         config = self.spec.provider
@@ -293,6 +328,19 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     for skill_path in skills.paths:
         if not Path(skill_path).exists():
             _fail(source, "skills.paths", f"path does not exist: {skill_path}")
+    trace_raw = _optional_table(raw, "trace", source)
+    _fields(trace_raw, _TRACE_FIELDS, "trace", source)
+    trace_exporter = trace_raw.get("exporter")
+    if trace_exporter is not None:
+        if not isinstance(trace_exporter, str) or not trace_exporter:
+            _fail(source, "trace.exporter", "must be a nonempty string")
+        if (
+            trace_exporter != "stdout"
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*", trace_exporter)
+            is None
+        ):
+            _fail(source, "trace.exporter", "must be 'stdout' or 'module.path:attribute'")
+    trace = TraceConfig(exporter=trace_exporter)
     return HarnessSpec(
         schema=schema,
         min_nextloop=minimum,
@@ -301,6 +349,7 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
         loop=loop,
         tools=tools,
         skills=skills,
+        trace=trace,
         source_path=str(source),
     )
 
@@ -353,6 +402,34 @@ def _make_store(config: StoreConfig) -> InMemoryEventStore | SQLiteEventStore:
     if config.driver == "memory":
         return InMemoryEventStore()
     return SQLiteEventStore(config.path)
+
+
+def _resolve_exporters(
+    spec_exporter: str | None,
+    runtime_exporter: TraceExporterInput | Sequence[TraceExporterInput] | None,
+) -> tuple[TraceExporterInput, ...]:
+    exporters: list[TraceExporterInput] = []
+    if spec_exporter == "stdout":
+        exporters.append(StdoutExporter())
+    elif spec_exporter is not None:
+        module_name, _, attribute = spec_exporter.partition(":")
+        try:
+            module = importlib.import_module(module_name)
+            target = getattr(module, attribute)
+        except (ImportError, AttributeError) as exc:
+            raise HarnessError(f"Cannot load trace exporter '{spec_exporter}': {exc}") from exc
+        exporters.append(target)
+    if runtime_exporter is not None:
+        if isinstance(runtime_exporter, Sequence) and not isinstance(
+            runtime_exporter, (str, bytes)
+        ):
+            exporters.extend(runtime_exporter)
+        else:
+            exporters.append(runtime_exporter)
+    for exporter in exporters:
+        if not callable(exporter) and not callable(getattr(exporter, "export", None)):
+            raise HarnessError(f"Trace exporter '{exporter}' is not callable and has no export()")
+    return tuple(exporters)
 
 
 def _fields(raw: Mapping[str, Any], allowed: set[str], prefix: str, source: Path) -> None:
