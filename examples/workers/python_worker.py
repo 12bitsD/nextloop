@@ -89,15 +89,21 @@ async def read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
     while True:
         newline = buffer.find(b"\n")
         if newline >= 0:
+            if newline > 16 * 1024 * 1024:
+                raise ValueError("stdio frame exceeds 16MiB limit")
             frame = bytes(buffer[:newline])
             del buffer[: newline + 1]
             return frame
         chunk = await reader.read(64 * 1024)
         if not chunk:
+            if len(buffer) > 16 * 1024 * 1024:
+                raise ValueError("stdio frame exceeds 16MiB limit")
             frame = bytes(buffer)
             buffer.clear()
             return frame
         buffer.extend(chunk)
+        if len(buffer) > 16 * 1024 * 1024 and b"\n" not in buffer:
+            raise ValueError("stdio frame exceeds 16MiB limit")
 
 
 async def main() -> None:
@@ -125,10 +131,17 @@ async def main() -> None:
             await asyncio.gather(reading, return_exceptions=True)
             break
         stopping.cancel()
-        line = reading.result()
-        if not line:
+        try:
+            line = reading.result()
+            if not line:
+                return
+            request = json.loads(line)
+        except ValueError as exc:
+            response = error(None, -32600, str(exc))
+            sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+            sys.stdout.flush()
             return
-        task = asyncio.create_task(run(json.loads(line)))
+        task = asyncio.create_task(run(request))
         pending.add(task)
         task.add_done_callback(pending.discard)
     for task in pending:

@@ -66,14 +66,14 @@ The protocol version is `nextloop.stdio/v1`. Messages are one JSON-RPC 2.0 objec
 - `initialize` params contain `protocolVersion`; the result must return the same version.
 - `tools/list` returns `{"tools": [ToolSpec...]}`. Tool fields are `name`, `description`, `parameters`, `mode`, `resources`, and optional `timeout_seconds`.
 - `tools/call` params contain `name`, `arguments`, and non-secret `context` coordinates. Normal Tool failures use a result with `is_error: true`; JSON-RPC `error` is reserved for protocol or transport failures.
-- Results support `content`, `structured`, `assets`, `concludes_turn`, and `release_resources`. Large payloads should be assets referenced by path or URI, not embedded base64.
+- Results support strictly typed `content`, `structured`, `assets`, `is_error`, `concludes_turn`, and `release_resources`. Inline content is limited to 1MiB; larger results must be returned by the worker as asset references, not inline base64. The driver does not invent assets or manage their lifecycle/GC.
 - A timeout or cancellation sends `notifications/cancelled`, waits the configured grace period, then uses SIGTERM and SIGKILL. The affected call is uncertain and retains declared resource locks.
 - A crash produces `UncertainHanging`; the driver never restarts and replays the old call. New calls remain blocked by normal resource admission or fail as uncertain.
 - Cancellation cleanup runs in a protected task, so repeated caller cancellation cannot interrupt notification, bounded termination, or reader reaping. Stdio writes and best-effort cancel notifications have bounded drain times.
 - `shutdown` is acknowledged before worker exit. `close()` does not drain active calls: process exit makes their effects uncertain and their normal execution paths return locked outcomes. Cancelling `close()` still completes protected process and reader cleanup before cancellation propagates.
-- Newline-delimited frames are read in chunks without the asyncio default 64KiB line limit. Python, Rust, and C++ conformance covers concurrent multi-MiB requests and responses.
+- Newline-delimited frames are read in chunks without the asyncio default 64KiB line limit, with a 16MiB protocol maximum on both send and receive. Python, Rust, and C++ conformance covers concurrent multi-MiB requests within that limit.
 
-Workers are persistent and reused across calls. `check` performs initialize/list handshakes but no `tools/call`. `lazy` defers startup until runtime use; `eager` starts during Harness assembly/check. Only explicitly declared commands are started.
+Workers are persistent and reused across calls. `check` performs initialize/list handshakes but no `tools/call`. `lazy` defers startup until runtime use and honors cancellation during the handshake; `eager` starts during Harness assembly/check. Only explicitly declared commands are started. Harness workers inherit the parent environment except for the variable named by `provider.api_key_env`, which is removed to prevent credential exfiltration; the parent Provider retains access.
 
 ## CLI
 

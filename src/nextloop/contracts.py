@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -13,6 +14,24 @@ API_VERSION = "0.3.0rc1"
 EVENT_SCHEMA_VERSION = "1.0"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
+
+
+def parse_version(value: str) -> tuple[int, int, int, int, int]:
+    match = re.fullmatch(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:rc(\d+))?", value)
+    if match is None:
+        raise ValueError(f"invalid version '{value}'")
+    release = match.group(4) is None
+    return (
+        int(match.group(1)),
+        int(match.group(2) or 0),
+        int(match.group(3) or 0),
+        1 if release else 0,
+        0 if release else int(match.group(4)),
+    )
+
+
+def is_positive_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
 
 
 def new_id(prefix: str) -> str:

@@ -47,6 +47,8 @@ def test_load_valid_config_without_credentials(tmp_path: Path) -> None:
         ("unknown = true", "unknown field"),
         ('min_nextloop = "9.0.0"', "requires nextloop"),
         ('min_nextloop = "0.3.0"', "requires nextloop"),
+        ('min_nextloop = "0.3"', "full x.y.z"),
+        ('min_nextloop = "1"', "full x.y.z"),
         ('[provider.default_parameters]\nACCESS_TOKEN = "literal"', "plaintext credentials"),
         (
             '[provider.default_parameters.headers]\nAuthorization = "literal"',
@@ -233,3 +235,26 @@ def test_composite_accepts_namespaced_and_64_character_names() -> None:
         )
     runtime = CompositeToolRuntime([registry])
     assert {spec.name for spec in runtime.catalog()} == {"worker__echo", "a" * 64}
+
+
+async def test_all_runtime_validation_entry_points_match() -> None:
+    from nextloop import StdioDriver, ToolConfig
+
+    registry = ToolRegistry()
+    spec = ToolSpec(
+        "consistent",
+        "Consistent",
+        {
+            "type": "object",
+            "properties": {"value": {"type": "integer"}},
+            "required": ["value"],
+        },
+    )
+    registry.register(spec, lambda arguments, context: None)
+    composite = CompositeToolRuntime([registry])
+    stdio = StdioDriver(ToolConfig(driver="stdio", command=(sys.executable, "-c", "")))
+    stdio._specs = (spec,)
+    calls = [ToolCall("1", "consistent", '{"value":"bad"}'), ToolCall("2", "missing", "{}")]
+    expected = [issue.to_dict() for issue in registry.validate(calls)[1]]
+    assert [issue.to_dict() for issue in composite.validate(calls)[1]] == expected
+    assert [issue.to_dict() for issue in stdio.validate(calls)[1]] == expected

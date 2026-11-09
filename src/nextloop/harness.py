@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import tomllib
@@ -27,8 +28,11 @@ from .contracts import (
     ToolSpec,
     TurnContext,
     TurnOutcome,
+    is_positive_number,
     new_id,
+    parse_version,
 )
+from .execute.cleanup import wait_for_cleanup
 from .execute.composite import CompositeToolRuntime
 from .execute.tools import ToolRegistry
 from .loop import AgentLoop
@@ -80,7 +84,9 @@ class Harness:
     def __init__(self, spec: HarnessSpec, *, session_id: str | None = None) -> None:
         self.spec = spec
         self.session_id = session_id or new_id("session")
-        self.tools = CompositeToolRuntime.from_configs(spec.tools)
+        self.tools = CompositeToolRuntime.from_configs(
+            spec.tools, sensitive_env=(spec.provider.api_key_env,)
+        )
         self.store = _make_store(spec.store)
         self.delivery = MemoryDeliveryOwner()
         self.loop = AgentLoop()
@@ -129,12 +135,19 @@ class Harness:
         return await self.loop.recover(self.session_id, self.store, self.delivery)
 
     async def close(self) -> None:
-        await self.tools.close()
-        if self._all_tools is not None and self._all_tools is not self.tools:
-            await self._all_tools.close()
-        close = getattr(self.store, "close", None)
-        if callable(close):
-            close()
+        cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
+        if cancelled:
+            raise asyncio.CancelledError()
+
+    async def _close(self) -> None:
+        try:
+            await self.tools.close()
+            if self._all_tools is not None and self._all_tools is not self.tools:
+                await self._all_tools.close()
+        finally:
+            close = getattr(self.store, "close", None)
+            if callable(close):
+                close()
 
     def _make_provider(self) -> OpenAIProvider | AnthropicProvider:
         config = self.spec.provider
@@ -227,6 +240,8 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     if schema != HARNESS_SCHEMA:
         _fail(source, "schema", f"expected '{HARNESS_SCHEMA}', got '{schema}'")
     minimum = _string(raw, "min_nextloop", source)
+    if re.fullmatch(r"\d+\.\d+\.\d+(?:rc\d+)?", minimum) is None:
+        _fail(source, "min_nextloop", "must use full x.y.z or x.y.zrcN form")
     if _version_tuple(API_VERSION, source, "min_nextloop") < _version_tuple(
         minimum, source, "min_nextloop"
     ):
@@ -320,9 +335,7 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
         _fail(source, f"{prefix}.resources", "must be an array of strings")
     timeout = raw.get("timeout_seconds")
     grace = _number(raw, "cancel_grace_seconds", 0.25, source, prefix)
-    if timeout is not None and (
-        not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0
-    ):
+    if timeout is not None and not is_positive_number(timeout):
         _fail(source, f"{prefix}.timeout_seconds", "must be a positive number")
     return ToolConfig(
         driver=driver,
@@ -407,17 +420,10 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
 
 
 def _version_tuple(value: str, source: Path, field: str) -> tuple[int, int, int, int, int]:
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:rc(\d+))?", value)
-    if match is None:
+    try:
+        return parse_version(value)
+    except ValueError:
         _fail(source, field, f"invalid version '{value}'")
-    release = match.group(4) is None
-    return (
-        int(match.group(1)),
-        int(match.group(2)),
-        int(match.group(3)),
-        1 if release else 0,
-        0 if release else int(match.group(4)),
-    )
 
 
 def _resolve_path(source: Path, value: str) -> Path:
@@ -483,7 +489,7 @@ def _number(
     raw: Mapping[str, Any], name: str, default: float, source: Path, prefix: str = ""
 ) -> float:
     value = raw.get(name, default)
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+    if not is_positive_number(value):
         _fail(source, f"{prefix + '.' if prefix else ''}{name}", "must be a positive number")
     return float(value)
 

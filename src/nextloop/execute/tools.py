@@ -32,6 +32,43 @@ class ToolContext:
 ToolHandler = Callable[[Mapping[str, Any], ToolContext], Any]
 
 
+def validate_calls(
+    calls: Sequence[ToolCall], specs: Mapping[str, ToolSpec]
+) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
+    validated = []
+    issues = []
+    seen_ids: set[str] = set()
+    for index, call in enumerate(calls):
+        call_id = call.call_id or f"unidentified_call_{index}"
+        if not call.call_id:
+            issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is empty"))
+        elif call.call_id in seen_ids:
+            issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is duplicated"))
+        seen_ids.add(call.call_id)
+        spec = specs.get(call.name)
+        if spec is None:
+            issues.append(ValidationIssue(call_id, call.name, "Unknown Tool name"))
+            continue
+        try:
+            arguments = json.loads(call.arguments)
+        except (json.JSONDecodeError, TypeError) as exc:
+            issues.append(ValidationIssue(call_id, call.name, f"Invalid argument JSON: {exc}"))
+            continue
+        if not isinstance(arguments, dict):
+            issues.append(
+                ValidationIssue(call_id, call.name, "Tool arguments must be a JSON object")
+            )
+            continue
+        validator = jsonschema.Draft202012Validator(spec.parameters)
+        for error in sorted(validator.iter_errors(arguments), key=lambda item: list(item.path)):
+            path = "$" + "".join(
+                f"[{part}]" if isinstance(part, int) else f".{part}" for part in error.path
+            )
+            issues.append(ValidationIssue(call_id, call.name, f"{path}: {error.message}"))
+        validated.append(ValidatedCall(call=call, spec=spec, arguments=arguments))
+    return tuple(validated), tuple(issues)
+
+
 class ToolRegistry:
     def __init__(self) -> None:
         self._specs: dict[str, ToolSpec] = {}
@@ -49,40 +86,7 @@ class ToolRegistry:
     def validate(
         self, calls: Sequence[ToolCall]
     ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
-        validated = []
-        issues = []
-        seen_ids: set[str] = set()
-        for index, call in enumerate(calls):
-            call_id = call.call_id or f"unidentified_call_{index}"
-            if not call.call_id:
-                issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is empty"))
-            elif call.call_id in seen_ids:
-                issues.append(
-                    ValidationIssue(call_id, call.name, "Tool Call identity is duplicated")
-                )
-            seen_ids.add(call.call_id)
-            spec = self._specs.get(call.name)
-            if spec is None:
-                issues.append(ValidationIssue(call_id, call.name, "Unknown Tool name"))
-                continue
-            try:
-                arguments = json.loads(call.arguments)
-            except (json.JSONDecodeError, TypeError) as exc:
-                issues.append(ValidationIssue(call_id, call.name, f"Invalid argument JSON: {exc}"))
-                continue
-            if not isinstance(arguments, dict):
-                issues.append(
-                    ValidationIssue(call_id, call.name, "Tool arguments must be a JSON object")
-                )
-                continue
-            validator = jsonschema.Draft202012Validator(spec.parameters)
-            for error in sorted(validator.iter_errors(arguments), key=lambda item: list(item.path)):
-                path = "$" + "".join(
-                    f"[{part}]" if isinstance(part, int) else f".{part}" for part in error.path
-                )
-                issues.append(ValidationIssue(call_id, call.name, f"{path}: {error.message}"))
-            validated.append(ValidatedCall(call=call, spec=spec, arguments=arguments))
-        return tuple(validated), tuple(issues)
+        return validate_calls(calls, self._specs)
 
     async def execute(
         self,

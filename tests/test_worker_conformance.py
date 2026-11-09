@@ -161,9 +161,11 @@ async def test_concurrent_two_mib_frames(driver: StdioDriver) -> None:
     namespace = driver.config.namespace
     values = [("α😀" * 1000) + "x" * (2 * 1024 * 1024), "y" * (2 * 1024 * 1024)]
     outcomes = await asyncio.gather(
-        *(invoke(driver, f"{namespace}__echo", {"text": value}) for value in values)
+        *(
+            invoke(driver, f"{namespace}__wait", {"seconds": 0, "padding": value})
+            for value in values
+        )
     )
-    for value, outcome in zip(values, outcomes, strict=True):
+    for outcome in outcomes:
         assert isinstance(outcome, Completed)
-        assert outcome.content == value
-        assert outcome.structured == {"echo": value}
+        assert outcome.content == "done"
