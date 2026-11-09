@@ -15,6 +15,8 @@ This file defines the public domain vocabulary. Names describe execution semanti
 | SurfaceOp | Event classification (`append | epoch | none`) separating model-visible surface events from log-only audit events, enabling O(Δ) projection from the latest compaction epoch watermark. |
 | Conversation projection | The model-facing view derived from the latest `epoch` (compaction) watermark and subsequent `append` surface events. |
 | ToolOutcome | Closed 5-variant algebraic type (`Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`) that makes illegal state combinations unrepresentable. |
+| SkillRegistry | Directory-backed instruction index. `list()` returns Skill metadata; `load(name)` reads the current `SKILL.md` body on demand without executing it. |
+| SkillSpec | Public Skill metadata: `name`, `description`, `path`, optional `requires_tools`, and optional `min_nextloop`. |
 | WorkingContext | A short-lived, turn- or session-scoped self-reminder appended as user-level context with hash deduplication and update damping, folded right after the summary on compaction. |
 | Compaction | A model-generated task summary committed as an `epoch` event to establish a new Conversation projection watermark while leaving Trajectory immutable. |
 | Finalization | The mandatory settlement path for success, cancellation, and failure, including facts, resources, and delivery responsibility. |

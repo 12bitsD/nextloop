@@ -1,6 +1,6 @@
 # nextloop development and verification plan
 
-Current stage: **0.1.0rc2 implementation complete; publication and consumer acceptance are separate**.
+Current stage: **0.2.0rc1 implementation complete; publication and consumer acceptance are separate**.
 
 ## Phase 0 — Contracts — Closed
 
@@ -30,7 +30,7 @@ See [verification matrix](../design/verification-matrix.md) for the release gate
 ## Phase 3 — Release candidate publication — In progress
 
 - CI runs Python 3.11, 3.12, and 3.13.
-- A `v0.1.0rc2` tag runs the release workflow.
+- A `v0.2.0rc1` tag runs the release workflow.
 - The workflow verifies the package, installs the built wheel in a clean environment, publishes to PyPI through Trusted Publishing, and creates a GitHub Pre-release.
 
 PyPI project and GitHub Environment trusted-publisher setup are external prerequisites. A tag alone is not proof of publication.

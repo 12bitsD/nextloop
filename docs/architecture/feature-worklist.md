@@ -2,7 +2,7 @@
 
 Purpose: distinguish implemented release-candidate capabilities from remaining product work. Verification evidence is in [verification-matrix.md](../design/verification-matrix.md).
 
-## Implemented for 0.1.0rc2
+## Implemented for 0.2.0rc1
 
 | Feature | Implementation | Evidence |
 |---|---|---|
@@ -16,6 +16,7 @@ Purpose: distinguish implemented release-candidate capabilities from remaining p
 | EventStore | Memory and SQLite, atomic append, idempotency, writer fencing | Transaction, stale-writer, close/reopen, and projection tests |
 | Recovery | Crash closers, resource restrictions, delivery-only retry | Real subprocess exits during Tool and final delivery |
 | Providers | OpenAI-compatible and Anthropic SSE | Recorded text, Tool delta, usage, HTTP error, and partial-stream tests |
+| Directory Skills | `SkillRegistry`, `skill_view`, frontmatter and dependency validation | Recursive discovery, current-body reload, duplicate/missing-field/dependency/version tests |
 | Packaging | Python 3.11+, wheel/sdist, CI and tag workflows | `ruff`, `mypy`, `pytest`, `twine check`, clean wheel installation |
 
 ## Remaining work

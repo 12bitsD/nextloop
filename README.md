@@ -2,12 +2,12 @@
 
 A small, embeddable Python AgentLoop with explicit execution, recovery, and delivery semantics.
 
-Current version: **0.1.0rc2**.
+Current version: **0.2.0rc1**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.1.0rc2
+python -m pip install nextloop==0.2.0rc1
 ```
 
 For local development:
@@ -27,6 +27,7 @@ uv pip install --python .venv/bin/python -e '.[dev]'
 - Bounded Provider retries, protocol correction, WorkingContext, Compaction, and cancellation.
 - SQLite and in-memory EventStores, crash closers, and delivery-only recovery.
 - OpenAI-compatible and Anthropic streaming Provider adapters.
+- Directory-based `SkillRegistry` for progressive, on-demand `SKILL.md` loading with dependency and version validation.
 
 It is a library, not an HTTP service, product bot, Router, EventBus, or multi-agent framework.
 
@@ -70,6 +71,12 @@ python examples/basic.py
 
 It executes model → Tool → Observation → model → delivery without a hosted model.
 
+For a directory-based Skill example, run:
+
+```bash
+python examples/skills_demo.py
+```
+
 ## Code structure
 
 ```text
@@ -109,6 +116,7 @@ Current limits:
 - [AgentLoop design](docs/design/agent-loop.md)
 - [Public interface](docs/design/loop-interface.md)
 - [ReAct protocol](docs/design/react-protocol.md)
+- [Directory-based SkillRegistry](docs/design/skills.md)
 - [Verification matrix](docs/design/verification-matrix.md)
 - [Development plan](docs/architecture/development-plan.md)
 - [Changelog](CHANGELOG.md)

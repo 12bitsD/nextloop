@@ -20,7 +20,8 @@ This map records reusable execution requirements and verification ownership. No 
 | L14 | Preserve large outputs and their references | [Content access](../design/context-builder.md#content-access-and-task-performance) | **Open implementation.** Asset identity, preview, retrieval, retention, backup and GC |
 | L15 | Retry delivery without rerunning model or Tools | [DeliveryOwner](../design/loop-interface.md#deliveryowner) | **Design closed.** `final_message_id`, delivery_unknown, durable handoff and writer-release tests |
 | L16 | Prove consumer independence through public Adapters | [Loop interface](../design/loop-interface.md) | **Open.** Fake and nika Adapters pass the same suite with no Feishu/Wiki dependency |
-| L17 | Package and release only after protocol verification | [Development plan](development-plan.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) | **0.1.0rc2 implemented.** Tests, static checks, wheel/sdist and clean-install verification pass; CI publication and consumer smoke remain separate |
+| L18 | Load third-party instruction Skills from directories on demand | [SkillRegistry](../design/skills.md) | **Implemented for 0.2.0rc1.** Metadata discovery, current-body loading, duplicate/dependency/version errors, and `skill_view` tests |
+| L17 | Package and release only after protocol verification | [Development plan](development-plan.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) | **0.2.0rc1 implemented.** Tests, static checks, wheel/sdist and clean-install verification pass; CI publication and consumer smoke remain separate |
 
 ## Independence rule
 

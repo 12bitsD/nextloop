@@ -27,6 +27,7 @@ jobs:
       - run: uv venv --python 3.11 .release-venv
       - run: uv pip install --python .release-venv/bin/python dist/*.whl
       - run: .release-venv/bin/python examples/basic.py
+      - run: .release-venv/bin/python examples/skills_demo.py
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true

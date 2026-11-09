@@ -27,3 +27,5 @@ jobs:
       - run: .venv/bin/pytest -q
       - run: .venv/bin/python -m build
       - run: .venv/bin/twine check dist/*
+      - run: .venv/bin/python examples/basic.py
+      - run: .venv/bin/python examples/skills_demo.py

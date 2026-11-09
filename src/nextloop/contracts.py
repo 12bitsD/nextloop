@@ -25,6 +25,10 @@ class NextloopError(Exception):
     """Base error for nextloop."""
 
 
+class SkillError(NextloopError):
+    """Raised when a Skill document or its dependencies are invalid."""
+
+
 class InvariantViolation(NextloopError):
     """Raised when seq, idempotency, or writer_epoch invariants fail."""
 
@@ -249,6 +253,21 @@ class UncertainHanging:
 
 
 ToolOutcome = Completed | Skipped | Cancelled | UncertainSettled | UncertainHanging
+
+
+@dataclass(frozen=True)
+class SkillSpec:
+    name: str
+    description: str
+    path: str
+    requires_tools: tuple[str, ...] = ()
+    min_nextloop: str | None = None
+
+
+@dataclass(frozen=True)
+class SkillDocument:
+    spec: SkillSpec
+    body: str
 
 
 class TurnStatus(StrEnum):

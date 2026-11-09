@@ -1,6 +1,6 @@
 # Loop interface and ownership
 
-Status: **v1-draft implemented for 0.1.0rc2**, with public contracts in `src/nextloop/contracts.py`.
+Status: **v1-draft implemented for 0.2.0rc1**, with public contracts in `src/nextloop/contracts.py`.
 
 ## Independence and version dependency
 
@@ -71,6 +71,12 @@ The five closed `ToolOutcome` variants are:
 - `deliver(message: FinalMessage) -> None`
 - Delivers a committed `final_message_id` after `final/message + turn/end` are durable.
 - Recovery retries only external delivery and never reruns the model or Tools.
+
+## Directory-based Skills
+
+`SkillRegistry(paths)` recursively discovers `SKILL.md`, validates frontmatter, and exposes `list()` for metadata and `load(name)` for the current instruction body. `skill_view(registry)` adapts a registry to an ordinary read-only Tool handler. Skill loading never executes code.
+
+See [Directory-based SkillRegistry](skills.md).
 
 ## Canonical documents
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0rc1 - 2026-11-09
+
+### Added
+
+- Directory-based `SkillRegistry` for third-party `SKILL.md` discovery and on-demand loading.
+- `skill_view` Tool handler with metadata results and honest not-found errors.
+- Frontmatter validation for required fields, duplicate names, required Tools, and minimum Loop versions.
+- Eight new directory-Skill tests; the complete offline suite now has 38 tests.
+
 ## 0.1.0rc2 - 2026-11-08
 
 ### Fixed

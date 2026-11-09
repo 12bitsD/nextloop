@@ -26,6 +26,9 @@ from .contracts import (
     ProtocolExhausted,
     ProviderError,
     RecoveryOutcome,
+    SkillDocument,
+    SkillError,
+    SkillSpec,
     Skipped,
     SurfaceOp,
     ToolCall,
@@ -45,6 +48,7 @@ from .contracts import (
 )
 from .execute.tools import ToolContext, ToolRegistry
 from .loop import AgentLoop
+from .skills import SkillRegistry, skill_view
 
 __all__ = [
     "API_VERSION",
@@ -75,6 +79,10 @@ __all__ = [
     "ProviderError",
     "RecoveryOutcome",
     "SQLiteEventStore",
+    "SkillDocument",
+    "SkillError",
+    "SkillRegistry",
+    "SkillSpec",
     "Skipped",
     "SurfaceOp",
     "ToolCall",
@@ -92,5 +100,6 @@ __all__ = [
     "ValidatedCall",
     "ValidationIssue",
     "new_id",
+    "skill_view",
     "utc_now",
 ]
