@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0rc1 - 2026-11-09
+
+### Added
+
+- Strict versioned Harness TOML configuration and assembly over the existing AgentLoop.
+- CompositeToolRuntime with Python `module:register` and namespaced stdio worker routing.
+- Persistent JSON-RPC stdio driver with lazy/eager startup, cancellation, timeout termination, crash uncertainty, resource locks, and asset references.
+- Python, Rust, and C++ reference workers plus an offline debugging CLI.
+- Harness Skill discovery, dependency validation, on-demand `skill_view`, examples, and extension interface documentation.
+
+### Preserved
+
+- Existing AgentLoop, BatchExecutor, ToolRegistry, whole-batch validation, result ordering, recovery, and delivery semantics remain unchanged.
+
 ## 0.2.0rc1 - 2026-11-09
 
 ### Added

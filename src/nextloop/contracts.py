@@ -9,8 +9,10 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
-API_VERSION = "0.1.0"
+API_VERSION = "0.3.0rc1"
 EVENT_SCHEMA_VERSION = "1.0"
+HARNESS_SCHEMA = "nextloop.harness/v1"
+STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
 
 
 def new_id(prefix: str) -> str:
@@ -23,6 +25,10 @@ def utc_now() -> str:
 
 class NextloopError(Exception):
     """Base error for nextloop."""
+
+
+class HarnessError(NextloopError):
+    """Raised when Harness configuration or assembly is invalid."""
 
 
 class SkillError(NextloopError):
@@ -290,6 +296,51 @@ class LoopConfig:
     max_provider_attempts: int = 3
     retry_backoff_seconds: float = 0.1
     pacing_step_interval: int = 15
+
+
+@dataclass(frozen=True)
+class ProviderConfig:
+    protocol: str
+    model_id: str
+    base_url: str
+    api_key_env: str
+    default_parameters: Mapping[str, Any] = field(default_factory=dict)
+    timeout_seconds: float = 60.0
+
+
+@dataclass(frozen=True)
+class StoreConfig:
+    driver: str = "memory"
+    path: str = ":memory:"
+
+
+@dataclass(frozen=True)
+class ToolConfig:
+    driver: str
+    target: str | None = None
+    command: tuple[str, ...] = ()
+    namespace: str = ""
+    start: str = "lazy"
+    resources: tuple[str, ...] = ()
+    timeout_seconds: float | None = None
+    cancel_grace_seconds: float = 0.25
+
+
+@dataclass(frozen=True)
+class SkillConfig:
+    paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class HarnessSpec:
+    schema: str
+    min_nextloop: str
+    provider: ProviderConfig
+    store: StoreConfig
+    loop: LoopConfig
+    tools: tuple[ToolConfig, ...] = ()
+    skills: SkillConfig = field(default_factory=SkillConfig)
+    source_path: str = "<memory>"
 
 
 @dataclass(frozen=True)

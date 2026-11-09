@@ -2,12 +2,12 @@
 
 A small, embeddable Python AgentLoop with explicit execution, recovery, and delivery semantics.
 
-Current version: **0.2.0rc1**.
+Current version: **0.3.0rc1**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.2.0rc1
+python -m pip install nextloop==0.3.0rc1
 ```
 
 For local development:
@@ -28,6 +28,8 @@ uv pip install --python .venv/bin/python -e '.[dev]'
 - SQLite and in-memory EventStores, crash closers, and delivery-only recovery.
 - OpenAI-compatible and Anthropic streaming Provider adapters.
 - Directory-based `SkillRegistry` for progressive, on-demand `SKILL.md` loading with dependency and version validation.
+- Strict `harness.toml` assembly, Python `module:register`, and persistent Python/Rust/C++ stdio workers.
+- Offline `nextloop` CLI for configuration, worker, Tool, and Skill diagnostics.
 
 It is a library, not an HTTP service, product bot, Router, EventBus, or multi-agent framework.
 
@@ -41,6 +43,16 @@ AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
 ```
 
 The only four Adapter protocols are `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`. Context projection and Compaction are built in and configured through `LoopConfig`.
+
+`Harness.load("harness.toml")` assembles those adapters without changing the Loop. Use `await harness.check()` for offline validation and `await harness.run("input")` for a model-backed Turn. See [Harness and extension interface](docs/design/harness.md) for the strict TOML schema, stdio protocol, lifecycle rules, and CLI.
+
+```bash
+nextloop check examples/harness.toml
+nextloop tools call python_worker.echo '{"text":"hello"}' examples/harness.toml
+nextloop skills view echo-guide examples/harness.toml
+```
+
+The example Python module is found when running from a source checkout with `PYTHONPATH=examples`. No API key is needed for these diagnostic commands.
 
 `ToolRegistry` is the built-in `ToolRuntime` implementation:
 
@@ -115,6 +127,7 @@ Current limits:
 
 - [AgentLoop design](docs/design/agent-loop.md)
 - [Public interface](docs/design/loop-interface.md)
+- [Harness and extension interface](docs/design/harness.md)
 - [ReAct protocol](docs/design/react-protocol.md)
 - [Directory-based SkillRegistry](docs/design/skills.md)
 - [Verification matrix](docs/design/verification-matrix.md)
