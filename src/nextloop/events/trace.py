@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, cast, get_args
 
 from ..contracts import (
     Event,
@@ -134,13 +134,19 @@ class TraceProjector:
         self, state: _SessionState, turn: _OpenTurn, event: Event
     ) -> tuple[TraceRecord, ...]:
         payload = event.payload
-        status = str(payload["status"])
-        purpose = str(payload.get("purpose", "inference"))
+        status = _enum(
+            payload["status"],
+            {"started", *get_args(ModelCallStatus)},
+            "assistant/attempt.status",
+        )
+        purpose = _enum(
+            payload.get("purpose", "inference"),
+            get_args(ModelCallPurpose),
+            "assistant/attempt.purpose",
+        )
         key = (event.turn, event.step, event.attempt, purpose)
         if status == "started":
             state.open_attempts[key] = event
-            return ()
-        if status not in {"success", "error", "cancelled"}:
             return ()
 
         started = state.open_attempts.pop(key, None)
@@ -150,6 +156,7 @@ class TraceProjector:
         started_at = _string(payload.get("started_at"))
         ended_at = _string(payload.get("ended_at"))
         duration = _number(payload.get("duration_ms"))
+        duration, timing_source = _normalize_timing(duration, started_at, ended_at)
         source_seqs = tuple(seq for seq in (started.seq if started else None, event.seq) if seq)
         trace = ModelCallTrace(
             session_id=event.session_id,
@@ -162,7 +169,7 @@ class TraceProjector:
             started_at=started_at,
             ended_at=ended_at,
             duration_ms=duration,
-            timing_source=_timing_source(duration, started_at, ended_at),
+            timing_source=timing_source,
             finish_reason=_string(payload.get("finish_reason")),
             output=_string(payload.get("output")),
             usage=_usage(payload.get("usage")),
@@ -183,18 +190,19 @@ class TraceProjector:
         proposed = state.proposed_tools.get(key, {})
         outcome = payload.get("outcome", {})
         assert isinstance(outcome, Mapping)
-        kind = str(outcome["kind"])
+        kind = _enum(outcome["kind"], get_args(ToolOutcomeKind), "tool outcome.kind")
         result = _tool_result(outcome)
-        recovered = bool(payload.get("recovered", False))
+        recovered = _boolean_field(payload, "recovered")
         started_at = _string(payload.get("started_at"))
         ended_at = _string(payload.get("ended_at"))
         duration = _number(payload.get("duration_ms"))
-        timing_source = _timing_source(duration, started_at, ended_at)
         if recovered:
             started_at = started.occurred_at if started else started_at
             ended_at = None
             duration = None
-            timing_source = TimingSource.UNKNOWN
+        duration, timing_source = _normalize_timing(
+            duration, started_at, ended_at, preserve_zero=kind == "skipped"
+        )
         source_seqs = tuple(seq for seq in (started.seq if started else None, event.seq) if seq)
         return ToolCallTrace(
             session_id=event.session_id,
@@ -208,8 +216,8 @@ class TraceProjector:
             outcome_kind=cast(ToolOutcomeKind, kind),
             result=result,
             error=result if kind == "uncertain_hanging" else _tool_error(outcome),
-            is_error=bool(outcome.get("is_error", False)),
-            concludes_turn=bool(outcome.get("concludes_turn", False)),
+            is_error=_boolean_field(outcome, "is_error"),
+            concludes_turn=_boolean_field(outcome, "concludes_turn"),
             recovered=recovered,
             started_at=started_at,
             ended_at=ended_at,
@@ -222,13 +230,11 @@ class TraceProjector:
 
     def _close_turn(self, state: _SessionState, event: Event) -> TurnTrace:
         open_turn = state.open_turns.pop(event.turn)
-        status = str(event.payload["status"])
-        recovered = bool(event.payload.get("recovered", False)) or status == "interrupted"
+        status = _enum(event.payload["status"], get_args(TurnTraceStatus), "turn/end.status")
+        recovered = _boolean_field(event.payload, "recovered") or status == "interrupted"
         started_at = open_turn.start.occurred_at if open_turn.start else None
         ended_at = None if recovered else event.occurred_at
-        duration = (
-            _elapsed_ms(started_at, ended_at) if started_at and ended_at and not recovered else None
-        )
+        duration = _elapsed_ms(started_at, ended_at) if started_at and ended_at else None
         timing_source = (
             TimingSource.UNKNOWN if recovered or duration is None else TimingSource.EVENT_OBSERVED
         )
@@ -277,6 +283,19 @@ def _boolean(value: Any) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
+def _boolean_field(data: Mapping[str, Any], key: str) -> bool:
+    value = data.get(key, False)
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
+def _enum(value: Any, allowed: Collection[str], field: str) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise ValueError(f"{field} must be one of {sorted(allowed)}")
+    return value
+
+
 def _number(value: Any) -> float | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
@@ -293,12 +312,16 @@ def _strings(value: Any) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str))
 
 
-def _timing_source(
-    duration: float | None, started_at: str | None, ended_at: str | None
-) -> TimingSource:
+def _normalize_timing(
+    duration: float | None,
+    started_at: str | None,
+    ended_at: str | None,
+    *,
+    preserve_zero: bool = False,
+) -> tuple[float | None, TimingSource]:
     if duration is not None and started_at is not None and ended_at is not None:
-        return TimingSource.MEASURED
-    return TimingSource.UNKNOWN
+        return duration, TimingSource.MEASURED
+    return (duration if preserve_zero else None), TimingSource.UNKNOWN
 
 
 def _usage(data: Any) -> ModelUsage | None:

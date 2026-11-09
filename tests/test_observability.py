@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -11,7 +12,9 @@ from helpers import FakeDelivery, FakeProvider, config
 
 from nextloop import (
     AgentLoop,
+    Cancelled,
     Completed,
+    Event,
     EventType,
     FinishReason,
     Harness,
@@ -31,6 +34,7 @@ from nextloop import (
     TurnContext,
     TurnStatus,
     TurnTrace,
+    utc_now,
 )
 from nextloop.adapters.observing import _query_history
 from nextloop.contracts import Message, ToolCall
@@ -489,4 +493,311 @@ async def test_close_is_bounded_when_exporter_suppresses_cancellation():
     await asyncio.wait_for(store.close(), timeout=0.3)
     assert raw.closed is True
     exporter.release.set()
+    await store.close()
+
+
+def trace_event(event_type, seq, turn, step, payload, attempt=0):
+    return Event(
+        session_id="s",
+        seq=seq,
+        turn=turn,
+        step=step,
+        attempt=attempt,
+        writer_epoch=1,
+        event_id=f"event-{seq}",
+        event_type=event_type,
+        surface_op=SurfaceOp.NONE,
+        payload=payload,
+        occurred_at=utc_now(),
+    )
+
+
+async def test_live_recovery_read_does_not_duplicate_open_turn():
+    collector = Collector()
+    store = ObservingEventStore(InMemoryEventStore(), [collector])
+    epoch, seq, _ = await store.attach_writer("s")
+    started_at = utc_now()
+    drafts = [
+        NewEvent(event_type=EventType.TURN_START, turn=1, step=0),
+        NewEvent(event_type=EventType.STEP_START, turn=1, step=1),
+        NewEvent(
+            event_type=EventType.ASSISTANT_ATTEMPT,
+            turn=1,
+            step=1,
+            attempt=1,
+            payload={"status": "started", "purpose": "inference", "started_at": started_at},
+        ),
+        NewEvent(
+            event_type=EventType.ASSISTANT_ATTEMPT,
+            turn=1,
+            step=1,
+            attempt=1,
+            payload={
+                "status": "success",
+                "purpose": "inference",
+                "started_at": started_at,
+                "ended_at": utc_now(),
+                "duration_ms": 1.0,
+                "output": "safe",
+                "usage": {"input_tokens": 2, "output_tokens": 3},
+            },
+        ),
+        NewEvent(
+            event_type=EventType.TOOL_CALL,
+            turn=1,
+            step=1,
+            payload={"call_id": "call-1", "name": "echo", "arguments": "{}", "resources": []},
+        ),
+        NewEvent(
+            event_type=EventType.TOOL_RESULT,
+            turn=1,
+            step=1,
+            payload={
+                "call_id": "call-1",
+                "outcome": {"kind": "completed", "content": "safe"},
+                "started_at": started_at,
+                "ended_at": utc_now(),
+                "duration_ms": 1.0,
+            },
+        ),
+    ]
+    await store.append("s", epoch, seq + 1, drafts)
+    await store.flush(1)
+    assert len(collector.records) == 2
+    await store.load_recovery("s")
+    assert len(collector.records) == 2
+    epoch, seq, _ = await store.attach_writer("s")
+    await store.append(
+        "s",
+        epoch,
+        seq + 1,
+        [NewEvent(event_type=EventType.TURN_END, turn=1, step=1, payload={"status": "succeeded"})],
+    )
+    await store.flush(1)
+    turn = await store.get_turn("s", 1)
+    assert turn is not None
+    assert turn.model_call_count == 1
+    assert turn.tool_call_count == 1
+    assert turn.usage == ModelUsage(2, 3, 0)
+    assert len(turn.model_calls) == 1
+    assert len(turn.tool_calls) == 1
+    assert turn.model_calls[0].output == "safe"
+    assert turn.tool_calls[0].result == "safe"
+    assert project_traces(await store.load_recovery("s")) == tuple(collector.records)
+    await store.close()
+
+
+def test_malformed_boolean_and_enum_fields_fail_explicitly():
+    bad_tool = trace_event(
+        EventType.TOOL_RESULT,
+        1,
+        1,
+        1,
+        {
+            "call_id": "call-1",
+            "outcome": {
+                "kind": "completed",
+                "content": "safe",
+                "is_error": "false",
+                "concludes_turn": "false",
+            },
+        },
+    )
+    with pytest.raises(ValueError, match="is_error"):
+        project_traces([bad_tool])
+
+    bad_turn = trace_event(
+        EventType.TURN_END, 2, 1, 1, {"status": "succeeded", "recovered": "false"}
+    )
+    with pytest.raises(ValueError, match="recovered"):
+        project_traces([bad_turn])
+
+    bad_purpose = trace_event(
+        EventType.ASSISTANT_ATTEMPT,
+        3,
+        1,
+        1,
+        {"status": "started", "purpose": "other"},
+        attempt=1,
+    )
+    with pytest.raises(ValueError, match="purpose"):
+        project_traces([bad_purpose])
+
+
+def test_valid_false_fields_and_final_content_are_preserved():
+    events = [
+        trace_event(EventType.TURN_START, 1, 1, 0, {}),
+        trace_event(
+            EventType.TOOL_RESULT,
+            2,
+            1,
+            1,
+            {
+                "call_id": "call-1",
+                "outcome": {
+                    "kind": "completed",
+                    "content": "safe",
+                    "is_error": False,
+                    "concludes_turn": False,
+                },
+            },
+        ),
+        trace_event(
+            EventType.FINAL_MESSAGE,
+            3,
+            1,
+            1,
+            {"final_message_id": "final-1", "content": "safe"},
+        ),
+        trace_event(EventType.TURN_END, 4, 1, 1, {"status": "succeeded", "recovered": False}),
+    ]
+    tool, turn = project_traces(events)
+    assert tool.is_error is False
+    assert tool.concludes_turn is False
+    assert turn.recovered is False
+    assert turn.final_content == "safe"
+    assert turn.ended_at is not None
+
+
+def test_partial_measured_fields_are_normalized_to_unknown():
+    started_at = utc_now()
+    events = [
+        trace_event(
+            EventType.ASSISTANT_ATTEMPT,
+            1,
+            1,
+            1,
+            {
+                "status": "success",
+                "purpose": "inference",
+                "started_at": started_at,
+                "ended_at": None,
+                "duration_ms": 5.0,
+            },
+            attempt=1,
+        ),
+        trace_event(
+            EventType.TOOL_RESULT,
+            2,
+            1,
+            1,
+            {
+                "call_id": "call-1",
+                "outcome": {"kind": "completed", "content": "safe"},
+                "started_at": started_at,
+                "ended_at": None,
+                "duration_ms": 5.0,
+            },
+        ),
+    ]
+    model, tool = project_traces(events)
+    assert model.timing_source == TimingSource.UNKNOWN
+    assert model.duration_ms is None
+    assert tool.timing_source == TimingSource.UNKNOWN
+    assert tool.duration_ms is None
+
+
+async def test_in_flight_record_is_counted_once_when_close_abandons_it():
+    class HangingExporter:
+        def __init__(self):
+            self.started = asyncio.Event()
+
+        async def export(self, trace):
+            self.started.set()
+            await asyncio.Event().wait()
+
+    exporter = HangingExporter()
+    store = ObservingEventStore(InMemoryEventStore(), [exporter], close_timeout=0.02)
+    epoch, seq, _ = await store.attach_writer("s")
+    await store.append(
+        "s",
+        epoch,
+        seq + 1,
+        [
+            NewEvent(event_type=EventType.TURN_START, turn=1, step=0),
+            NewEvent(
+                event_type=EventType.TURN_END, turn=1, step=0, payload={"status": "succeeded"}
+            ),
+        ],
+    )
+
+    await asyncio.wait_for(exporter.started.wait(), timeout=0.2)
+    await store.close()
+    assert store.dropped_count == 1
+
+
+async def test_sync_exporter_residual_is_reported_not_hidden():
+    errors = []
+
+    class BlockingExporter:
+        def __init__(self):
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.finished = threading.Event()
+
+        def export(self, trace):
+            self.started.set()
+            self.release.wait(1)
+            self.finished.set()
+
+    exporter = BlockingExporter()
+    store = ObservingEventStore(
+        InMemoryEventStore(),
+        [exporter],
+        close_timeout=0.02,
+        on_error=lambda error, record: errors.append(str(error)),
+    )
+    await run(store, [response()])
+    await asyncio.to_thread(exporter.started.wait, 0.2)
+    await store.close()
+    assert any("did not stop before close timeout" in error for error in errors)
+    exporter.release.set()
+    await asyncio.to_thread(exporter.finished.wait, 1)
+    assert exporter.finished.is_set()
+
+
+async def test_slow_sync_exporter_does_not_block_steer_or_cancel():
+    class SlowSyncExporter(Collector):
+        def export(self, trace):
+            time.sleep(0.5)
+            self.records.append(trace)
+
+    exporter = SlowSyncExporter()
+    store = ObservingEventStore(InMemoryEventStore(), [exporter])
+    provider = FakeProvider([echo_call(), response()])
+    provider.model_id = "test-model"
+    registry = tools()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def wait_for_release(arguments, context):
+        started.set()
+        await release.wait()
+        return Completed("steer base")
+
+    registry._handlers["echo"] = wait_for_release
+    loop = AgentLoop()
+    running = asyncio.create_task(loop.run(context(store, provider, registry, FakeDelivery())))
+    await asyncio.wait_for(started.wait(), timeout=0.2)
+    assert await loop.steer("s", "STEER_OK") is True
+    release.set()
+    outcome = await asyncio.wait_for(running, timeout=0.2)
+    assert outcome.status == TurnStatus.SUCCEEDED
+    assert any("STEER_OK" in message.content for message in provider.requests[-1].messages)
+
+    cancel_started = asyncio.Event()
+
+    async def wait_for_cancel(arguments, context):
+        cancel_started.set()
+        await context.cancel.wait()
+        return Cancelled(settled=True)
+
+    registry._handlers["echo"] = wait_for_cancel
+    provider = FakeProvider([echo_call()])
+    provider.model_id = "test-model"
+    running = asyncio.create_task(loop.run(context(store, provider, registry, FakeDelivery())))
+    await asyncio.wait_for(cancel_started.wait(), timeout=0.2)
+    assert await loop.cancel("s") is True
+    outcome = await asyncio.wait_for(running, timeout=0.2)
+    assert outcome.status == TurnStatus.CANCELLED
     await store.close()

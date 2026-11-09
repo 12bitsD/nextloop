@@ -59,7 +59,7 @@ class ModelCaller:
                     self.provider.complete(request, attempt=attempt, cancel=cancel),
                     cancel,
                 )
-            except _CancelledByUser:
+            except (_CancelledByUser, asyncio.CancelledError):
                 events.append(
                     self._timed_event(request, attempt, "cancelled", purpose, started_at, started)
                 )
@@ -93,11 +93,6 @@ class ModelCaller:
                 if delay and await _sleep_or_cancel(delay, cancel):
                     return ModelCallResult(events=tuple(events), cancelled=True)
                 continue
-            except asyncio.CancelledError:
-                events.append(
-                    self._timed_event(request, attempt, "cancelled", purpose, started_at, started)
-                )
-                return ModelCallResult(events=tuple(events), cancelled=True)
             except Exception as exc:
                 error = ProviderError(f"{type(exc).__name__}: {exc}")
                 events.append(
