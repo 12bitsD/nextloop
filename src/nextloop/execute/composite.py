@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -159,6 +160,11 @@ class CompositeToolRuntime:
         if any(owner is runtime for owner in self._owners.values()):
             return
         for spec in runtime.catalog():
+            if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", spec.name) is None:
+                raise HarnessError(
+                    f"{origin}: Tool '{spec.name}' has invalid name; expected 1-64 characters "
+                    "matching [A-Za-z][A-Za-z0-9_-]*"
+                )
             try:
                 jsonschema.Draft202012Validator.check_schema(spec.parameters)
             except jsonschema.SchemaError as exc:

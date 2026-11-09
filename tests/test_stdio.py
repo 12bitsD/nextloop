@@ -103,3 +103,12 @@ async def test_direct_task_cancellation_reclaims_worker() -> None:
     assert process.returncode is not None
     assert not driver._pending
     await driver.close()
+
+
+async def test_namespace_uses_provider_compatible_double_underscore() -> None:
+    driver = StdioDriver(config(namespace="worker"))
+    outcome = await call(driver, "worker__echo", {"text": "routed"})
+    assert isinstance(outcome, Completed) and outcome.content == "routed"
+    assert [spec.name for spec in driver.catalog()][0] == "worker__echo"
+    assert all("." not in spec.name for spec in driver.catalog())
+    await driver.close()

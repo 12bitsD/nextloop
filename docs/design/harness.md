@@ -45,7 +45,7 @@ cancel_grace_seconds = 0.25
 paths = ["skills"]
 ```
 
-Relative paths are resolved from the configuration file. The API key is read only when a model-backed run starts; `check` never contacts a Provider or executes a Tool. A Python register function receives a `ToolRegistry` and normally registers `ToolSpec` plus a synchronous or asynchronous handler. Stdio namespaces use `namespace.remote_name` to prevent collisions.
+Relative paths are resolved from the configuration file. The API key is read only when a model-backed run starts; `check` never contacts a Provider or executes a Tool. A Python register function receives a `ToolRegistry` and normally registers `ToolSpec` plus a synchronous or asynchronous handler. Stdio namespaces use `namespace__remote_name` to prevent collisions. Harness/Composite Tool names are limited to 64 characters and must match `[A-Za-z][A-Za-z0-9_-]*` for Provider compatibility; invalid names fail before a model request.
 
 ```python
 harness = Harness.load("harness.toml")
@@ -80,7 +80,7 @@ Workers are persistent and reused across calls. `check` performs initialize/list
 ```bash
 nextloop check harness.toml --json
 nextloop tools list harness.toml
-nextloop tools call local.echo '{"text":"hello"}' harness.toml
+nextloop tools call local__echo '{"text":"hello"}' harness.toml
 nextloop skills list harness.toml
 nextloop skills view guide harness.toml
 nextloop smoke harness.toml --input "Hello"

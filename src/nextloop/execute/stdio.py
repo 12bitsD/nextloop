@@ -405,7 +405,7 @@ class StdioDriver:
                     raise TypeError("timeout_seconds must be a positive number")
                 timeout = self.config.timeout_seconds or remote_timeout
                 name = (
-                    f"{self.config.namespace}.{remote_name}"
+                    f"{self.config.namespace}__{remote_name}"
                     if self.config.namespace
                     else remote_name
                 )
