@@ -38,7 +38,9 @@ async def _read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
             return frame
         chunk = await reader.read(64 * 1024)
         if not chunk:
-            return bytes(buffer)
+            frame = bytes(buffer)
+            buffer.clear()
+            return frame
         buffer.extend(chunk)
 
 
