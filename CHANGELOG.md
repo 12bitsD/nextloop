@@ -13,7 +13,8 @@
 ### Fixed
 
 - Direct and repeated Task cancellation, including handshake and termination waits, now notifies and reclaims stdio workers with resource-locking outcomes.
-- Stdio writes have bounded backpressure handling; shutdown responses are flushed before native worker exit.
+- Stdio writes have bounded backpressure handling; shutdown responses are flushed before native worker exit, and cancelled close still reaps workers.
+- Cancellation counts are balanced when Tool outcomes replace Task cancellation; chunked stdio frames support concurrent multi-MiB messages.
 - Rust/C++ workers use real JSON parsing, escaped serialization, and concurrent responses.
 - Catalog Schema validation, normalized secret rejection, strict typing, and JSON CLI usage errors.
 - Shared three-language conformance and clean-wheel CI/release checks; examples are included in sdist.

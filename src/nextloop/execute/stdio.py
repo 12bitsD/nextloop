@@ -29,6 +29,19 @@ class StdioProtocolError(HarnessError):
     pass
 
 
+async def _read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
+    while True:
+        newline = buffer.find(b"\n")
+        if newline >= 0:
+            frame = bytes(buffer[:newline])
+            del buffer[: newline + 1]
+            return frame
+        chunk = await reader.read(64 * 1024)
+        if not chunk:
+            return bytes(buffer)
+        buffer.extend(chunk)
+
+
 class StdioDriver:
     def __init__(self, config: ToolConfig) -> None:
         if config.driver != "stdio" or not config.command:
@@ -172,13 +185,21 @@ class StdioDriver:
                 resource_locks=spec.resources,
             )
         except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None:
+                current.uncancel()
             await self._cleanup_call(operation, call.name, remote_name)
             return Cancelled(
                 settled=False,
                 partial_content=f"stdio Tool {call.name} task was cancelled; effects are unknown",
                 resource_locks=spec.resources,
             )
-        except (StdioProtocolError, ConnectionError, asyncio.IncompleteReadError) as exc:
+        except (
+            StdioProtocolError,
+            ConnectionError,
+            asyncio.IncompleteReadError,
+            ValueError,
+        ) as exc:
             await self._cleanup_call(operation, call.name, remote_name)
             return self._hanging(call.name, spec.resources, str(exc))
         finally:
@@ -189,13 +210,15 @@ class StdioDriver:
         process = self._process
         if process is None:
             return
-        if process.returncode is None and not self._broken:
-            try:
-                await self._request("shutdown", {}, request_timeout=2.0)
-                await asyncio.wait_for(process.wait(), timeout=1.0)
-            except (Exception, TimeoutError):
-                pass
-        await self._terminate()
+        try:
+            if process.returncode is None and not self._broken:
+                try:
+                    await self._request("shutdown", {}, request_timeout=2.0)
+                    await asyncio.wait_for(process.wait(), timeout=1.0)
+                except (Exception, TimeoutError):
+                    pass
+        finally:
+            await self._wait_for_cleanup(asyncio.create_task(self._terminate()))
 
     async def _cleanup_call(
         self, operation: asyncio.Task[dict[str, Any]], name: str, remote_name: str
@@ -298,9 +321,10 @@ class StdioDriver:
         process = self._process
         if process is None or process.stdout is None:
             return
+        buffer = bytearray()
         try:
             while True:
-                line = await process.stdout.readline()
+                line = await _read_frame(process.stdout, buffer)
                 if not line:
                     break
                 try:

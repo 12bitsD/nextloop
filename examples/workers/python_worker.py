@@ -85,12 +85,26 @@ def error(request_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
 
 
+async def read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
+    while True:
+        newline = buffer.find(b"\n")
+        if newline >= 0:
+            frame = bytes(buffer[:newline])
+            del buffer[: newline + 1]
+            return frame
+        chunk = await reader.read(64 * 1024)
+        if not chunk:
+            return bytes(buffer)
+        buffer.extend(chunk)
+
+
 async def main() -> None:
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader()
     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
     pending: set[asyncio.Task[None]] = set()
     shutdown = asyncio.Event()
+    buffer = bytearray()
 
     async def run(request: dict[str, Any]) -> None:
         response = await handle(request)
@@ -101,7 +115,7 @@ async def main() -> None:
             shutdown.set()
 
     while not shutdown.is_set():
-        reading = asyncio.create_task(reader.readline())
+        reading = asyncio.create_task(read_frame(reader, buffer))
         stopping = asyncio.create_task(shutdown.wait())
         done, _ = await asyncio.wait({reading, stopping}, return_when=asyncio.FIRST_COMPLETED)
         if stopping in done:

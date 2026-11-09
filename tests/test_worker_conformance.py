@@ -155,3 +155,15 @@ async def test_shutdown_response_stress(
         response = json.loads(line)
         assert response == {"jsonrpc": "2.0", "id": f"stop-{iteration}", "result": {}}
         assert await asyncio.wait_for(process.wait(), timeout=2) == 0
+
+
+async def test_concurrent_two_mib_frames(driver: StdioDriver) -> None:
+    namespace = driver.config.namespace
+    values = [("α😀" * 1000) + "x" * (2 * 1024 * 1024), "y" * (2 * 1024 * 1024)]
+    outcomes = await asyncio.gather(
+        *(invoke(driver, f"{namespace}.echo", {"text": value}) for value in values)
+    )
+    for value, outcome in zip(values, outcomes, strict=True):
+        assert isinstance(outcome, Completed)
+        assert outcome.content == value
+        assert outcome.structured == {"echo": value}

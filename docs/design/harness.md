@@ -70,7 +70,8 @@ The protocol version is `nextloop.stdio/v1`. Messages are one JSON-RPC 2.0 objec
 - A timeout or cancellation sends `notifications/cancelled`, waits the configured grace period, then uses SIGTERM and SIGKILL. The affected call is uncertain and retains declared resource locks.
 - A crash produces `UncertainHanging`; the driver never restarts and replays the old call. New calls remain blocked by normal resource admission or fail as uncertain.
 - Cancellation cleanup runs in a protected task, so repeated caller cancellation cannot interrupt notification, bounded termination, or reader reaping. Stdio writes and best-effort cancel notifications have bounded drain times.
-- `shutdown` is acknowledged before worker exit. `close()` does not drain active calls: process exit makes their effects uncertain and their normal execution paths return locked outcomes.
+- `shutdown` is acknowledged before worker exit. `close()` does not drain active calls: process exit makes their effects uncertain and their normal execution paths return locked outcomes. Cancelling `close()` still completes protected process and reader cleanup before cancellation propagates.
+- Newline-delimited frames are read in chunks without the asyncio default 64KiB line limit. Python, Rust, and C++ conformance covers concurrent multi-MiB requests and responses.
 
 Workers are persistent and reused across calls. `check` performs initialize/list handshakes but no `tools/call`. `lazy` defers startup until runtime use; `eager` starts during Harness assembly/check. Only explicitly declared commands are started.
 
