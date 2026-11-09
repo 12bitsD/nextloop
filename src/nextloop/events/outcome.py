@@ -14,6 +14,7 @@ from ..contracts import (
     Skipped,
     SurfaceOp,
     ToolCall,
+    ToolExecutionTiming,
     ToolOutcome,
     ToolSpec,
     UncertainHanging,
@@ -88,7 +89,14 @@ def outcome_text(call: ToolCall, outcome: ToolOutcome) -> str:
 
 
 def outcome_event(
-    call: ToolCall, outcome: ToolOutcome, *, turn: int, step: int, suffix: str = ""
+    call: ToolCall,
+    outcome: ToolOutcome,
+    *,
+    turn: int,
+    step: int,
+    suffix: str = "",
+    timing: ToolExecutionTiming | None = None,
+    recovered: bool = False,
 ) -> NewEvent:
     message = Message(
         role="tool",
@@ -96,16 +104,27 @@ def outcome_event(
         tool_call_id=call.call_id,
         name=call.name,
     )
+    payload: dict[str, Any] = {
+        "call_id": call.call_id,
+        "message": message_to_data(message),
+        "outcome": outcome_to_data(outcome),
+    }
+    if timing is not None:
+        payload.update(
+            started_at=timing.started_at,
+            ended_at=timing.ended_at,
+            duration_ms=timing.duration_ms,
+        )
+    elif isinstance(outcome, Skipped) and not recovered:
+        payload.update(started_at=None, ended_at=None, duration_ms=0.0)
+    if recovered:
+        payload["recovered"] = True
     return NewEvent(
         event_type=EventType.TOOL_RESULT,
         turn=turn,
         step=step,
         surface_op=SurfaceOp.APPEND,
-        payload={
-            "call_id": call.call_id,
-            "message": message_to_data(message),
-            "outcome": outcome_to_data(outcome),
-        },
+        payload=payload,
     )
 
 
@@ -116,6 +135,7 @@ def settle_outcomes(
     step: int,
     pacing_step_interval: int,
     blocked_resources: frozenset[str] = frozenset(),
+    timings: Mapping[str, ToolExecutionTiming] | None = None,
 ) -> BatchDecision:
     events: list[NewEvent] = []
     acquired: set[str] = set()
@@ -133,7 +153,16 @@ def settle_outcomes(
                 f"\n[Runtime: Step {step} reached; verify progress, converge, "
                 "or ask the user if blocked]"
             )
-        events.append(outcome_event(call, outcome, turn=turn, step=step, suffix=suffix))
+        events.append(
+            outcome_event(
+                call,
+                outcome,
+                turn=turn,
+                step=step,
+                suffix=suffix,
+                timing=(timings or {}).get(call.call_id),
+            )
+        )
         if isinstance(outcome, Completed):
             released.update(outcome.release_resources)
             for message in outcome.additional_messages:

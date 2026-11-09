@@ -87,14 +87,16 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
                         "effects are unknown",
                         resource_locks=tuple(started.payload.get("resources", ())),
                     )
-                new_events.append(outcome_event(call, outcome, turn=turn, step=assistant.step))
+                new_events.append(
+                    outcome_event(call, outcome, turn=turn, step=assistant.step, recovered=True)
+                )
         for step in sorted(started_steps - ended_steps):
             new_events.append(
                 NewEvent(
                     event_type=EventType.STEP_END,
                     turn=turn,
                     step=step,
-                    payload={"status": "interrupted"},
+                    payload={"status": "interrupted", "recovered": True},
                 )
             )
         new_events.append(
@@ -102,7 +104,7 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
                 event_type=EventType.TURN_END,
                 turn=turn,
                 step=max(started_steps, default=0),
-                payload={"status": "interrupted"},
+                payload={"status": "interrupted", "recovered": True},
             )
         )
     existing_locks = set(active_resource_locks(events))

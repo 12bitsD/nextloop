@@ -111,6 +111,7 @@ class TurnDriver:
                     compaction = await self.model.call(
                         make_compaction_request(projection, execution.context.config),
                         execution.cancel,
+                        purpose="compaction",
                     )
                     await execution.append(compaction.events)
                     if compaction.rebuild_for_steer:
@@ -221,6 +222,7 @@ class TurnDriver:
                     step=execution.step,
                     pacing_step_interval=execution.context.config.pacing_step_interval,
                     blocked_resources=batch.blocked_resources,
+                    timings=batch.timings,
                 )
                 await execution.append(settled.events)
                 execution.resource_locks.update(settled.acquired_resources)

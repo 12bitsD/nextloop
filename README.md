@@ -30,6 +30,7 @@ uv pip install --python .venv/bin/python -e '.[dev]'
 - Directory-based `SkillRegistry` for progressive, on-demand `SKILL.md` loading with dependency and version validation.
 - Strict `harness.toml` assembly, Python `module:register`, and persistent Python/Rust/C++ stdio workers.
 - Offline `nextloop` CLI for configuration, worker, Tool, and Skill diagnostics.
+- Committed-event observability with Model/Tool/Turn DTOs, asynchronous Exporters, and Session history.
 
 It is a library, not an HTTP service, product bot, Router, EventBus, or multi-agent framework.
 
@@ -53,6 +54,34 @@ nextloop skills view echo-guide examples/harness.toml
 ```
 
 The example Python module is found when running from a source checkout with `PYTHONPATH=examples`. Examples and reference workers ship in the repository and sdist; wheels contain the library and CLI. No API key is needed for these diagnostic commands.
+
+## Observability
+
+Enable committed-event traces with a built-in stdout Exporter:
+
+```toml
+[trace]
+exporter = "stdout"
+```
+
+Or pass a sync/async function directly:
+
+```python
+harness = Harness.load("harness.toml", exporter=my_exporter)
+```
+
+Use `module.path:function` in TOML for a custom Exporter. No Exporter is enabled by default. Every Exporter receives `ModelCallTrace`, `ToolCallTrace`, or `TurnTrace`; exports are queued asynchronously and flushed by `await harness.close()`.
+
+```python
+turn = await harness.get_turn(1)
+if turn is not None:
+    for tool in turn.tool_calls:
+        print(tool.name, tool.result, tool.duration_ms)
+
+history = await harness.history(from_turn=1, to_turn=10)
+```
+
+History works with memory and SQLite Stores even when no Exporter is configured.
 
 `ToolRegistry` is the built-in `ToolRuntime` implementation:
 
