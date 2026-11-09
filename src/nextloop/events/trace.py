@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, cast, get_args
 
 from ..contracts import (
     Event,
@@ -136,19 +136,17 @@ class TraceProjector:
         payload = event.payload
         status = _enum(
             payload["status"],
-            {"started", "success", "error", "cancelled"},
+            {"started", *get_args(ModelCallStatus)},
             "assistant/attempt.status",
         )
         purpose = _enum(
             payload.get("purpose", "inference"),
-            {"inference", "compaction"},
+            get_args(ModelCallPurpose),
             "assistant/attempt.purpose",
         )
         key = (event.turn, event.step, event.attempt, purpose)
         if status == "started":
             state.open_attempts[key] = event
-            return ()
-        if status not in {"success", "error", "cancelled"}:
             return ()
 
         started = state.open_attempts.pop(key, None)
@@ -158,9 +156,7 @@ class TraceProjector:
         started_at = _string(payload.get("started_at"))
         ended_at = _string(payload.get("ended_at"))
         duration = _number(payload.get("duration_ms"))
-        timing_source = _timing_source(duration, started_at, ended_at)
-        if timing_source == TimingSource.UNKNOWN:
-            duration = None
+        duration, timing_source = _normalize_timing(duration, started_at, ended_at)
         source_seqs = tuple(seq for seq in (started.seq if started else None, event.seq) if seq)
         trace = ModelCallTrace(
             session_id=event.session_id,
@@ -194,11 +190,7 @@ class TraceProjector:
         proposed = state.proposed_tools.get(key, {})
         outcome = payload.get("outcome", {})
         assert isinstance(outcome, Mapping)
-        kind = _enum(
-            outcome["kind"],
-            {"completed", "skipped", "cancelled", "uncertain_settled", "uncertain_hanging"},
-            "tool outcome.kind",
-        )
+        kind = _enum(outcome["kind"], get_args(ToolOutcomeKind), "tool outcome.kind")
         result = _tool_result(outcome)
         recovered = _boolean_field(payload, "recovered")
         started_at = _string(payload.get("started_at"))
@@ -208,9 +200,9 @@ class TraceProjector:
             started_at = started.occurred_at if started else started_at
             ended_at = None
             duration = None
-        timing_source = _timing_source(duration, started_at, ended_at)
-        if kind != "skipped" and timing_source == TimingSource.UNKNOWN:
-            duration = None
+        duration, timing_source = _normalize_timing(
+            duration, started_at, ended_at, preserve_zero=kind == "skipped"
+        )
         source_seqs = tuple(seq for seq in (started.seq if started else None, event.seq) if seq)
         return ToolCallTrace(
             session_id=event.session_id,
@@ -238,17 +230,11 @@ class TraceProjector:
 
     def _close_turn(self, state: _SessionState, event: Event) -> TurnTrace:
         open_turn = state.open_turns.pop(event.turn)
-        status = _enum(
-            event.payload["status"],
-            {"succeeded", "failed", "cancelled", "blocked", "interrupted"},
-            "turn/end.status",
-        )
+        status = _enum(event.payload["status"], get_args(TurnTraceStatus), "turn/end.status")
         recovered = _boolean_field(event.payload, "recovered") or status == "interrupted"
         started_at = open_turn.start.occurred_at if open_turn.start else None
         ended_at = None if recovered else event.occurred_at
-        duration = (
-            _elapsed_ms(started_at, ended_at) if started_at and ended_at and not recovered else None
-        )
+        duration = _elapsed_ms(started_at, ended_at) if started_at and ended_at else None
         timing_source = (
             TimingSource.UNKNOWN if recovered or duration is None else TimingSource.EVENT_OBSERVED
         )
@@ -304,7 +290,7 @@ def _boolean_field(data: Mapping[str, Any], key: str) -> bool:
     return value
 
 
-def _enum(value: Any, allowed: set[str], field: str) -> str:
+def _enum(value: Any, allowed: Collection[str], field: str) -> str:
     if not isinstance(value, str) or value not in allowed:
         raise ValueError(f"{field} must be one of {sorted(allowed)}")
     return value
@@ -326,12 +312,16 @@ def _strings(value: Any) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str))
 
 
-def _timing_source(
-    duration: float | None, started_at: str | None, ended_at: str | None
-) -> TimingSource:
+def _normalize_timing(
+    duration: float | None,
+    started_at: str | None,
+    ended_at: str | None,
+    *,
+    preserve_zero: bool = False,
+) -> tuple[float | None, TimingSource]:
     if duration is not None and started_at is not None and ended_at is not None:
-        return TimingSource.MEASURED
-    return TimingSource.UNKNOWN
+        return duration, TimingSource.MEASURED
+    return (duration if preserve_zero else None), TimingSource.UNKNOWN
 
 
 def _usage(data: Any) -> ModelUsage | None:

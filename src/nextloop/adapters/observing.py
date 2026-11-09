@@ -63,7 +63,6 @@ class ObservingEventStore:
         self._projector = TraceProjector()
         self._projector_lock = asyncio.Lock()
         self._seeded_sessions: set[str] = set()
-        self._live_sessions: set[str] = set()
         self._queue: asyncio.Queue[TraceRecord] = asyncio.Queue(maxsize=max_queue_size)
         self._worker_task: asyncio.Task[None] | None = None
         self._in_flight: TraceRecord | None = None
@@ -90,8 +89,7 @@ class ObservingEventStore:
         if session_id not in self._seeded_sessions:
             try:
                 async with self._projector_lock:
-                    if session_id not in self._live_sessions:
-                        self._projector.seed(events)
+                    self._projector.seed(events)
                     self._seeded_sessions.add(session_id)
             except Exception as exc:
                 self._report_error(exc, None)
@@ -108,7 +106,7 @@ class ObservingEventStore:
         try:
             async with self._projector_lock:
                 records = self._projector.feed(committed)
-                self._live_sessions.add(session_id)
+                self._seeded_sessions.add(session_id)
             for record in records:
                 self._enqueue(record)
         except Exception as exc:
