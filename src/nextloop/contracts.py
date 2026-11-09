@@ -205,6 +205,14 @@ class TimingSource(StrEnum):
     UNKNOWN = "unknown"
 
 
+ModelCallPurpose = Literal["inference", "compaction"]
+ModelCallStatus = Literal["success", "error", "cancelled"]
+ToolOutcomeKind = Literal[
+    "completed", "skipped", "cancelled", "uncertain_settled", "uncertain_hanging"
+]
+TurnTraceStatus = Literal["succeeded", "failed", "cancelled", "blocked", "interrupted"]
+
+
 @dataclass(frozen=True)
 class ToolExecutionTiming:
     started_at: str
@@ -218,9 +226,9 @@ class ModelCallTrace:
     turn: int
     step: int
     attempt: int
-    purpose: Literal["inference", "compaction"]
+    purpose: ModelCallPurpose
     model: str | None
-    status: Literal["success", "error", "cancelled"]
+    status: ModelCallStatus
     started_at: str | None
     ended_at: str | None
     duration_ms: float | None
@@ -243,9 +251,7 @@ class ToolCallTrace:
     call_id: str
     name: str
     arguments: str
-    outcome_kind: Literal[
-        "completed", "skipped", "cancelled", "uncertain_settled", "uncertain_hanging"
-    ]
+    outcome_kind: ToolOutcomeKind
     result: Any
     error: str | None
     is_error: bool
@@ -264,7 +270,7 @@ class ToolCallTrace:
 class TurnTrace:
     session_id: str
     turn: int
-    status: Literal["succeeded", "failed", "cancelled", "blocked", "interrupted"]
+    status: TurnTraceStatus
     step_count: int
     model_call_count: int
     tool_call_count: int

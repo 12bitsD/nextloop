@@ -3,17 +3,21 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from ..contracts import (
     Event,
     EventType,
+    ModelCallPurpose,
+    ModelCallStatus,
     ModelCallTrace,
     ModelUsage,
     TimingSource,
     ToolCallTrace,
+    ToolOutcomeKind,
     TraceRecord,
     TurnTrace,
+    TurnTraceStatus,
 )
 
 
@@ -49,8 +53,6 @@ class _UsageTotal:
 class _OpenTurn:
     start: Event | None = None
     steps: set[int] = field(default_factory=set)
-    model_call_count: int = 0
-    tool_call_count: int = 0
     rejected_batch_count: int = 0
     compaction_count: int = 0
     usage: _UsageTotal = field(default_factory=_UsageTotal)
@@ -118,7 +120,6 @@ class TraceProjector:
         elif event.event_type == EventType.TOOL_CALL:
             state.open_tools[(event.turn, event.step, str(event.payload["call_id"]))] = event
         elif event.event_type == EventType.TOOL_RESULT:
-            turn.tool_call_count += 1
             trace = self._tool_trace(state, event)
             turn.tool_traces.append(trace)
             return (trace,)
@@ -143,7 +144,6 @@ class TraceProjector:
             return ()
 
         started = state.open_attempts.pop(key, None)
-        turn.model_call_count += 1
         if purpose == "compaction":
             turn.compaction_count += 1
         turn.usage.add(payload.get("usage"))
@@ -156,9 +156,9 @@ class TraceProjector:
             turn=event.turn,
             step=event.step,
             attempt=event.attempt,
-            purpose=cast(Literal["inference", "compaction"], purpose),
+            purpose=cast(ModelCallPurpose, purpose),
             model=_string(payload.get("model")),
-            status=cast(Literal["success", "error", "cancelled"], status),
+            status=cast(ModelCallStatus, status),
             started_at=started_at,
             ended_at=ended_at,
             duration_ms=duration,
@@ -205,12 +205,7 @@ class TraceProjector:
             arguments=(
                 str(started.payload["arguments"]) if started else str(proposed.get("arguments", ""))
             ),
-            outcome_kind=cast(
-                Literal[
-                    "completed", "skipped", "cancelled", "uncertain_settled", "uncertain_hanging"
-                ],
-                kind,
-            ),
+            outcome_kind=cast(ToolOutcomeKind, kind),
             result=result,
             error=result if kind == "uncertain_hanging" else _tool_error(outcome),
             is_error=bool(outcome.get("is_error", False)),
@@ -249,12 +244,10 @@ class TraceProjector:
         return TurnTrace(
             session_id=event.session_id,
             turn=event.turn,
-            status=cast(
-                Literal["succeeded", "failed", "cancelled", "blocked", "interrupted"], status
-            ),
+            status=cast(TurnTraceStatus, status),
             step_count=len(open_turn.steps),
-            model_call_count=open_turn.model_call_count,
-            tool_call_count=open_turn.tool_call_count,
+            model_call_count=len(open_turn.model_traces),
+            tool_call_count=len(open_turn.tool_traces),
             rejected_batch_count=open_turn.rejected_batch_count,
             compaction_count=open_turn.compaction_count,
             usage=open_turn.usage.build(),
