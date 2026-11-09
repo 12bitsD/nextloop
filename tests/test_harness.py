@@ -47,6 +47,8 @@ def test_load_valid_config_without_credentials(tmp_path: Path) -> None:
         ("unknown = true", "unknown field"),
         ('min_nextloop = "9.0.0"', "requires nextloop"),
         ('min_nextloop = "0.3.0"', "requires nextloop"),
+        ('min_nextloop = "0.3"', "full x.y.z"),
+        ('min_nextloop = "1"', "full x.y.z"),
         ('[provider.default_parameters]\nACCESS_TOKEN = "literal"', "plaintext credentials"),
         (
             '[provider.default_parameters.headers]\nAuthorization = "literal"',

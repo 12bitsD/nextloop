@@ -121,6 +121,21 @@ class CompositeToolRuntime:
         )
 
     async def close(self) -> None:
+        closing = asyncio.create_task(self._close())
+        current = asyncio.current_task()
+        cancelled = False
+        while not closing.done():
+            try:
+                await asyncio.shield(closing)
+            except asyncio.CancelledError:
+                cancelled = True
+                if current is not None:
+                    current.uncancel()
+        await closing
+        if cancelled:
+            raise asyncio.CancelledError()
+
+    async def _close(self) -> None:
         for driver in self._stdio:
             await driver.close()
 

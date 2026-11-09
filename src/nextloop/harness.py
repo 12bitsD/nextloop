@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import tomllib
@@ -133,12 +134,29 @@ class Harness:
         return await self.loop.recover(self.session_id, self.store, self.delivery)
 
     async def close(self) -> None:
-        await self.tools.close()
-        if self._all_tools is not None and self._all_tools is not self.tools:
-            await self._all_tools.close()
-        close = getattr(self.store, "close", None)
-        if callable(close):
-            close()
+        closing = asyncio.create_task(self._close())
+        current = asyncio.current_task()
+        cancelled = False
+        while not closing.done():
+            try:
+                await asyncio.shield(closing)
+            except asyncio.CancelledError:
+                cancelled = True
+                if current is not None:
+                    current.uncancel()
+        await closing
+        if cancelled:
+            raise asyncio.CancelledError()
+
+    async def _close(self) -> None:
+        try:
+            await self.tools.close()
+            if self._all_tools is not None and self._all_tools is not self.tools:
+                await self._all_tools.close()
+        finally:
+            close = getattr(self.store, "close", None)
+            if callable(close):
+                close()
 
     def _make_provider(self) -> OpenAIProvider | AnthropicProvider:
         config = self.spec.provider
@@ -231,6 +249,8 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     if schema != HARNESS_SCHEMA:
         _fail(source, "schema", f"expected '{HARNESS_SCHEMA}', got '{schema}'")
     minimum = _string(raw, "min_nextloop", source)
+    if re.fullmatch(r"\d+\.\d+\.\d+(?:rc\d+)?", minimum) is None:
+        _fail(source, "min_nextloop", "must use full x.y.z or x.y.zrcN form")
     if _version_tuple(API_VERSION, source, "min_nextloop") < _version_tuple(
         minimum, source, "min_nextloop"
     ):
