@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import json
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -20,7 +19,7 @@ from ..contracts import (
     ValidationIssue,
 )
 from .stdio import StdioDriver
-from .tools import ToolRegistry
+from .tools import ToolRegistry, validate_calls
 
 
 class CompositeToolRuntime:
@@ -46,7 +45,9 @@ class CompositeToolRuntime:
             self._add_catalog(runtime, origin)
 
     @classmethod
-    def from_configs(cls, configs: Sequence[ToolConfig]) -> CompositeToolRuntime:
+    def from_configs(
+        cls, configs: Sequence[ToolConfig], *, sensitive_env: Sequence[str] = ()
+    ) -> CompositeToolRuntime:
         runtimes: list[ToolRuntime] = []
         origins: list[str] = []
         stdio: list[StdioDriver] = []
@@ -58,7 +59,7 @@ class CompositeToolRuntime:
                 runtimes.append(load_python_tools(config.target))
                 origins.append(f"Python target {config.target}")
             elif config.driver == "stdio":
-                stdio.append(StdioDriver(config))
+                stdio.append(StdioDriver(config, sensitive_env=sensitive_env))
                 stdio_origins.append(f"stdio worker {' '.join(config.command)}")
             else:
                 raise HarnessError(f"Unsupported Tool driver: {config.driver}")
@@ -96,40 +97,7 @@ class CompositeToolRuntime:
     def validate(
         self, calls: Sequence[ToolCall]
     ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
-        validated = []
-        issues = []
-        seen_ids: set[str] = set()
-        for index, call in enumerate(calls):
-            call_id = call.call_id or f"unidentified_call_{index}"
-            if not call.call_id:
-                issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is empty"))
-            elif call.call_id in seen_ids:
-                issues.append(
-                    ValidationIssue(call_id, call.name, "Tool Call identity is duplicated")
-                )
-            seen_ids.add(call.call_id)
-            spec = self._specs.get(call.name)
-            if spec is None:
-                issues.append(ValidationIssue(call_id, call.name, "Unknown Tool name"))
-                continue
-            try:
-                arguments = json.loads(call.arguments)
-            except (json.JSONDecodeError, TypeError) as exc:
-                issues.append(ValidationIssue(call_id, call.name, f"Invalid argument JSON: {exc}"))
-                continue
-            if not isinstance(arguments, dict):
-                issues.append(
-                    ValidationIssue(call_id, call.name, "Tool arguments must be a JSON object")
-                )
-                continue
-            validator = jsonschema.Draft202012Validator(spec.parameters)
-            for error in sorted(validator.iter_errors(arguments), key=lambda item: list(item.path)):
-                path = "$" + "".join(
-                    f"[{part}]" if isinstance(part, int) else f".{part}" for part in error.path
-                )
-                issues.append(ValidationIssue(call_id, call.name, f"{path}: {error.message}"))
-            validated.append(ValidatedCall(call=call, spec=spec, arguments=arguments))
-        return tuple(validated), tuple(issues)
+        return validate_calls(calls, self._specs)
 
     async def execute(
         self,

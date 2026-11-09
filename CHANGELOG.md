@@ -18,6 +18,7 @@
 - Rust/C++ workers use real JSON parsing, escaped serialization, and concurrent responses.
 - Catalog Schema validation, normalized secret rejection, strict typing, and JSON CLI usage errors.
 - Stdio names use `namespace__remote_name`; Composite rejects Provider-incompatible names before model calls.
+- Lifecycle locking covers lazy start/close races, workers do not inherit Provider credentials, and strict result/frame limits require asset references for large content.
 - Shared three-language conformance and clean-wheel CI/release checks; examples are included in sdist.
 
 ### Preserved

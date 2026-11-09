@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import signal
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -22,7 +23,12 @@ from ..contracts import (
     UncertainHanging,
     ValidatedCall,
     ValidationIssue,
+    is_positive_number,
 )
+from .tools import validate_calls
+
+MAX_FRAME_BYTES = 16 * 1024 * 1024
+MAX_INLINE_CONTENT_BYTES = 1024 * 1024
 
 
 class StdioProtocolError(HarnessError):
@@ -33,22 +39,32 @@ async def _read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
     while True:
         newline = buffer.find(b"\n")
         if newline >= 0:
+            if newline > MAX_FRAME_BYTES:
+                raise StdioProtocolError("stdio frame exceeds 16MiB limit")
             frame = bytes(buffer[:newline])
             del buffer[: newline + 1]
             return frame
         chunk = await reader.read(64 * 1024)
         if not chunk:
+            if len(buffer) > MAX_FRAME_BYTES:
+                raise StdioProtocolError("stdio frame exceeds 16MiB limit")
             frame = bytes(buffer)
             buffer.clear()
             return frame
         buffer.extend(chunk)
+        if len(buffer) > MAX_FRAME_BYTES and b"\n" not in buffer:
+            raise StdioProtocolError("stdio frame exceeds 16MiB limit")
 
 
 class StdioDriver:
-    def __init__(self, config: ToolConfig) -> None:
+    def __init__(self, config: ToolConfig, *, sensitive_env: Sequence[str] = ()) -> None:
         if config.driver != "stdio" or not config.command:
             raise ValueError("StdioDriver requires a stdio ToolConfig with a command")
         self.config = config
+        self._environment = {
+            key: value for key, value in os.environ.items() if key not in set(sensitive_env)
+        }
+        self._closed = False
         self._process: asyncio.subprocess.Process | None = None
         self._reader: asyncio.Task[None] | None = None
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
@@ -69,6 +85,8 @@ class StdioDriver:
 
     async def start(self) -> None:
         async with self._start_lock:
+            if self._closed:
+                raise StdioProtocolError("stdio worker is closed")
             if self._specs:
                 return
             if self._broken:
@@ -79,6 +97,7 @@ class StdioDriver:
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=None,
+                    env=self._environment,
                 )
                 self._reader = asyncio.create_task(self._read_messages())
                 response = await self._request(
@@ -105,37 +124,7 @@ class StdioDriver:
     def validate(
         self, calls: Sequence[ToolCall]
     ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
-        validated: list[ValidatedCall] = []
-        issues: list[ValidationIssue] = []
-        seen_ids: set[str] = set()
-        for index, call in enumerate(calls):
-            call_id = call.call_id or f"unidentified_call_{index}"
-            if not call.call_id:
-                issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is empty"))
-            elif call.call_id in seen_ids:
-                issues.append(
-                    ValidationIssue(call_id, call.name, "Tool Call identity is duplicated")
-                )
-            seen_ids.add(call.call_id)
-            spec = next((item for item in self._specs if item.name == call.name), None)
-            if spec is None:
-                issues.append(ValidationIssue(call_id, call.name, "Unknown Tool name"))
-                continue
-            try:
-                arguments = json.loads(call.arguments)
-            except (json.JSONDecodeError, TypeError) as exc:
-                issues.append(ValidationIssue(call_id, call.name, f"Invalid argument JSON: {exc}"))
-                continue
-            if not isinstance(arguments, dict):
-                issues.append(
-                    ValidationIssue(call_id, call.name, "Tool arguments must be an object")
-                )
-                continue
-            validator = jsonschema.Draft202012Validator(spec.parameters)
-            for error in validator.iter_errors(arguments):
-                issues.append(ValidationIssue(call_id, call.name, error.message))
-            validated.append(ValidatedCall(call=call, spec=spec, arguments=arguments))
-        return tuple(validated), tuple(issues)
+        return validate_calls(calls, {spec.name: spec for spec in self._specs})
 
     async def execute(
         self,
@@ -149,7 +138,12 @@ class StdioDriver:
     ) -> ToolOutcome:
         if cancel.is_set():
             return Cancelled(settled=True, partial_content="Cancelled before stdio Tool call")
-        await self.start()
+        if not await self._start_for_call(cancel):
+            return Cancelled(
+                settled=False,
+                partial_content=f"stdio Tool {call.name} was cancelled during lazy startup",
+                resource_locks=self.config.resources,
+            )
         remote_name = self._remote_names.get(call.name)
         spec = next((item for item in self._specs if item.name == call.name), None)
         if remote_name is None or spec is None:
@@ -208,19 +202,63 @@ class StdioDriver:
             cancellation.cancel()
             await asyncio.gather(cancellation, return_exceptions=True)
 
-    async def close(self) -> None:
-        process = self._process
-        if process is None:
-            return
+    async def _start_for_call(self, cancel: asyncio.Event) -> bool:
+        starting = asyncio.create_task(self.start())
+        cancellation = asyncio.create_task(cancel.wait())
         try:
-            if process.returncode is None and not self._broken:
-                try:
-                    await self._request("shutdown", {}, request_timeout=2.0)
-                    await asyncio.wait_for(process.wait(), timeout=1.0)
-                except (Exception, TimeoutError):
-                    pass
+            done, _ = await asyncio.wait(
+                {starting, cancellation}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if starting in done:
+                await starting
+                return True
+            starting.cancel()
+            await asyncio.gather(starting, return_exceptions=True)
+            return False
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None:
+                current.uncancel()
+            starting.cancel()
+            waiting = asyncio.create_task(self._await_start_cleanup(starting))
+            await self._wait_for_cleanup(waiting)
+            return False
         finally:
-            await self._wait_for_cleanup(asyncio.create_task(self._terminate()))
+            cancellation.cancel()
+            await asyncio.gather(cancellation, return_exceptions=True)
+
+    @staticmethod
+    async def _await_start_cleanup(starting: asyncio.Task[None]) -> None:
+        await asyncio.gather(starting, return_exceptions=True)
+
+    async def close(self) -> None:
+        closing = asyncio.create_task(self._close())
+        current = asyncio.current_task()
+        cancelled = False
+        while not closing.done():
+            try:
+                await asyncio.shield(closing)
+            except asyncio.CancelledError:
+                cancelled = True
+                if current is not None:
+                    current.uncancel()
+        await closing
+        if cancelled:
+            raise asyncio.CancelledError()
+
+    async def _close(self) -> None:
+        async with self._start_lock:
+            self._closed = True
+            process = self._process
+            try:
+                if process is not None and process.returncode is None and not self._broken:
+                    try:
+                        await self._request("shutdown", {}, request_timeout=2.0)
+                        await asyncio.wait_for(process.wait(), timeout=1.0)
+                    except (Exception, TimeoutError):
+                        pass
+            finally:
+                await self._terminate()
 
     async def _cleanup_call(
         self, operation: asyncio.Task[dict[str, Any]], name: str, remote_name: str
@@ -305,18 +343,26 @@ class StdioDriver:
             self._pending.pop(request_id, None)
             if not future.done():
                 future.cancel()
+            elif not future.cancelled():
+                future.exception()
 
     async def _send(self, message: Mapping[str, Any], send_timeout: float = 1.0) -> None:
         process = self._process
         if process is None or process.stdin is None or process.returncode is not None:
             raise ConnectionError("stdio worker stdin is closed")
         data = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
+        if len(data) - 1 > MAX_FRAME_BYTES:
+            raise StdioProtocolError("stdio request frame exceeds 16MiB limit")
         async with self._write_lock:
             try:
                 process.stdin.write(data)
                 await asyncio.wait_for(process.stdin.drain(), timeout=send_timeout)
             except (BrokenPipeError, ConnectionResetError, TimeoutError) as exc:
                 self._broken = True
+                if process.returncode is not None:
+                    raise ConnectionError(
+                        f"stdio worker exited with status {process.returncode}"
+                    ) from exc
                 raise ConnectionError("stdio worker stdin is closed or backpressured") from exc
 
     async def _read_messages(self) -> None:
@@ -397,11 +443,7 @@ class StdioDriver:
                     raise TypeError("resources must be an array of strings")
                 jsonschema.Draft202012Validator.check_schema(parameters)
                 remote_timeout = item.get("timeout_seconds")
-                if remote_timeout is not None and (
-                    not isinstance(remote_timeout, (int, float))
-                    or isinstance(remote_timeout, bool)
-                    or remote_timeout <= 0
-                ):
+                if remote_timeout is not None and not is_positive_number(remote_timeout):
                     raise TypeError("timeout_seconds must be a positive number")
                 timeout = self.config.timeout_seconds or remote_timeout
                 name = (
@@ -429,15 +471,40 @@ class StdioDriver:
 
     @staticmethod
     def _outcome(response: Mapping[str, Any]) -> ToolOutcome:
+        allowed = {
+            "content",
+            "structured",
+            "assets",
+            "is_error",
+            "concludes_turn",
+            "release_resources",
+        }
+        unknown = set(response) - allowed
+        if unknown:
+            raise StdioProtocolError(f"Unknown Tool result field: {sorted(unknown)[0]}")
         content = response.get("content", "")
-        assets = tuple(str(item) for item in response.get("assets", ()))
+        if not isinstance(content, str):
+            raise StdioProtocolError("Tool result content must be a string")
+        if len(content.encode()) > MAX_INLINE_CONTENT_BYTES:
+            raise StdioProtocolError(
+                "Inline Tool content exceeds 1MiB; return an asset reference instead"
+            )
+        for field in ("is_error", "concludes_turn"):
+            if not isinstance(response.get(field, False), bool):
+                raise StdioProtocolError(f"Tool result {field} must be boolean")
+        references: dict[str, tuple[str, ...]] = {}
+        for field in ("assets", "release_resources"):
+            value = response.get(field, [])
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                raise StdioProtocolError(f"Tool result {field} must be an array of strings")
+            references[field] = tuple(value)
         return Completed(
-            str(content),
-            is_error=bool(response.get("is_error", False)),
-            concludes_turn=bool(response.get("concludes_turn", False)),
+            content,
+            is_error=response.get("is_error", False),
+            concludes_turn=response.get("concludes_turn", False),
             structured=response.get("structured"),
-            assets=assets,
-            release_resources=tuple(response.get("release_resources", ())),
+            assets=references["assets"],
+            release_resources=references["release_resources"],
         )
 
     @staticmethod

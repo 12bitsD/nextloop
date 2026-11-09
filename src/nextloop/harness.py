@@ -27,7 +27,9 @@ from .contracts import (
     ToolSpec,
     TurnContext,
     TurnOutcome,
+    is_positive_number,
     new_id,
+    parse_version,
 )
 from .execute.composite import CompositeToolRuntime
 from .execute.tools import ToolRegistry
@@ -80,7 +82,9 @@ class Harness:
     def __init__(self, spec: HarnessSpec, *, session_id: str | None = None) -> None:
         self.spec = spec
         self.session_id = session_id or new_id("session")
-        self.tools = CompositeToolRuntime.from_configs(spec.tools)
+        self.tools = CompositeToolRuntime.from_configs(
+            spec.tools, sensitive_env=(spec.provider.api_key_env,)
+        )
         self.store = _make_store(spec.store)
         self.delivery = MemoryDeliveryOwner()
         self.loop = AgentLoop()
@@ -320,9 +324,7 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
         _fail(source, f"{prefix}.resources", "must be an array of strings")
     timeout = raw.get("timeout_seconds")
     grace = _number(raw, "cancel_grace_seconds", 0.25, source, prefix)
-    if timeout is not None and (
-        not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0
-    ):
+    if timeout is not None and not is_positive_number(timeout):
         _fail(source, f"{prefix}.timeout_seconds", "must be a positive number")
     return ToolConfig(
         driver=driver,
@@ -407,17 +409,10 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
 
 
 def _version_tuple(value: str, source: Path, field: str) -> tuple[int, int, int, int, int]:
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:rc(\d+))?", value)
-    if match is None:
+    try:
+        return parse_version(value)
+    except ValueError:
         _fail(source, field, f"invalid version '{value}'")
-    release = match.group(4) is None
-    return (
-        int(match.group(1)),
-        int(match.group(2)),
-        int(match.group(3)),
-        1 if release else 0,
-        0 if release else int(match.group(4)),
-    )
 
 
 def _resolve_path(source: Path, value: str) -> Path:
@@ -483,7 +478,7 @@ def _number(
     raw: Mapping[str, Any], name: str, default: float, source: Path, prefix: str = ""
 ) -> float:
     value = raw.get(name, default)
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+    if not is_positive_number(value):
         _fail(source, f"{prefix + '.' if prefix else ''}{name}", "must be a positive number")
     return float(value)
 

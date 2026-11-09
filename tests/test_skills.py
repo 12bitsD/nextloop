@@ -111,3 +111,13 @@ def test_skill_view_returns_body_and_honest_not_found(tmp_path):
 def test_missing_path_fails(tmp_path):
     with pytest.raises(SkillError, match="does not exist"):
         SkillRegistry([tmp_path / "missing"])
+
+
+def test_skill_final_version_exceeds_release_candidate(tmp_path):
+    path = write_skill(tmp_path / "versioned")
+    path.write_text(
+        "---\nname: versioned\ndescription: Version test\nmin_nextloop: 0.3.0\n---\nBody\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SkillError, match="requires nextloop"):
+        SkillRegistry([path])

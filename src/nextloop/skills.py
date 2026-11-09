@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .contracts import API_VERSION, Completed, SkillDocument, SkillError, SkillSpec
+from .contracts import (
+    API_VERSION,
+    Completed,
+    SkillDocument,
+    SkillError,
+    SkillSpec,
+    parse_version,
+)
 
 
 class SkillRegistry:
@@ -153,14 +159,10 @@ def _parse_tool_list(value: str) -> tuple[str, ...]:
 
 
 def _check_version(min_nextloop: str, path: Path) -> None:
-    required = _version_tuple(min_nextloop, path)
-    current = _version_tuple(API_VERSION, path)
+    try:
+        required = parse_version(min_nextloop)
+        current = parse_version(API_VERSION)
+    except ValueError as exc:
+        raise SkillError(f"{path}: invalid nextloop version '{min_nextloop}'") from exc
     if current < required:
         raise SkillError(f"{path}: requires nextloop >= {min_nextloop}, current is {API_VERSION}")
-
-
-def _version_tuple(value: str, path: Path) -> tuple[int, ...]:
-    match = re.match(r"^\s*(\d+(?:\.\d+){0,2})", value)
-    if match is None:
-        raise SkillError(f"{path}: invalid nextloop version '{value}'")
-    return tuple(int(part) for part in match.group(1).split("."))
