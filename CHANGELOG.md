@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0rc1 - 2026-11-09
+
+### Added
+
+- Strict versioned Harness TOML configuration and assembly over the existing AgentLoop.
+- CompositeToolRuntime with Python `module:register` and namespaced stdio worker routing.
+- Persistent JSON-RPC stdio driver with lazy/eager startup, cancellation, timeout termination, crash uncertainty, resource locks, and asset references.
+- Python, Rust, and C++ reference workers plus an offline debugging CLI.
+- Harness Skill discovery, dependency validation, on-demand `skill_view`, examples, and extension interface documentation.
+
+### Fixed
+
+- Direct and repeated Task cancellation, including handshake and termination waits, now notifies and reclaims stdio workers with resource-locking outcomes.
+- Stdio writes have bounded backpressure handling; shutdown responses are flushed before native worker exit, and cancelled close still reaps workers.
+- Cancellation counts are balanced when Tool outcomes replace Task cancellation; chunked stdio frames support concurrent multi-MiB messages.
+- Rust/C++ workers use real JSON parsing, escaped serialization, and concurrent responses.
+- Catalog Schema validation, normalized secret rejection, strict typing, and JSON CLI usage errors.
+- Shared three-language conformance and clean-wheel CI/release checks; examples are included in sdist.
+
+### Preserved
+
+- Existing AgentLoop, BatchExecutor, ToolRegistry, whole-batch validation, result ordering, recovery, and delivery semantics remain unchanged.
+
 ## 0.2.0rc1 - 2026-11-09
 
 ### Added

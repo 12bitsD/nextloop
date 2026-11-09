@@ -1,0 +1,29 @@
+schema = "nextloop.harness/v1"
+min_nextloop = "0.3.0rc1"
+
+[provider]
+protocol = "openai"
+model_id = "kimi-k2.5"
+base_url = "https://api.moonshot.cn/v1"
+api_key_env = "KIMI_API_KEY"
+
+[store]
+driver = "memory"
+
+[loop]
+system_prompt = "You are a helpful assistant. Use declared Tools when useful."
+max_parallel_tools = 4
+
+[[tools]]
+driver = "python"
+target = "python_tools:register"
+
+[[tools]]
+driver = "stdio"
+command = ["python3", "workers/python_worker.py"]
+namespace = "python_worker"
+start = "lazy"
+timeout_seconds = 10
+
+[skills]
+paths = ["harness-skills"]

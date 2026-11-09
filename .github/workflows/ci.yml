@@ -21,11 +21,18 @@ jobs:
       - run: uv python install ${{ matrix.python-version }}
       - run: uv venv --python ${{ matrix.python-version }} .venv
       - run: uv pip install --python .venv/bin/python -e '.[dev]'
-      - run: .venv/bin/ruff check src tests
-      - run: .venv/bin/ruff format --check src tests
-      - run: .venv/bin/mypy src/nextloop
+      - run: .venv/bin/ruff check src tests examples
+      - run: .venv/bin/ruff format --check src tests examples
+      - run: .venv/bin/mypy --strict src/nextloop
       - run: .venv/bin/pytest -q
       - run: .venv/bin/python -m build
       - run: .venv/bin/twine check dist/*
       - run: .venv/bin/python examples/basic.py
       - run: .venv/bin/python examples/skills_demo.py
+      - run: uv venv --python ${{ matrix.python-version }} .wheel-venv
+      - run: uv pip install --python .wheel-venv/bin/python dist/*.whl
+      - run: PYTHONPATH=examples .wheel-venv/bin/nextloop check examples/harness.toml --json
+      - run: PYTHONPATH=examples .wheel-venv/bin/nextloop tools list examples/harness.toml --json
+      - run: PYTHONPATH=examples .wheel-venv/bin/nextloop tools call python_worker.echo '{"text":"wheel"}' examples/harness.toml --json
+      - run: PYTHONPATH=examples .wheel-venv/bin/nextloop skills list examples/harness.toml --json
+      - run: PYTHONPATH=examples .wheel-venv/bin/nextloop skills view echo-guide examples/harness.toml --json
