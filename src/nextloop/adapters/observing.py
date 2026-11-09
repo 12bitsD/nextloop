@@ -130,14 +130,7 @@ class ObservingEventStore:
             try:
                 for exporter in self._exporters:
                     try:
-                        export = getattr(exporter, "export", None)
-                        result = (
-                            export(record)
-                            if callable(export)
-                            else cast(Callable[[TraceRecord], Any], exporter)(record)
-                        )
-                        if inspect.isawaitable(result):
-                            await result
+                        await _export(exporter, record)
                     except Exception as exc:
                         self._report_error(exc, record)
             finally:
@@ -171,6 +164,7 @@ class ObservingEventStore:
 
     async def _close(self) -> None:
         try:
+            deadline = asyncio.get_running_loop().time() + self._close_timeout
             flushed = await self.flush(self._close_timeout)
             if not flushed and self._queue.qsize():
                 pending = self._queue.qsize()
@@ -180,7 +174,16 @@ class ObservingEventStore:
                 )
             if self._worker_task is not None:
                 self._worker_task.cancel()
-                await asyncio.gather(self._worker_task, return_exceptions=True)
+                remaining = max(0.0, deadline - asyncio.get_running_loop().time())
+                try:
+                    await asyncio.wait_for(asyncio.shield(self._worker_task), timeout=remaining)
+                except TimeoutError:
+                    self._report_error(
+                        TimeoutError("Trace exporter did not stop before close timeout"), None
+                    )
+                except asyncio.CancelledError:
+                    if not self._worker_task.done():
+                        raise
         finally:
             close = getattr(self._store, "close", None)
             if callable(close):
@@ -194,8 +197,23 @@ class ObservingEventStore:
         return await _query_history(self._store, session_id, from_turn=from_turn, to_turn=to_turn)
 
     async def get_turn(self, session_id: str, turn: int) -> TurnTrace | None:
-        records = await self.history(session_id, from_turn=turn, to_turn=turn)
-        return next((record for record in records if isinstance(record, TurnTrace)), None)
+        return await _get_turn(self._store, session_id, turn)
+
+
+async def _export(exporter: TraceExporterInput, record: TraceRecord) -> None:
+    export = getattr(exporter, "export", None)
+    callback = export if callable(export) else cast(Callable[[TraceRecord], Any], exporter)
+    if inspect.iscoroutinefunction(callback):
+        result = callback(record)
+    else:
+        result = await asyncio.to_thread(callback, record)
+    if inspect.isawaitable(result):
+        await result
+
+
+async def _get_turn(store: EventStore, session_id: str, turn: int) -> TurnTrace | None:
+    records = await _query_history(store, session_id, from_turn=turn, to_turn=turn)
+    return next((record for record in records if isinstance(record, TurnTrace)), None)
 
 
 async def _query_history(

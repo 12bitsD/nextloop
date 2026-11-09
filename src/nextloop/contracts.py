@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 API_VERSION = "0.3.0rc2"
 EVENT_SCHEMA_VERSION = "1.0"
@@ -218,9 +218,9 @@ class ModelCallTrace:
     turn: int
     step: int
     attempt: int
-    purpose: str
+    purpose: Literal["inference", "compaction"]
     model: str | None
-    status: str
+    status: Literal["success", "error", "cancelled"]
     started_at: str | None
     ended_at: str | None
     duration_ms: float | None
@@ -243,7 +243,9 @@ class ToolCallTrace:
     call_id: str
     name: str
     arguments: str
-    outcome_kind: str
+    outcome_kind: Literal[
+        "completed", "skipped", "cancelled", "uncertain_settled", "uncertain_hanging"
+    ]
     result: Any
     error: str | None
     is_error: bool
@@ -262,7 +264,7 @@ class ToolCallTrace:
 class TurnTrace:
     session_id: str
     turn: int
-    status: str
+    status: Literal["succeeded", "failed", "cancelled", "blocked", "interrupted"]
     step_count: int
     model_call_count: int
     tool_call_count: int
@@ -278,6 +280,8 @@ class TurnTrace:
     duration_ms: float | None
     timing_source: TimingSource
     source_seqs: tuple[int, ...] = ()
+    model_calls: tuple[ModelCallTrace, ...] = ()
+    tool_calls: tuple[ToolCallTrace, ...] = ()
 
 
 TraceRecord = ModelCallTrace | ToolCallTrace | TurnTrace

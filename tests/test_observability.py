@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -129,6 +130,8 @@ async def test_live_history_and_tool_fields():
     assert turn.step_count == 2
     assert turn.model_call_count == 2
     assert turn.tool_call_count == 1
+    assert turn.model_calls == (collector.records[0], collector.records[2])
+    assert turn.tool_calls == (tool,)
     assert turn.usage == ModelUsage(4, 5, 6)
     assert delivery.messages
     events = await store.load_recovery("s")
@@ -203,7 +206,7 @@ async def test_exclusive_failure_skips_later_tool_with_arguments():
     assert skipped.outcome_kind == "skipped"
     assert skipped.arguments == '{"text":"later"}'
     assert skipped.duration_ms == 0.0
-    assert skipped.timing_source == TimingSource.MEASURED
+    assert skipped.timing_source == TimingSource.UNKNOWN
     await store.close()
 
 
@@ -439,3 +442,51 @@ async def test_module_exporter_and_runtime_exporter(
 
     assert len(trace_sink.records) == 2
     assert len(runtime_collector.records) == 2
+
+
+async def test_blocking_sync_exporter_does_not_block_loop_and_still_exports():
+    class SlowSyncExporter(Collector):
+        def export(self, trace):
+            time.sleep(0.5)
+            self.records.append(trace)
+
+    exporter = SlowSyncExporter()
+    store = ObservingEventStore(InMemoryEventStore(), [exporter])
+    outcome, delivery = await asyncio.wait_for(run(store, [response()]), timeout=0.2)
+    assert outcome.status == TurnStatus.SUCCEEDED
+    assert len(delivery.messages) == 1
+    await store.close()
+    assert len(exporter.records) == 2
+
+
+async def test_close_is_bounded_when_exporter_suppresses_cancellation():
+    class ClosingStore(InMemoryEventStore):
+        def __init__(self):
+            super().__init__()
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    class SuppressingExporter:
+        def __init__(self):
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def export(self, trace):
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await self.release.wait()
+                raise
+
+    raw = ClosingStore()
+    exporter = SuppressingExporter()
+    store = ObservingEventStore(raw, [exporter], close_timeout=0.05)
+    await run(store, [response()])
+    await asyncio.wait_for(exporter.started.wait(), timeout=0.2)
+    await asyncio.wait_for(store.close(), timeout=0.3)
+    assert raw.closed is True
+    exporter.release.set()
+    await store.close()

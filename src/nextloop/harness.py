@@ -12,7 +12,7 @@ from typing import Any, NoReturn, cast
 
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
-from .adapters.observing import ObservingEventStore, StdoutExporter, _query_history
+from .adapters.observing import ObservingEventStore, StdoutExporter, _get_turn, _query_history
 from .adapters.openai import OpenAIProvider
 from .adapters.sqlite import SQLiteEventStore
 from .contracts import (
@@ -164,8 +164,7 @@ class Harness:
         )
 
     async def get_turn(self, turn: int) -> TurnTrace | None:
-        records = await self.history(from_turn=turn, to_turn=turn)
-        return next((record for record in records if isinstance(record, TurnTrace)), None)
+        return await _get_turn(self.store, self.session_id, turn)
 
     async def close(self) -> None:
         cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
