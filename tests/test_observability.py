@@ -69,7 +69,7 @@ def fake_provider(responses):
 def write_harness_config(path: Path, exporter: str) -> None:
     path.write_text(
         'schema = "nextloop.harness/v1"\n'
-        'min_nextloop = "0.3.0rc2"\n'
+        'min_nextloop = "0.4.0rc1"\n'
         "[provider]\n"
         'protocol = "openai"\n'
         'model_id = "test"\n'

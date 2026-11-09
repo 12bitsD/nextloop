@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0rc1 - 2026-11-09
+
+### Added
+
+- Committed-event observability with immutable ModelCallTrace, ToolCallTrace, and TurnTrace DTOs, including nested Model/Tool calls, usage, results, measured timing, and recovery markers.
+- ObservingEventStore with bounded asynchronous export, sync/async Exporters, JSONL StdoutExporter, duplicate suppression, and bounded close with degraded diagnostics.
+- Harness `[trace]` and runtime Exporter configuration, `get_turn()` and `history()` on Harness and ObservingEventStore, with no Exporter enabled by default.
+- Independent Standards, Spec, and Risk review with real Kimi, Harness, cross-language, and crash-recovery acceptance scenarios.
+
+### Fixed
+
+- Model and Tool timing now uses actual execution boundaries; Compaction and inference are distinguished by purpose.
+- Recovery seed preserves open Tool/Turn state without replaying closed history or duplicating live Sessions.
+- Sync Exporters run off the event loop; close remains bounded when Exporters suppress cancellation, while residual synchronous calls are explicitly reported.
+- Trace projection normalizes missing timing fields, validates boolean and enum inputs, avoids duplicate export on idempotent append, and counts queued plus in-flight drops.
+- Observability implementation and tests were simplified by sharing timing, enum, query, and setup logic without changing AgentLoop control flow.
+
 ## 0.3.0rc2 - 2026-11-09
 
 ### Fixed
