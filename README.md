@@ -1,6 +1,10 @@
 # nextloop
 
-A small, embeddable Python AgentLoop with explicit execution, recovery, and delivery semantics.
+**Small core. Serious runtime semantics.**
+
+nextloop is an embeddable Python AgentLoop for developers who want to build their own agent runtime — not inherit a heavyweight framework. Deterministic ReAct execution, append-only history, explicit crash recovery, typed Tools, and committed-event observability, all in a package you can actually read.
+
+**Your agent, your rules. No magic, no black box.**
 
 Current version: **0.4.0rc1**.
 
@@ -17,7 +21,17 @@ uv venv --python 3.11 .venv
 uv pip install --python .venv/bin/python -e '.[dev]'
 ```
 
-## What it provides
+## Why nextloop
+
+- **Execution you can reason about.** DSH-aligned Session/Turn/Step/attempt coordinates, writer fencing, and append-only Trajectory instead of implicit runner state.
+- **Crash recovery without blind replay.** Resource locks, uncertain outcomes, crash closers, and delivery-only recovery tell you what is known, what is unknown, and what must not run twice.
+- **Tools without framework lock-in.** Register Python functions directly, or run persistent Rust and C++ workers over stdio JSON-RPC. Schema validation, parallel calls, and exclusive barriers are built in.
+- **Observability from committed facts.** Structured Model/Tool/Turn traces, asynchronous Exporters, and Session history. No second execution path and no telemetry-driven control flow.
+- **Small, explicit integration.** Assemble Providers, Stores, Tools, and Skills with `harness.toml`, or keep everything in Python. OpenAI-compatible and Anthropic Providers are included.
+
+It is a library, not an HTTP service, product bot, Router, EventBus, or multi-agent framework. **The Loop stays in your application; the decisions stay with you.**
+
+## Under the hood
 
 - DSH-aligned Session/Turn/Step execution with 4D integer coordinates and writer fencing.
 - Append-only Trajectory and O(Δ) `surface_op` watermark projection.
@@ -31,8 +45,6 @@ uv pip install --python .venv/bin/python -e '.[dev]'
 - Strict `harness.toml` assembly, Python `module:register`, and persistent Python/Rust/C++ stdio workers.
 - Offline `nextloop` CLI for configuration, worker, Tool, and Skill diagnostics.
 - Committed-event observability with Model/Tool/Turn DTOs, asynchronous Exporters, and Session history.
-
-It is a library, not an HTTP service, product bot, Router, EventBus, or multi-agent framework.
 
 ## Public API
 
