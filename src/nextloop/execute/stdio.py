@@ -105,7 +105,7 @@ class StdioDriver:
                     "initialize",
                     {
                         "protocolVersion": STDIO_PROTOCOL_VERSION,
-                        "clientInfo": {"name": "nextloop", "version": "0.3.0rc2"},
+                        "clientInfo": {"name": "nextloop", "version": "0.4.0rc1"},
                     },
                     request_timeout=10.0,
                 )
