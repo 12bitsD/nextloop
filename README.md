@@ -48,7 +48,7 @@ The only four Adapter protocols are `EventStore`, `ModelProvider`, `ToolRuntime`
 
 ```bash
 nextloop check examples/harness.toml
-nextloop tools call python_worker.echo '{"text":"hello"}' examples/harness.toml
+nextloop tools call python_worker__echo '{"text":"hello"}' examples/harness.toml
 nextloop skills view echo-guide examples/harness.toml
 ```
 

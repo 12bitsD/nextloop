@@ -213,3 +213,23 @@ async def test_invalid_stdio_tool_schema_has_worker_and_name(tmp_path: Path) -> 
     with pytest.raises(HarnessError, match="stdio worker.*broken"):
         await harness.check()
     await harness.close()
+
+
+@pytest.mark.parametrize("name", ["bad.name", "bad name", "1tool", "a" * 65])
+def test_composite_rejects_provider_incompatible_tool_names(name: str) -> None:
+    registry = ToolRegistry()
+    registry.register(
+        ToolSpec(name, "Invalid", {"type": "object"}), lambda arguments, context: None
+    )
+    with pytest.raises(HarnessError, match="invalid name"):
+        CompositeToolRuntime([registry])
+
+
+def test_composite_accepts_namespaced_and_64_character_names() -> None:
+    registry = ToolRegistry()
+    for name in ("worker__echo", "a" * 64):
+        registry.register(
+            ToolSpec(name, "Valid", {"type": "object"}), lambda arguments, context: None
+        )
+    runtime = CompositeToolRuntime([registry])
+    assert {spec.name for spec in runtime.catalog()} == {"worker__echo", "a" * 64}

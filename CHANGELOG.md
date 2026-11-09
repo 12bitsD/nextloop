@@ -17,6 +17,7 @@
 - Cancellation counts are balanced when Tool outcomes replace Task cancellation; chunked stdio frames support concurrent multi-MiB messages.
 - Rust/C++ workers use real JSON parsing, escaped serialization, and concurrent responses.
 - Catalog Schema validation, normalized secret rejection, strict typing, and JSON CLI usage errors.
+- Stdio names use `namespace__remote_name`; Composite rejects Provider-incompatible names before model calls.
 - Shared three-language conformance and clean-wheel CI/release checks; examples are included in sdist.
 
 ### Preserved

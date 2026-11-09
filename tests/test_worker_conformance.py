@@ -70,9 +70,9 @@ async def invoke(
 
 async def test_protocol_initialize_list_and_escaped_call(driver: StdioDriver) -> None:
     await driver.start()
-    assert {spec.name.rsplit(".", 1)[-1] for spec in driver.catalog()} >= {"echo", "wait"}
+    assert {spec.name.rsplit("__", 1)[-1] for spec in driver.catalog()} >= {"echo", "wait"}
     for value in ('Unicode 中文 😀 "quote" \\ slash\nnext\tline', "", "null \\u1234"):
-        outcome = await invoke(driver, f"{driver.config.namespace}.echo", {"text": value})
+        outcome = await invoke(driver, f"{driver.config.namespace}__echo", {"text": value})
         assert isinstance(outcome, Completed)
         assert outcome.content == value
         assert outcome.structured == {"echo": value}
@@ -80,9 +80,9 @@ async def test_protocol_initialize_list_and_escaped_call(driver: StdioDriver) ->
 
 async def test_protocol_concurrent_out_of_order_and_shutdown(driver: StdioDriver) -> None:
     namespace = driver.config.namespace
-    slow = asyncio.create_task(invoke(driver, f"{namespace}.wait", {"seconds": 0.3}))
+    slow = asyncio.create_task(invoke(driver, f"{namespace}__wait", {"seconds": 0.3}))
     await asyncio.sleep(0.03)
-    fast = asyncio.create_task(invoke(driver, f"{namespace}.echo", {"text": "fast"}))
+    fast = asyncio.create_task(invoke(driver, f"{namespace}__echo", {"text": "fast"}))
     fast_outcome = await asyncio.wait_for(fast, timeout=0.2)
     assert isinstance(fast_outcome, Completed) and fast_outcome.content == "fast"
     assert not slow.done()
@@ -100,7 +100,7 @@ async def test_protocol_cancellation(driver: StdioDriver) -> None:
     assert process is not None
     cancel = asyncio.Event()
     operation = asyncio.create_task(
-        invoke(driver, f"{driver.config.namespace}.wait", {"seconds": 10}, cancel)
+        invoke(driver, f"{driver.config.namespace}__wait", {"seconds": 10}, cancel)
     )
     await asyncio.sleep(0.03)
     cancel.set()
@@ -161,7 +161,7 @@ async def test_concurrent_two_mib_frames(driver: StdioDriver) -> None:
     namespace = driver.config.namespace
     values = [("α😀" * 1000) + "x" * (2 * 1024 * 1024), "y" * (2 * 1024 * 1024)]
     outcomes = await asyncio.gather(
-        *(invoke(driver, f"{namespace}.echo", {"text": value}) for value in values)
+        *(invoke(driver, f"{namespace}__echo", {"text": value}) for value in values)
     )
     for value, outcome in zip(values, outcomes, strict=True):
         assert isinstance(outcome, Completed)
