@@ -93,7 +93,8 @@ int main() {
         try { request = Parser(line).parse(); } catch (...) { continue; }
         auto method = text(get(&request, "method")); auto id = text(get(&request, "id"));
         if (method == "notifications/cancelled") { std::lock_guard<std::mutex> lock(cancel_mutex); cancelled.insert(text(get(get(&request, "params"), "name"))); continue; }
-        bool shutdown = method == "shutdown";
+        if (method == "shutdown") { reply(id, "{}"); break; }
+        bool shutdown = false;
         std::thread([request = std::move(request), method, id, tools, shutdown]() mutable {
             if (method == "initialize") reply(id, "{\"protocolVersion\":\"nextloop.stdio/v1\",\"serverInfo\":{\"name\":\"cpp-worker\"}}");
             else if (method == "ping" || method == "shutdown") reply(id, "{}");

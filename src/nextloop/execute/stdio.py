@@ -80,8 +80,8 @@ class StdioDriver:
                     )
                 listed = await self._request("tools/list", {}, request_timeout=10.0)
                 self._specs = self._parse_specs(listed.get("tools"))
-            except Exception:
-                await self._terminate()
+            except BaseException:
+                await self._wait_for_cleanup(asyncio.create_task(self._terminate()))
                 raise
 
     def catalog(self) -> Sequence[ToolSpec]:
@@ -163,7 +163,7 @@ class StdioDriver:
                 response = await operation
                 return self._outcome(response)
             timed_out = cancellation not in done
-            await self._abort_call(operation, call.name, remote_name)
+            await self._cleanup_call(operation, call.name, remote_name)
             if timed_out:
                 return self._hanging(call.name, spec.resources, "stdio Tool call timed out")
             return Cancelled(
@@ -172,14 +172,14 @@ class StdioDriver:
                 resource_locks=spec.resources,
             )
         except asyncio.CancelledError:
-            await self._abort_call(operation, call.name, remote_name)
+            await self._cleanup_call(operation, call.name, remote_name)
             return Cancelled(
                 settled=False,
                 partial_content=f"stdio Tool {call.name} task was cancelled; effects are unknown",
                 resource_locks=spec.resources,
             )
         except (StdioProtocolError, ConnectionError, asyncio.IncompleteReadError) as exc:
-            self._broken = True
+            await self._cleanup_call(operation, call.name, remote_name)
             return self._hanging(call.name, spec.resources, str(exc))
         finally:
             cancellation.cancel()
@@ -197,31 +197,53 @@ class StdioDriver:
                 pass
         await self._terminate()
 
+    async def _cleanup_call(
+        self, operation: asyncio.Task[dict[str, Any]], name: str, remote_name: str
+    ) -> None:
+        cleanup = asyncio.create_task(self._abort_call(operation, name, remote_name))
+        await self._wait_for_cleanup(cleanup)
+
+    @staticmethod
+    async def _wait_for_cleanup(cleanup: asyncio.Task[None]) -> None:
+        current = asyncio.current_task()
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                if current is not None:
+                    current.uncancel()
+        await cleanup
+
     async def _abort_call(
         self, operation: asyncio.Task[dict[str, Any]], name: str, remote_name: str
     ) -> None:
         operation.cancel()
         await asyncio.gather(operation, return_exceptions=True)
-        await self._cancel_request(name, remote_name)
-        await asyncio.sleep(self.config.cancel_grace_seconds)
-        process = self._process
-        if process is not None and process.returncode is None:
-            process.terminate()
-            try:
-                await asyncio.wait_for(process.wait(), timeout=self.config.cancel_grace_seconds)
-            except TimeoutError:
-                process.kill()
-                await process.wait()
-        self._broken = True
+        try:
+            await self._cancel_request(name, remote_name)
+            await asyncio.sleep(self.config.cancel_grace_seconds)
+        finally:
+            process = self._process
+            if process is not None and process.returncode is None:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=self.config.cancel_grace_seconds)
+                except TimeoutError:
+                    process.kill()
+                    await process.wait()
+            self._broken = True
+            if self._reader is not None:
+                await asyncio.gather(self._reader, return_exceptions=True)
 
     async def _cancel_request(self, name: str, remote_name: str) -> None:
-        with contextlib.suppress(ConnectionError, StdioProtocolError):
+        with contextlib.suppress(ConnectionError, StdioProtocolError, TimeoutError):
             await self._send(
                 {
                     "jsonrpc": "2.0",
                     "method": "notifications/cancelled",
                     "params": {"name": remote_name, "reason": f"nextloop cancelled {name}"},
-                }
+                },
+                send_timeout=0.05,
             )
 
     async def _request(
@@ -259,7 +281,7 @@ class StdioDriver:
             if not future.done():
                 future.cancel()
 
-    async def _send(self, message: Mapping[str, Any]) -> None:
+    async def _send(self, message: Mapping[str, Any], send_timeout: float = 1.0) -> None:
         process = self._process
         if process is None or process.stdin is None or process.returncode is not None:
             raise ConnectionError("stdio worker stdin is closed")
@@ -267,10 +289,10 @@ class StdioDriver:
         async with self._write_lock:
             try:
                 process.stdin.write(data)
-                await process.stdin.drain()
-            except (BrokenPipeError, ConnectionResetError) as exc:
+                await asyncio.wait_for(process.stdin.drain(), timeout=send_timeout)
+            except (BrokenPipeError, ConnectionResetError, TimeoutError) as exc:
                 self._broken = True
-                raise ConnectionError("stdio worker stdin is closed") from exc
+                raise ConnectionError("stdio worker stdin is closed or backpressured") from exc
 
     async def _read_messages(self) -> None:
         process = self._process

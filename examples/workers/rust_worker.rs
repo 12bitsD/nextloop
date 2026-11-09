@@ -81,8 +81,9 @@ fn main() {
         let method = text(request.get("method"));
         let id = text(request.get("id"));
         if method == "notifications/cancelled" { if let Some(Json::Object(params)) = request.get("params") { cancelled.lock().unwrap().insert(text(params.get("name"))); } continue; }
+        if method == "shutdown" { reply(&id, "{}".into(), &output); break; }
         let output = Arc::clone(&output); let cancelled = Arc::clone(&cancelled);
-        let shutdown = method == "shutdown";
+        let shutdown = false;
         thread::spawn(move || {
             match method.as_str() {
                 "initialize" => reply(&id, "{\"protocolVersion\":\"nextloop.stdio/v1\",\"serverInfo\":{\"name\":\"rust-worker\"}}".into(), &output),

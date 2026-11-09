@@ -134,3 +134,24 @@ async def test_ascii_escaped_unicode_wire_input(
     assert response["result"]["content"] == value
     process.terminate()
     await process.wait()
+
+
+@pytest.mark.parametrize("language", ["python", "rust", "cpp"])
+async def test_shutdown_response_stress(
+    language: str, native_workers: dict[str, tuple[str, ...]]
+) -> None:
+    for iteration in range(20):
+        process = await asyncio.create_subprocess_exec(
+            *native_workers[language],
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+        )
+        assert process.stdin is not None and process.stdout is not None
+        request = {"jsonrpc": "2.0", "id": f"stop-{iteration}", "method": "shutdown"}
+        process.stdin.write(json.dumps(request).encode() + b"\n")
+        await process.stdin.drain()
+        line = await asyncio.wait_for(process.stdout.readline(), timeout=2)
+        assert line, f"{language} shutdown {iteration} returned EOF"
+        response = json.loads(line)
+        assert response == {"jsonrpc": "2.0", "id": f"stop-{iteration}", "result": {}}
+        assert await asyncio.wait_for(process.wait(), timeout=2) == 0
