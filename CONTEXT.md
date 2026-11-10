@@ -12,6 +12,7 @@ This file defines the public domain vocabulary. Names describe execution semanti
 | WriterLease | Monotonic fencing token (`writer_epoch: int` or `lease_id`) held by the single active in-memory Session driver to reject stale callbacks and split-brain writes. |
 | Steer | Additional user guidance accepted during an active Turn into the in-memory `next_step` inbox and injected only at a legal Step boundary. |
 | Trajectory | The append-only factual event history of a Session (`seq: int >= 1`). Preview deltas are ephemeral and never enter Trajectory. |
+| Pending Input | An accepted input not yet consumed by a USER_MESSAGE. It is computed as a pure log projection by `input_id`, so recovery never needs a second in-memory Pending writer. |
 | SurfaceOp | Event classification (`append | epoch | none`) separating model-visible surface events from log-only audit events, enabling O(Δ) projection from the latest compaction epoch watermark. |
 | Conversation projection | The model-facing view derived from the latest `epoch` (compaction) watermark and subsequent `append` surface events. |
 | ToolOutcome | Closed 5-variant algebraic type (`Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`) that makes illegal state combinations unrepresentable. |

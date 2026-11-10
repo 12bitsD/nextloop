@@ -166,9 +166,9 @@ class SessionExecution:
         for event in committed:
             if event.surface_op == SurfaceOp.EPOCH:
                 self.surface = (event,)
-            elif (
-                event.surface_op == SurfaceOp.APPEND
-                or event.event_type == EventType.TOOL_BATCH_REJECTED
+            elif event.surface_op == SurfaceOp.APPEND or event.event_type in (
+                EventType.TOOL_BATCH_REJECTED,
+                EventType.INPUT_ACCEPTED,
             ):
                 self.surface = (*self.surface, event)
 

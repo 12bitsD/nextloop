@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.5.0rc1"
+API_VERSION = "0.5.0rc2"
 EVENT_SCHEMA_VERSION = "1.0"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
@@ -516,6 +516,14 @@ class HarnessSpec:
     skills: SkillConfig = field(default_factory=SkillConfig)
     trace: TraceConfig = field(default_factory=TraceConfig)
     source_path: str = "<memory>"
+
+
+@dataclass(frozen=True)
+class PendingInput:
+    input_id: str
+    turn: int
+    seq: int
+    content: str
 
 
 @dataclass(frozen=True)

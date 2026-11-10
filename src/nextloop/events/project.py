@@ -17,6 +17,7 @@ from ..contracts import (
     ToolCall,
     ToolSpec,
 )
+from .pending import pending_inputs
 
 
 def message_to_data(message: Message) -> dict[str, Any]:
@@ -98,9 +99,19 @@ def project_events(
         for event in events
         if event.event_type == EventType.TOOL_BATCH_REJECTED
     }
+    pending = [Message(role="user", content=item.content) for item in pending_inputs(events)]
+    injected = False
     messages = [Message(role="system", content=config.system_prompt)]
     messages.extend(config.bootstrap_messages)
     for event in events:
+        if (
+            not injected
+            and event.event_type == EventType.USER_MESSAGE
+            and event.turn == turn
+            and event.step == 1
+        ):
+            messages.extend(pending)
+            injected = True
         if event.event_type == EventType.COMPACTION:
             messages.append(
                 Message(role="user", content="[Task summary]\n" + str(event.payload["summary"]))
@@ -123,6 +134,8 @@ def project_events(
                     provider_data=message.provider_data,
                 )
             messages.append(message)
+    if not injected:
+        messages.extend(pending)
     request = CandidateRequest(
         session_id=session_id,
         turn=turn,

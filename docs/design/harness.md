@@ -82,6 +82,16 @@ Skills remain instructions only. Their metadata is added to the system prompt, a
 
 Exporters may optionally implement `flush()` and `close()`, synchronously or asynchronously. The queue is flushed before Exporter lifecycle calls. Harness closes Exporters created from `[trace]`; runtime-injected Exporters are flushed but not closed. `nextloop.testing.check_event_store(store)` exposes the same basic atomicity, idempotency, fencing, surface, and recovery-read contract used by the built-in Stores.
 
+## Pending Input
+
+The event log is the sole source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs that have not been consumed by a USER_MESSAGE, ordered by their original seq. Recovery projects these inputs at the start of the next Turn instead of rebuilding an in-memory inbox. Callers must provide a stable `input_id` to deduplicate retries or query Pending before retrying.
+
+```python
+pending = await loop.pending_inputs("session-id", store)
+```
+
+Pending historical inputs appear before the new Turn's initial input. Inputs from cancelled or budget-terminated Turns carry forward by default. Repeated recovery and a crash between recover and run do not duplicate them.
+
 ## Budgets and Tool Results
 
 All budget fields default to `None`. Step, model-attempt, and validated Tool-batch limits stop the next side effect. Model attempts include retries and compaction. Token limits use Provider-reported usage and fail closed when required usage is missing or invalid. `turn_deadline_seconds` reuses cancellation and uncertain Tool semantics. Budgets are Turn-local; recovery closes an interrupted Turn and a later Turn gets a new budget.

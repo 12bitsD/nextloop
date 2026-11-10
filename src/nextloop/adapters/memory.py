@@ -78,7 +78,7 @@ class InMemoryEventStore:
                 if event.seq >= epoch_seq
                 and (
                     event.surface_op != SurfaceOp.NONE
-                    or event.event_type == EventType.TOOL_BATCH_REJECTED
+                    or event.event_type in (EventType.TOOL_BATCH_REJECTED, EventType.INPUT_ACCEPTED)
                 )
             )
 

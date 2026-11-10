@@ -2,16 +2,16 @@
 
 **Small core. Serious runtime semantics.**
 
-nextloop is an embeddable Python AgentLoop for developers who want to build their own agent runtime — not inherit a heavyweight framework. Deterministic ReAct execution, append-only history, explicit crash recovery, typed Tools, and committed-event observability, all in a package you can actually read.
+nextloop is an embeddable Python AgentLoop for developers who want to build their own agent runtime — not inherit a heavyweight framework. Deterministic scheduling and state folding, append-only history, explicit crash recovery, typed Tools, and committed-event observability, all in a package you can actually read.
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.5.0rc1**.
+Current version: **0.5.0rc2**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.5.0rc1
+python -m pip install nextloop==0.5.0rc2
 ```
 
 For local development:
@@ -35,9 +35,9 @@ It is a library, not an HTTP service, product bot, Router, EventBus, or multi-ag
 
 ## Under the hood
 
-- DSH-aligned Session/Turn/Step execution with 4D integer coordinates and writer fencing.
-- Append-only Trajectory and O(Δ) `surface_op` watermark projection.
-- In-memory `Inbox` serialization for steer and final commitment.
+- Session/Turn/Step execution with 4D integer coordinates and writer fencing.
+- Append-only Trajectory with `surface_op` watermark semantics and Turn-private surface snapshots.
+- Log-derived Pending Input and in-memory inbox signaling for steer and final commitment.
 - Whole-batch Tool Schema validation, bounded parallel calls, and exclusive failure barriers.
 - Closed five-variant `ToolOutcome`: `Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`.
 - Bounded Provider retries, protocol correction, WorkingContext, Compaction, and cancellation.
@@ -59,9 +59,23 @@ AgentLoop.run(TurnContext) -> TurnOutcome
 AgentLoop.steer(session_id, content, *, input_id=None) -> bool
 AgentLoop.cancel(session_id, cause="user_stop") -> bool
 AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
+AgentLoop.pending_inputs(session_id, store) -> tuple[PendingInput, ...]
 ```
 
-The only four Adapter protocols are `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`. Context projection and Compaction are built in and configured through `LoopConfig`.
+Core adapter seams are `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`. Additional extension points include `PreviewSink`, Exporters, Skills, and stdio/MCP workers. Context projection and Compaction are built in and configured through `LoopConfig`.
+
+## Guarantees and non-guarantees
+
+| Area | Guarantee | Not a guarantee |
+|---|---|---|
+| Accepted input | Accepted inputs are projected from the log by `input_id` and can be queried with `AgentLoop.pending_inputs`. | Automatic deduplication when callers retry with a different or missing ID. |
+| Delivery | Delivery is at least once; DeliveryOwner must deduplicate by stable `final_message_id`. | Exactly-once delivery or delivery without an idempotent owner. |
+| Tool execution | The library never automatically replays an already dispatched Tool. | No duplicate external effect when a model reissues a call or a Tool is not idempotent. |
+| Resource locks | Unresolved uncertain results block later calls sharing declared resources. | Global idempotency across different resources or Tools without resource declarations. |
+| Recovery | Recovery writes crash closers; the caller starts a new Turn with projected prior messages and Pending Input. | In-place replay of the interrupted Turn or automatic execution of uncertain calls. |
+| Preview | Preview is transient and cannot execute partial Tool arguments. | Preview as a durable EventStore fact or a substitute for committed Delivery. |
+| Observability | Committed Events are authoritative and can be replayed for history. | The current in-memory Exporter queue as a durable outbox. |
+| MCP | stdio lifecycle, paginated static catalogs, and uncertain crash handling. | Remote MCP, OAuth, dynamic `listChanged`, or non-text content mapping. |
 
 `Harness.load("harness.toml")` assembles those adapters without changing the Loop. Use `await harness.check()` for offline validation and `await harness.run("input")` for a model-backed Turn. See [Harness and extension interface](docs/design/harness.md) for the strict TOML schema, stdio protocol, lifecycle rules, and CLI.
 
@@ -177,7 +191,7 @@ The release-candidate checks cover:
 - recorded OpenAI and Anthropic SSE streams;
 - 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
 - live DeepSeek text + Preview + usage and real Tool Call + Delivery smoke;
-- 185 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
+- 215 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 
@@ -195,7 +209,7 @@ Current limits:
 - [Verification matrix](docs/design/verification-matrix.md)
 - [Development plan](docs/architecture/development-plan.md)
 - [Changelog](CHANGELOG.md)
-- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md) and [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md)
+- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), and [ADR-0005 Pending Input](docs/adr/0005-pending-input.md)
 
 ## Release
 

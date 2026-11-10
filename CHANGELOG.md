@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0rc2 - 2026-11-11
+
+### Fixed
+
+- Accepted inputs are recovered as a pure log projection by `input_id`, preventing acknowledged input from disappearing after process crashes.
+- INPUT_ACCEPTED remains available in Memory/SQLite surface reads and Turn-private snapshots without duplicating USER_MESSAGE content.
+- Pending historical inputs precede new Turn input, while consumed inputs and repeated recovery remain deduplicated.
+- `AgentLoop.pending_inputs` exposes accepted-but-unconsumed inputs with their original seq, Turn, and content.
+
+### Changed
+
+- README now documents guarantee boundaries, Pending Input, adapter extension points, and deterministic scheduling/state folding instead of Deterministic ReAct.
+- Harness and context documentation describe stable `input_id` retry semantics and the new Pending query interface.
+
 ## 0.5.0rc1 - 2026-11-10
 
 ### Added

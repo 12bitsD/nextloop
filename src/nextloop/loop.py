@@ -8,11 +8,13 @@ from .contracts import (
     EventStore,
     EventType,
     NewEvent,
+    PendingInput,
     RecoveryOutcome,
     TurnContext,
     TurnOutcome,
 )
 from .driver import SessionActor, SessionExecution, TurnDriver
+from .events.pending import pending_inputs
 from .events.repair import pending_final_messages, repair_events
 
 
@@ -119,6 +121,9 @@ class AgentLoop:
             execution.cancel_cause = cause
             execution.cancel.set()
             return True
+
+    async def pending_inputs(self, session_id: str, store: EventStore) -> tuple[PendingInput, ...]:
+        return pending_inputs(await store.load_recovery(session_id))
 
     async def recover(
         self,
