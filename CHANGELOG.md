@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0 - 2026-11-11
+
+### Breaking changes
+
+- `ToolEffect` defaults to `NON_IDEMPOTENT`. Side-effecting Tools without explicit resources now use their Tool name as an uncertainty lock after crashes, timeouts, or cancellation. This lock does not change normal parallel scheduling. Declare `READ_ONLY` or `IDEMPOTENT` explicitly to opt out of the default lock; `nextloop check` warns when `effect` is unset.
+- New Events use schema 1.1. Version 0.5.0 and earlier cannot read them. Version 0.6 reads 1.0 through pure, read-only upcasting; idempotent append still compares the original stored payload.
+
+### Added
+
+- Persistent `operation_id` across Tool Intent, dispatch, ToolContext, results, recovery, stdio, MCP, and traces.
+- Explicit resource-lock query/release and `retry_operation` Reconciliation Results for READ_ONLY and IDEMPOTENT operations.
+- Approval policies with atomic Intent/request commit, whole-batch decisions, new-Turn resume, origin coordinates, lazy expiry, cancellation, and concurrent revalidation.
+- Compaction `source_seqs` lineage and unresolved Tool Intent protection.
+- Real 1.0 SQLite upcasting fixtures, approval/retry failure regressions, and operation metadata on stdio/MCP.
+
+### Verified
+
+- 341 offline tests, ruff, format check, strict mypy, wheel/sdist builds, Twine, and a clean wheel-installed Turn.
+- Python 3.11 and 3.14 clean-environment verification plus the 10,505-event parity benchmark.
+- Live DeepSeek Tool Call, Preview, usage, and Delivery smoke.
+- Independent Standards / Spec / Risk review and incremental closure of all reported counterexamples.
+
 ## 0.5.0 - 2026-11-11
 
 ### Added

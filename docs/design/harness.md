@@ -82,6 +82,12 @@ Skills remain instructions only. Their metadata is added to the system prompt, a
 
 Exporters may optionally implement `flush()` and `close()`, synchronously or asynchronously. The queue is flushed before Exporter lifecycle calls. Harness closes Exporters created from `[trace]`; runtime-injected Exporters are flushed but not closed. `nextloop.testing.check_event_store(store)` exposes the same basic atomicity, idempotency, fencing, surface, and recovery-read contract used by the built-in Stores.
 
+## Tool effects and approval
+
+Each `[[tools]]` entry accepts optional `effect = "read_only" | "idempotent" | "non_idempotent"`. The default is NON_IDEMPOTENT, and `nextloop check` reports a migration warning when it is unset. Explicit `resources` still control normal conflict checks; otherwise only uncertain outcomes use the Tool name as a lock.
+
+Python ToolSpecs can declare `ApprovalPolicy(version, predicate=None, expires_after_seconds=None)`. Any approval-required item suspends the entire validated batch before dispatch. Resume uses explicit per-operation decisions or `reject_all`, writes permission before execution, and preserves original operation IDs and canonical arguments across the new Turn. Stdio workers receive `context.operation_id/effect`; MCP receives namespaced `_meta` fields. MCP annotations do not choose the effect.
+
 ## Pending Input
 
 The event log is the sole source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs that have not been consumed by a USER_MESSAGE, ordered by their original seq. The next Turn loads these inputs from the log and commits their USER_MESSAGE consumption at its first Step boundary; `recover()` itself does not rebuild an in-memory inbox. Callers must provide a stable `input_id` to deduplicate retries or query Pending before retrying.

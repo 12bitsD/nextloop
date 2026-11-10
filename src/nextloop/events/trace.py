@@ -119,7 +119,7 @@ class TraceProjector:
             return self._model_event(state, turn, event)
         elif event.event_type == EventType.TOOL_CALL:
             state.open_tools[(event.turn, event.step, str(event.payload["call_id"]))] = event
-        elif event.event_type == EventType.TOOL_RESULT:
+        elif event.event_type in (EventType.TOOL_RESULT, EventType.RECONCILIATION_RESULT):
             trace = self._tool_trace(state, event)
             turn.tool_traces.append(trace)
             return (trace,)
@@ -226,6 +226,15 @@ class TraceProjector:
             assets=_strings(outcome.get("assets")),
             resource_locks=_strings(outcome.get("resource_locks")),
             source_seqs=source_seqs,
+            operation_id=(
+                str(started.payload["operation_id"])
+                if started and started.payload.get("operation_id")
+                else str(proposed["operation_id"])
+                if proposed.get("operation_id")
+                else None
+            ),
+            origin_turn=event.payload.get("origin_turn"),
+            origin_step=event.payload.get("origin_step"),
         )
 
     def _close_turn(self, state: _SessionState, event: Event) -> TurnTrace:

@@ -3,6 +3,7 @@ from .project import Projection, project_events
 from .repair import RepairDecision, repair_events
 from .response import ResponseAction, ResponseDecision, decide_response
 from .trace import TraceProjector, project_traces
+from .upcast import upcast_event
 
 __all__ = [
     "BatchAction",
@@ -17,4 +18,5 @@ __all__ = [
     "project_traces",
     "repair_events",
     "settle_outcomes",
+    "upcast_event",
 ]

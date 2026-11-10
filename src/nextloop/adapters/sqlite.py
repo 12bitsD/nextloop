@@ -12,9 +12,11 @@ from ..contracts import (
     EventType,
     InvariantViolation,
     NewEvent,
+    PayloadErasedError,
     SurfaceOp,
     utc_now,
 )
+from ..events.upcast import upcast_event, validate_event_schema
 
 
 class SQLiteEventStore:
@@ -209,7 +211,9 @@ class SQLiteEventStore:
             ).fetchone()
             if row is None:
                 raise InvariantViolation("Expected sequence does not match Session tail")
-            event = self._event_from_row(row)
+            event = self._event_from_row(row, upcast=False)
+            if event.payload == {"_nextloop_erased": True}:
+                raise PayloadErasedError(f"Event payload is erased: {event.event_id}")
             if (
                 event.event_type != draft.event_type
                 or event.turn != draft.turn
@@ -245,10 +249,8 @@ class SQLiteEventStore:
         )
 
     @staticmethod
-    def _event_from_row(row: sqlite3.Row) -> Event:
-        if row["schema_version"] != EVENT_SCHEMA_VERSION:
-            raise InvariantViolation(f"Unsupported Event schema version: {row['schema_version']}")
-        return Event(
+    def _event_from_row(row: sqlite3.Row, *, upcast: bool = True) -> Event:
+        event = Event(
             session_id=row["session_id"],
             seq=row["seq"],
             turn=row["turn"],
@@ -262,3 +264,5 @@ class SQLiteEventStore:
             occurred_at=row["occurred_at"],
             schema_version=row["schema_version"],
         )
+        validate_event_schema(event)
+        return upcast_event(event) if upcast else event

@@ -83,6 +83,7 @@ async def _dispatch(args: argparse.Namespace) -> Any:
                     "name": spec.name,
                     "description": spec.description,
                     "mode": spec.mode.value,
+                    "effect": spec.effect.value,
                     "resources": list(spec.resources),
                     "parameters": dict(spec.parameters),
                 }

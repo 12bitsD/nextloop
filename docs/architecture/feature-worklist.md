@@ -2,7 +2,7 @@
 
 Purpose: distinguish implemented capabilities from remaining work. Executable evidence is owned by the [verification matrix](../design/verification-matrix.md).
 
-## Implemented in the current 0.5 line
+## Implemented in the current 0.6 line
 
 | Feature | Implementation | Evidence |
 |---|---|---|
@@ -13,6 +13,9 @@ Purpose: distinguish implemented capabilities from remaining work. Executable ev
 | Pending Input | Log projection by `input_id`, query API, Step-boundary consumption | Accepted/not-consumed windows, duplicate recovery, retry, cancellation, and next-Turn tests |
 | Context | Append-only projection, WorkingContext, Compaction, result preview/page/full | Projection parity, compaction, UTF-8 paging, read-back, and capacity tests |
 | EventStore | Memory and SQLite, atomic conditional append, idempotency, writer checks | Public conformance plus deliberately broken Store rejection |
+| Event compatibility | Read-only 1.0→1.1 upcasting, raw append comparison | Real 1.0/1.1 SQLite fixtures and unknown-schema negative paths |
+| Operation identity | operation_id, ToolEffect, resource locks, explicit Reconciliation | End-to-end propagation, dynamic locks, repeated/concurrent retry, and no-replay evidence |
+| Approval | Atomic Intent/request, new-Turn resume, origin pairing, lazy expiry | Zero pre-grant dispatch, crash windows, concurrent resume, rejection, cancellation, and fresh budgets |
 | Providers | OpenAI-compatible and Anthropic streaming adapters | Recorded protocol streams plus separately identified live-provider smoke |
 | Observability | Model/Tool/Turn Trace DTOs, async Exporters, history | Live/history parity, failure isolation, bounded close, and 10k incremental parity |
 | Integrations | Harness, directory Skills, stdio workers, MCP stdio | Offline diagnostics, subprocess conformance, lifecycle, and clean-wheel examples |
@@ -22,9 +25,6 @@ Purpose: distinguish implemented capabilities from remaining work. Executable ev
 
 | Feature | Target and boundary |
 |---|---|
-| Event upcasting | 0.6; read-only migration with real historical fixtures |
-| operation_id and ToolEffect | 0.6; explicit reconciliation, not automatic replay |
-| Approval and resume | 0.6; original ID/arguments, new-Turn execution |
 | Time-based writer leases | 0.7; opt-in owner identity, heartbeat, expiry, and takeover |
 | Durable Outbox | 0.8; caller-driven export, persistent acknowledgement, auditable gaps |
 | Whole-Session deletion | 0.9; tombstones and local derived-state cleanup |

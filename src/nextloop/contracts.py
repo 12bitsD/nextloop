@@ -10,8 +10,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.5.0"
-EVENT_SCHEMA_VERSION = "1.0"
+API_VERSION = "0.6.0"
+EVENT_SCHEMA_VERSION = "1.1"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
 TRACE_SCHEMA = "nextloop.trace/v1"
@@ -64,6 +64,10 @@ class InvariantViolation(NextloopError):
     """Raised when seq, idempotency, or writer_epoch invariants fail."""
 
 
+class PayloadErasedError(NextloopError):
+    """Raised when an append reuses the identity of an erased Event payload."""
+
+
 class CapacityError(NextloopError):
     """Raised when request exceeds context capacity even after compaction."""
 
@@ -103,6 +107,12 @@ class EventType(StrEnum):
     TOOL_CALL = "tool/call"
     TOOL_RESULT = "tool/result"
     TOOL_BATCH_REJECTED = "tool/batch-rejected"
+    RECONCILIATION_RESULT = "reconciliation/result"
+    RESOURCE_RELEASED = "resource/released"
+    APPROVAL_REQUESTED = "approval/requested"
+    APPROVAL_GRANTED = "approval/granted"
+    APPROVAL_REJECTED = "approval/rejected"
+    APPROVAL_CANCELLED = "approval/cancelled"
     COMPACTION = "compaction"
     CANCELLATION_REQUESTED = "cancellation/requested"
     FINAL_MESSAGE = "final/message"
@@ -153,6 +163,12 @@ class ToolExecutionMode(StrEnum):
     EXCLUSIVE = "exclusive"  # Mutating barrier; failure truncates remaining batch
 
 
+class ToolEffect(StrEnum):
+    READ_ONLY = "read_only"
+    IDEMPOTENT = "idempotent"
+    NON_IDEMPOTENT = "non_idempotent"
+
+
 class ToolResultMode(StrEnum):
     PREVIEW = "preview"
     PAGED = "paged"
@@ -164,6 +180,33 @@ class ToolCall:
     call_id: str
     name: str
     arguments: str
+    operation_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ApprovalPolicy:
+    version: str
+    predicate: Callable[[Mapping[str, Any]], bool] | None = None
+    expires_after_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class ApprovalItem:
+    operation_id: str
+    call_id: str
+    name: str
+    canonical_arguments: str
+    policy_version: str
+    schema_version: str
+
+
+@dataclass(frozen=True)
+class ApprovalRequest:
+    approval_id: str
+    origin_turn: int
+    origin_step: int
+    items: tuple[ApprovalItem, ...]
+    expires_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -175,6 +218,16 @@ class ToolSpec:
     resources: tuple[str, ...] = ()
     timeout_seconds: float | None = None
     result_mode: ToolResultMode = ToolResultMode.PREVIEW
+    effect: ToolEffect = ToolEffect.NON_IDEMPOTENT
+    approval: ApprovalPolicy | None = None
+
+    @property
+    def uncertain_resources(self) -> tuple[str, ...]:
+        if self.resources:
+            return self.resources
+        if self.effect == ToolEffect.NON_IDEMPOTENT:
+            return (self.name,)
+        return ()
 
 
 @dataclass(frozen=True)
@@ -222,7 +275,9 @@ ModelCallStatus = Literal["success", "error", "cancelled"]
 ToolOutcomeKind = Literal[
     "completed", "skipped", "cancelled", "uncertain_settled", "uncertain_hanging"
 ]
-TurnTraceStatus = Literal["succeeded", "failed", "cancelled", "blocked", "interrupted"]
+TurnTraceStatus = Literal[
+    "succeeded", "failed", "cancelled", "blocked", "interrupted", "approval_pending"
+]
 
 
 @dataclass(frozen=True)
@@ -276,6 +331,9 @@ class ToolCallTrace:
     assets: tuple[str, ...] = ()
     resource_locks: tuple[str, ...] = ()
     source_seqs: tuple[int, ...] = ()
+    operation_id: str | None = None
+    origin_turn: int | None = None
+    origin_step: int | None = None
 
 
 @dataclass(frozen=True)
@@ -442,6 +500,7 @@ class TurnStatus(StrEnum):
     CANCELLED = "cancelled"
     BLOCKED = "blocked"
     DELIVERY_UNKNOWN = "delivery_unknown"
+    APPROVAL_PENDING = "approval_pending"
 
 
 @dataclass(frozen=True)
@@ -493,6 +552,7 @@ class ToolConfig:
     resources: tuple[str, ...] = ()
     timeout_seconds: float | None = None
     cancel_grace_seconds: float = 0.25
+    effect: str | None = None
 
 
 @dataclass(frozen=True)

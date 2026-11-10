@@ -9,6 +9,7 @@ from ..contracts import (
     CapacityError,
     Event,
     EventType,
+    InvariantViolation,
     LoopConfig,
     Message,
     ModelUsage,
@@ -25,7 +26,12 @@ def message_to_data(message: Message) -> dict[str, Any]:
         "role": message.role,
         "content": message.content,
         "tool_calls": [
-            {"call_id": call.call_id, "name": call.name, "arguments": call.arguments}
+            {
+                "call_id": call.call_id,
+                "name": call.name,
+                "arguments": call.arguments,
+                "operation_id": call.operation_id,
+            }
             for call in message.tool_calls
         ],
         "tool_call_id": message.tool_call_id,
@@ -43,6 +49,7 @@ def message_from_data(data: Mapping[str, Any]) -> Message:
                 call_id=str(call["call_id"]),
                 name=str(call["name"]),
                 arguments=str(call["arguments"]),
+                operation_id=call.get("operation_id"),
             )
             for call in data.get("tool_calls", ())
         ),
@@ -100,12 +107,22 @@ def project_events(
         if event.event_type == EventType.TOOL_BATCH_REJECTED
     }
     pending = [Message(role="user", content=item.content) for item in pending_inputs(events)]
+    approval_result_seq = max(
+        (
+            event.seq
+            for event in events
+            if event.event_type == EventType.TOOL_RESULT
+            and event.payload.get("origin_kind") == "approval"
+        ),
+        default=0,
+    )
     injected = False
     messages = [Message(role="system", content=config.system_prompt)]
     messages.extend(config.bootstrap_messages)
     for event in events:
         if (
             not injected
+            and approval_result_seq == 0
             and event.event_type == EventType.USER_MESSAGE
             and event.turn == turn
             and event.step == 1
@@ -120,6 +137,7 @@ def project_events(
             EventType.USER_MESSAGE,
             EventType.ASSISTANT_MESSAGE,
             EventType.TOOL_RESULT,
+            EventType.RECONCILIATION_RESULT,
         ):
             message = message_from_data(event.payload["message"])
             if (
@@ -134,6 +152,9 @@ def project_events(
                     provider_data=message.provider_data,
                 )
             messages.append(message)
+            if not injected and event.seq == approval_result_seq:
+                messages.extend(pending)
+                injected = True
     if not injected:
         messages.extend(pending)
     request = CandidateRequest(
@@ -180,6 +201,34 @@ def valid_compaction(summary: str, projection: Projection) -> bool:
     return len(summary.strip()) < previous_size
 
 
+def _require_paired_tool_intents(events: Sequence[Event]) -> None:
+    rejected = {
+        (event.turn, event.step)
+        for event in events
+        if event.event_type == EventType.TOOL_BATCH_REJECTED
+    }
+    result_operations = {
+        str(event.payload.get("operation_id"))
+        for event in events
+        if event.event_type == EventType.TOOL_RESULT and event.payload.get("operation_id")
+    }
+    result_coordinates = {
+        (event.turn, event.step, str(event.payload.get("call_id")))
+        for event in events
+        if event.event_type == EventType.TOOL_RESULT
+    }
+    for event in events:
+        if event.event_type != EventType.ASSISTANT_MESSAGE or (event.turn, event.step) in rejected:
+            continue
+        for call in event.payload["message"].get("tool_calls", ()):
+            operation_id = call.get("operation_id")
+            if operation_id and str(operation_id) in result_operations:
+                continue
+            coordinate = (event.turn, event.step, str(call["call_id"]))
+            if coordinate not in result_coordinates:
+                raise InvariantViolation("Cannot compact across an unresolved Tool Intent")
+
+
 def compaction_events(
     summary: str,
     surface_events: Sequence[Event],
@@ -187,13 +236,19 @@ def compaction_events(
     turn: int,
     step: int,
 ) -> tuple[NewEvent, ...]:
+    _require_paired_tool_intents(surface_events)
     events = [
         NewEvent(
             event_type=EventType.COMPACTION,
             turn=turn,
             step=step,
             surface_op=SurfaceOp.EPOCH,
-            payload={"summary": summary.strip()},
+            payload={
+                "summary": summary.strip(),
+                "source_seqs": (
+                    [[surface_events[0].seq, surface_events[-1].seq]] if surface_events else []
+                ),
+            },
         )
     ]
     working_context = latest_working_context(surface_events)

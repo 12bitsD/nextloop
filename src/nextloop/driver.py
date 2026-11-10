@@ -18,6 +18,7 @@ from .contracts import (
     TurnStatus,
     new_id,
 )
+from .events.input import user_input_events
 from .events.outcome import BatchAction, settle_outcomes
 from .events.project import (
     compaction_events,
@@ -297,7 +298,8 @@ class TurnDriver:
                     corrections=execution.corrections,
                     max_corrections=execution.context.config.max_protocol_corrections,
                 )
-                await execution.append(decision.events)
+                if decision.action != ResponseAction.RUN_TOOLS:
+                    await execution.append(decision.events)
                 if execution.preview is not None:
                     execution.preview.resolved(
                         projection.request,
@@ -333,10 +335,14 @@ class TurnDriver:
                     check_writer=lambda: execution.context.store.check_writer(
                         execution.session_id, execution.writer_epoch
                     ),
+                    intent_events=decision.events,
                 )
+                if batch.approval is not None:
+                    return await self._approval_pending(batch.approval.approval_id)
                 if batch.budget_reason is not None:
                     return await self._budget_failure(batch.budget_reason)
                 if batch.issues:
+                    await execution.append(decision.events)
                     rejection = reject_batch(
                         [issue.to_dict() for issue in batch.issues],
                         turn=execution.turn,
@@ -391,6 +397,36 @@ class TurnDriver:
         except Exception as exc:
             return await self._finalize(TurnStatus.FAILED, f"{type(exc).__name__}: {exc}")
 
+    async def _approval_pending(self, approval_id: str) -> TurnOutcome:
+        execution = self.execution
+        await execution.append(
+            [
+                NewEvent(
+                    EventType.STEP_END,
+                    turn=execution.turn,
+                    step=execution.step,
+                    payload={"status": TurnStatus.APPROVAL_PENDING.value},
+                ),
+                NewEvent(
+                    EventType.TURN_END,
+                    turn=execution.turn,
+                    step=execution.step,
+                    payload={
+                        "status": TurnStatus.APPROVAL_PENDING.value,
+                        "approval_id": approval_id,
+                    },
+                ),
+            ]
+        )
+        execution.open_step = False
+        return TurnOutcome(
+            status=TurnStatus.APPROVAL_PENDING,
+            session_id=execution.session_id,
+            turn=execution.turn,
+            step=execution.step,
+            error=f"Approval pending: {approval_id}",
+        )
+
     async def _budget_failure(self, reason: str) -> TurnOutcome:
         self.execution.terminal_reason = (
             reason
@@ -414,24 +450,7 @@ class TurnDriver:
                 execution.recovered_inputs.clear()
             inputs.extend(execution.actor.inbox)
             execution.actor.inbox.clear()
-            unique_inputs: dict[str, tuple[str, str]] = {}
-            for input_id, content in inputs:
-                if input_id in unique_inputs and unique_inputs[input_id][1] != content:
-                    raise InvariantViolation("input_id reused with different content")
-                unique_inputs.setdefault(input_id, (input_id, content))
-            for input_id, content in unique_inputs.values():
-                events.append(
-                    NewEvent(
-                        event_type=EventType.USER_MESSAGE,
-                        turn=execution.turn,
-                        step=execution.step,
-                        surface_op=SurfaceOp.APPEND,
-                        payload={
-                            "input_id": input_id,
-                            "message": message_to_data(Message(role="user", content=content)),
-                        },
-                    )
-                )
+            events.extend(user_input_events(inputs, turn=execution.turn, step=execution.step))
             await execution._append_locked(events)
 
     async def _end_step(self, status: str) -> None:
@@ -588,13 +607,19 @@ class TurnDriver:
             error=error,
         )
 
-    async def _finalize(self, status: TurnStatus, error: str) -> TurnOutcome:
+    async def _finalize(
+        self,
+        status: TurnStatus,
+        error: str | None,
+        *,
+        facts: Sequence[NewEvent] = (),
+    ) -> TurnOutcome:
         execution = self.execution
         if execution.cancel_cause == "turn_deadline_exceeded":
             status = TurnStatus.FAILED
             error = "turn_deadline_exceeded"
             execution.terminal_reason = error
-        events = []
+        events = list(facts)
         expiry = await self._working_context_expiry()
         if expiry is not None:
             events.append(expiry)

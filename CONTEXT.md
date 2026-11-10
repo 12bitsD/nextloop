@@ -19,6 +19,12 @@ This is the public domain glossary. Names describe execution semantics, not a re
 | Pending Input | An INPUT_ACCEPTED without a corresponding USER_MESSAGE, computed from the log by `input_id`. Recovery does not require an in-memory Pending writer. |
 | Inbox | In-memory wake-up and finalization-race signaling for active Turns. The Event log remains the authoritative input state. |
 | Tool Intent | A model-proposed Tool Call in ASSISTANT_MESSAGE. It is not proof that dispatch occurred. The current TOOL_CALL Event is the dispatch-boundary fact. |
+| operation_id | Persistent logical Tool operation identity assigned at admitted Tool Intent. New model intent gets a new ID; explicit reconciliation reuses the original ID. |
+| ToolEffect | `READ_ONLY`, `IDEMPOTENT`, or `NON_IDEMPOTENT`. The default NON_IDEMPOTENT uses the Tool name only as an uncertainty lock, not as a normal scheduling barrier. |
+| Reconciliation Result | Notification produced by an explicit same-ID retry in a new Turn. It references origin coordinates and is not a second Tool Result at the original position. |
+| ApprovalPolicy | Tool declaration binding a policy version, optional pure argument predicate, and optional lazy expiry. Any required item suspends the whole batch before dispatch. |
+| Approval resume | New-Turn execution after explicit decisions. Permission commits before dispatch; results carry origin coordinates and prior dispatch requires recovery. |
+| Upcasting | Pure read-time transformation from Event schema 1.0 to 1.1. Original stored payloads remain authoritative for idempotent append; unknown versions fail closed. |
 | ToolOutcome | Closed five-variant type (`Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`) representing settled and uncertain execution without a generic unknown boolean. |
 | Resource lock | A declared resource retained by an unresolved uncertain Tool outcome. Later calls sharing that resource are blocked until verified release. |
 | Crash closer | Recovery-generated STEP_END, TURN_END, or Tool Result that closes incomplete history without replaying execution. |

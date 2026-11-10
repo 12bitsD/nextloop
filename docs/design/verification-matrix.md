@@ -1,6 +1,6 @@
 # AgentLoop verification matrix
 
-Status: 0.5.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
+Status: 0.6.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
 
 ## Evidence rules
 
@@ -77,10 +77,28 @@ Conversation Projection is bounded by the returned Surface and serialized messag
 
 ## Public contracts and packaging
 
-- `tests/test_import_contract.py` freezes all 91 root re-exports and the complete `__all__` of `events`, `adapters`, `execute`, and `testing`, plus explicit supported names on other integration modules.
+- `tests/test_import_contract.py` freezes all 94 root re-exports and the complete `__all__` of `events`, `adapters`, `execute`, and `testing`, plus explicit supported names on other integration modules.
 - `tests/test_store_contract.py` is the third-party Store conformance entrypoint.
-- Python 3.11, 3.12, 3.13, and 3.14 run CI. Local clean Python 3.11 and 3.14 environments also run the full suite and benchmark before 0.5.0 publication.
+- Python 3.11, 3.12, 3.13, and 3.14 run CI. Local clean Python 3.11 and 3.14 environments also run the full suite and benchmark before 0.6.0 publication.
 - `ruff`, format check, strict mypy, wheel/sdist build, Twine, clean wheel installation, examples, and CLI diagnostics are required gates.
+
+## 0.6 operation, approval, and compatibility evidence
+
+| Claim | Closing evidence |
+|---|---|
+| Schema 1.0 loads without rewriting raw bytes | Real 0.5.0-generated SQLite fixture, upcast idempotency, raw-file byte comparison |
+| Schema 1.1 preserves new operation and lineage facts | Real 0.6-generated SQLite fixture with approval, reconciliation, and Compaction |
+| Unknown schemas fail on every path | Memory and SQLite raw idempotent-append rejection, plus load rejection |
+| operation_id is stable end to end | Repeated call IDs across Steps, ToolContext, result, recovery, Trace, stdio, and MCP metadata |
+| ToolEffect changes only uncertainty locking | Default, READ_ONLY, IDEMPOTENT, explicit-resource, parallel/exclusive, and Harness warning scenarios |
+| Reconciliation is explicit and auditable | NON_IDEMPOTENT rejection, original ID/arguments, notification type, success unlock, uncertain retention, repeated retry, concurrent winner, dynamic locks |
+| Approval precedes every dispatch | Zero TOOL_CALL before grant, resource/budget precedence, atomic Intent/request, and original ID/argument checks |
+| Resume cannot replay dispatched work | Direct-resume-after-dispatch rejection, grant-before-call recovery, post-call uncertainty, concurrent single winner |
+| Approval decisions and expiry fail closed | Non-boolean rejection, lazy expiry, actor-lock-delay expiry, cancellation, and whole-batch rejection |
+| Cross-Turn pairing is preserved | origin coordinates, approval Trace, recovered uncertain Results, pre-suspension input after Results, and Compaction source_seqs |
+| Resume uses fresh budgets | Tool, Step, model, and deadline configuration on the resume Turn |
+
+The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch, concurrent reconciliation, repeated-retry lock leakage, unknown-schema bypass, resource/budget approval bypass, finalization divergence, and input/dedup duplication. Every original counterexample has a regression and incremental Risk verification.
 
 ## Review and external evidence
 

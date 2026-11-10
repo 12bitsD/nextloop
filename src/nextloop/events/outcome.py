@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
@@ -182,6 +182,7 @@ def outcome_event(
     )
     payload: dict[str, Any] = {
         "call_id": call.call_id,
+        "operation_id": call.operation_id,
         "message": message_to_data(message),
         "outcome": outcome_to_data(outcome),
     }
@@ -203,6 +204,51 @@ def outcome_event(
         payload=payload,
         event_id=event_id,
     )
+
+
+def reconciliation_event(
+    call: ToolCall,
+    outcome: ToolOutcome,
+    *,
+    origin_turn: int,
+    origin_step: int,
+    turn: int,
+    step: int,
+    release_resources: tuple[str, ...] = (),
+    timing: ToolExecutionTiming | None = None,
+    recovered: bool = False,
+    spec: ToolSpec | None = None,
+    result_bytes: int = DEFAULT_TOOL_RESULT_BYTES,
+) -> NewEvent:
+    event = outcome_event(
+        call,
+        outcome,
+        turn=turn,
+        step=step,
+        timing=timing,
+        recovered=recovered,
+        spec=spec,
+        result_bytes=result_bytes,
+    )
+    payload = dict(event.payload)
+    outcome_data = dict(payload["outcome"])
+    if release_resources:
+        outcome_data["release_resources"] = sorted(
+            {*outcome_data.get("release_resources", ()), *release_resources}
+        )
+    message = dict(payload["message"])
+    message.update(role="user", tool_call_id=None, name=None)
+    message["content"] = (
+        f"[Reconciliation Result operation_id={call.operation_id} "
+        f"origin_turn={origin_turn} origin_step={origin_step}]\n" + str(message["content"])
+    )
+    payload.update(
+        message=message,
+        outcome=outcome_data,
+        origin_turn=origin_turn,
+        origin_step=origin_step,
+    )
+    return replace(event, event_type=EventType.RECONCILIATION_RESULT, payload=payload)
 
 
 def settle_outcomes(

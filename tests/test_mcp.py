@@ -57,6 +57,9 @@ async def main():
             name = request["params"]["name"]
             arguments = request["params"]["arguments"]
             if name == "echo":
+                if os.environ.get("MCP_TEST_LOG"):
+                    with open(os.environ["MCP_TEST_LOG"], "a") as stream:
+                        stream.write(json.dumps(request["params"]) + "\n")
                 response["result"] = {"content": [{"type": "text", "text": arguments["text"]}], "structuredContent": {"echo": arguments["text"]}}
             elif name == "wait":
                 continue
@@ -91,9 +94,9 @@ def config(server, **changes):
     return ToolConfig(**values)
 
 
-async def call(runtime, name, arguments, cancel=None):
+async def call(runtime, name, arguments, cancel=None, operation_id=None):
     return await runtime.execute(
-        ToolCall("c", name, "{}"),
+        ToolCall("c", name, "{}", operation_id=operation_id),
         arguments,
         session_id="s",
         turn=1,
@@ -167,3 +170,23 @@ async def test_harness_runs_mcp_as_an_ordinary_tool(server):
     assert outcome.status == TurnStatus.SUCCEEDED
     assert provider.requests[1].messages[-1].content == "from mcp"
     await harness.close()
+
+
+async def test_mcp_operation_id_and_effect_use_namespaced_metadata(server, tmp_path):
+    log = tmp_path / "operation.log"
+    os.environ["MCP_TEST_LOG"] = str(log)
+    try:
+        runtime = McpStdioRuntime(config(server, effect="idempotent"))
+        await runtime.start()
+        outcome = await call(runtime, "echo", {"text": "hello"}, operation_id="op-mcp")
+
+        assert isinstance(outcome, Completed)
+        assert runtime.catalog()[0].effect == "idempotent"
+        params = json.loads(log.read_text().strip())
+        assert params["_meta"] == {
+            "nextloop/operation_id": "op-mcp",
+            "nextloop/effect": "idempotent",
+        }
+        await runtime.close()
+    finally:
+        os.environ.pop("MCP_TEST_LOG", None)

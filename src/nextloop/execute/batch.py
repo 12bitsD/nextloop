@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from ..contracts import (
+    ApprovalRequest,
     Cancelled,
     Completed,
     EventType,
@@ -22,6 +23,7 @@ from ..contracts import (
     ValidationIssue,
     utc_now,
 )
+from ..events.approval import approval_requested_event, make_approval_request
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,7 @@ class BatchResult:
     blocked_resources: frozenset[str] = frozenset()
     timings: Mapping[str, ToolExecutionTiming] = field(default_factory=dict)
     budget_reason: str | None = None
+    approval: ApprovalRequest | None = None
 
 
 class BatchExecutor:
@@ -55,10 +58,18 @@ class BatchExecutor:
         active_resources: frozenset[str],
         commit: Callable[[Sequence[NewEvent]], Awaitable[None]],
         check_writer: Callable[[], Awaitable[None]],
+        intent_events: Sequence[NewEvent] = (),
+        approval_checked: bool = False,
     ) -> BatchResult:
         validated, issues = self.registry.validate(calls)
         if issues:
             return BatchResult(issues=issues)
+        approval = (
+            None if approval_checked else make_approval_request(validated, turn=turn, step=step)
+        )
+        if approval is not None:
+            await commit([*intent_events, approval_requested_event(approval)])
+            return BatchResult(approval=approval)
         blocked = frozenset(
             resource
             for item in validated
@@ -66,6 +77,7 @@ class BatchExecutor:
             if resource in active_resources
         )
         if blocked:
+            await commit(intent_events)
             return BatchResult(
                 outcomes=tuple(
                     (
@@ -80,7 +92,9 @@ class BatchExecutor:
         if self.admit is not None:
             reason = self.admit(len(validated))
             if reason is not None:
+                await commit(intent_events)
                 return BatchResult(budget_reason=reason)
+        await commit(intent_events)
 
         outcomes: list[tuple[ToolCall, ToolSpec, ToolOutcome]] = []
         timings: dict[str, ToolExecutionTiming] = {}
@@ -158,9 +172,10 @@ class BatchExecutor:
                     step=step,
                     payload={
                         "call_id": item.call.call_id,
+                        "operation_id": item.call.operation_id,
                         "name": item.call.name,
                         "arguments": item.call.arguments,
-                        "resources": list(item.spec.resources),
+                        "resources": list(item.spec.uncertain_resources),
                     },
                 )
             ]

@@ -28,6 +28,7 @@ class ToolContext:
     turn: int
     step: int
     cancel: asyncio.Event
+    operation_id: str | None = None
 
 
 ToolHandler = Callable[[Mapping[str, Any], ToolContext], Any]
@@ -110,7 +111,10 @@ class ToolRegistry:
             )
         handler = self._handlers[call.name]
         try:
-            operation = handler(arguments, ToolContext(session_id, turn, step, cancel))
+            operation = handler(
+                arguments,
+                ToolContext(session_id, turn, step, cancel, operation_id=call.operation_id),
+            )
             if inspect.isawaitable(operation):
                 cancellable = await_with_cancel(operation, cancel, asyncio.CancelledError)
                 if spec.timeout_seconds is not None:
@@ -130,13 +134,13 @@ class ToolRegistry:
         except TimeoutError:
             return UncertainHanging(
                 f"Tool {call.name} timed out; external effects are unknown",
-                resource_locks=spec.resources,
+                resource_locks=spec.uncertain_resources,
             )
         except asyncio.CancelledError:
             return Cancelled(
                 settled=False,
                 partial_content="Tool handler was cancelled; external effects are unknown",
-                resource_locks=spec.resources,
+                resource_locks=spec.uncertain_resources,
             )
         except Exception as exc:
             return Completed(f"{type(exc).__name__}: {exc}", is_error=True)

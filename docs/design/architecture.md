@@ -50,7 +50,7 @@ The benchmark checks Memory/SQLite Conversation Projection parity, Model/Tool Tr
 
 ## Frozen import contract
 
-The root `nextloop` package keeps its existing convenience re-exports. `tests/test_import_contract.py` snapshots all 91 names and rejects accidental additions, removals, and duplicate entries.
+The root `nextloop` package keeps its existing convenience re-exports. `tests/test_import_contract.py` snapshots all 94 names and rejects accidental additions, removals, and duplicate entries.
 
 Core integration paths:
 

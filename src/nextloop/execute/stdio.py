@@ -12,6 +12,7 @@ from ..contracts import (
     Completed,
     ToolCall,
     ToolConfig,
+    ToolEffect,
     ToolExecutionMode,
     ToolOutcome,
     ToolSpec,
@@ -83,11 +84,20 @@ class StdioDriver(StdioTransport):
         session_id: str,
         turn: int,
         step: int,
+        *,
+        operation_id: str | None,
+        effect: ToolEffect,
     ) -> Mapping[str, Any]:
         return {
             "name": remote_name,
             "arguments": dict(arguments),
-            "context": {"session_id": session_id, "turn": turn, "step": step},
+            "context": {
+                "session_id": session_id,
+                "turn": turn,
+                "step": step,
+                "operation_id": operation_id,
+                "effect": effect.value,
+            },
         }
 
     def _response_outcome(self, response: Mapping[str, Any], call: ToolCall) -> ToolOutcome:
@@ -170,6 +180,9 @@ class StdioDriver(StdioTransport):
                         mode=ToolExecutionMode(item.get("mode", "exclusive")),
                         resources=tuple(resources),
                         timeout_seconds=float(timeout) if timeout is not None else None,
+                        effect=ToolEffect(
+                            item.get("effect", self.config.effect or ToolEffect.NON_IDEMPOTENT)
+                        ),
                     )
                 )
                 self._remote_names[name] = remote_name

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ..contracts import (
@@ -14,7 +14,7 @@ from ..contracts import (
     ToolCall,
     UncertainHanging,
 )
-from .outcome import outcome_event
+from .outcome import outcome_event, reconciliation_event
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,10 @@ class RepairDecision:
 def active_resource_locks(events: Sequence[Event]) -> frozenset[str]:
     locks: set[str] = set()
     for event in events:
-        if event.event_type != EventType.TOOL_RESULT:
+        if event.event_type == EventType.RESOURCE_RELEASED:
+            locks.discard(str(event.payload.get("resource", "")))
+            continue
+        if event.event_type not in (EventType.TOOL_RESULT, EventType.RECONCILIATION_RESULT):
             continue
         outcome = event.payload.get("outcome", {})
         if not isinstance(outcome, dict):
@@ -62,16 +65,21 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
         results = {
             (event.step, str(event.payload["call_id"]))
             for event in turn_events
-            if event.event_type == EventType.TOOL_RESULT
+            if event.event_type in (EventType.TOOL_RESULT, EventType.RECONCILIATION_RESULT)
         }
         rejected_steps = {
             event.step for event in turn_events if event.event_type == EventType.TOOL_BATCH_REJECTED
         }
+        approval_steps = {
+            event.step for event in turn_events if event.event_type == EventType.APPROVAL_REQUESTED
+        }
+        proposed = set()
         for assistant in turn_events:
             if (
                 assistant.event_type != EventType.ASSISTANT_MESSAGE
                 or assistant.surface_op != SurfaceOp.APPEND
                 or assistant.step in rejected_steps
+                or assistant.step in approval_steps
             ):
                 continue
             for raw_call in assistant.payload["message"].get("tool_calls", ()):
@@ -79,8 +87,10 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
                     call_id=str(raw_call["call_id"]),
                     name=str(raw_call["name"]),
                     arguments=str(raw_call["arguments"]),
+                    operation_id=raw_call.get("operation_id"),
                 )
                 key = (assistant.step, call.call_id)
+                proposed.add(key)
                 if key in results:
                     continue
                 started = calls_started.get(key)
@@ -94,6 +104,46 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
                     )
                 new_events.append(
                     outcome_event(call, outcome, turn=turn, step=assistant.step, recovered=True)
+                )
+        for key, started in calls_started.items():
+            if key in results or key in proposed or "origin_turn" not in started.payload:
+                continue
+            call = ToolCall(
+                call_id=str(started.payload["call_id"]),
+                name=str(started.payload["name"]),
+                arguments=str(started.payload["arguments"]),
+                operation_id=started.payload.get("operation_id"),
+            )
+            origin_kind = started.payload.get("origin_kind")
+            outcome = UncertainHanging(
+                "Process recovery found a Tool Call without a committed result; "
+                "effects are unknown",
+                resource_locks=tuple(started.payload.get("resources", ())),
+            )
+            if origin_kind == "approval":
+                event = outcome_event(call, outcome, turn=turn, step=started.step, recovered=True)
+                new_events.append(
+                    replace(
+                        event,
+                        payload={
+                            **event.payload,
+                            "origin_turn": started.payload["origin_turn"],
+                            "origin_step": started.payload["origin_step"],
+                            "origin_kind": "approval",
+                        },
+                    )
+                )
+            else:
+                new_events.append(
+                    reconciliation_event(
+                        call,
+                        outcome,
+                        origin_turn=int(started.payload["origin_turn"]),
+                        origin_step=int(started.payload["origin_step"]),
+                        turn=turn,
+                        step=started.step,
+                        recovered=True,
+                    )
                 )
         for step in sorted(started_steps - ended_steps):
             new_events.append(
@@ -114,7 +164,7 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
         )
     existing_locks = set(active_resource_locks(events))
     for event in new_events:
-        if event.event_type == EventType.TOOL_RESULT:
+        if event.event_type in (EventType.TOOL_RESULT, EventType.RECONCILIATION_RESULT):
             outcome = event.payload["outcome"]
             if outcome["kind"] == "uncertain_hanging":
                 existing_locks.update(outcome.get("resource_locks", ()))

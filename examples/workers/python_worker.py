@@ -40,6 +40,12 @@ TOOLS = [
         },
     },
     {
+        "name": "context",
+        "description": "Return the operation context",
+        "parameters": {"type": "object"},
+        "effect": "idempotent",
+    },
+    {
         "name": "crash",
         "description": "Exit without settling the call",
         "parameters": {"type": "object"},
@@ -72,6 +78,8 @@ async def handle(request: dict[str, Any]) -> dict[str, Any] | None:
             result = {"content": "done"}
         elif name == "asset":
             result = {"content": "Asset available", "assets": [arguments["path"]]}
+        elif name == "context":
+            result = {"content": "context", "structured": params.get("context", {})}
         elif name == "crash":
             os._exit(17)
         else:

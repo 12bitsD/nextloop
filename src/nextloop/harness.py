@@ -89,6 +89,7 @@ _TOOL_FIELDS = {
     "command",
     "namespace",
     "start",
+    "effect",
     "resources",
     "timeout_seconds",
     "cancel_grace_seconds",
@@ -180,6 +181,11 @@ class Harness:
             "nextloop": API_VERSION,
             "tools": [spec.name for spec in runtime.catalog()],
             "skills": [spec.name for spec in self.skills.list()] if self.skills else [],
+            "warnings": [
+                f"tools[{index}].effect is unset; defaulting to NON_IDEMPOTENT"
+                for index, config in enumerate(self.spec.tools)
+                if config.effect is None
+            ],
         }
 
     async def run(self, initial_input: str) -> TurnOutcome:
@@ -428,6 +434,11 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
     grace = _number(raw, "cancel_grace_seconds", 0.25, source, prefix)
     if timeout is not None and not is_positive_number(timeout):
         _fail(source, f"{prefix}.timeout_seconds", "must be a positive number")
+    effect = raw.get("effect")
+    if effect is not None:
+        effect = _choice(
+            raw, "effect", ("read_only", "idempotent", "non_idempotent"), source, prefix
+        )
     return ToolConfig(
         driver=driver,
         target=target,
@@ -437,6 +448,7 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
         resources=tuple(resources),
         timeout_seconds=float(timeout) if timeout is not None else None,
         cancel_grace_seconds=grace,
+        effect=effect,
     )
 
 

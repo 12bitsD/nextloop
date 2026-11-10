@@ -14,6 +14,7 @@ from ..contracts import (
     HarnessError,
     ToolCall,
     ToolConfig,
+    ToolEffect,
     ToolOutcome,
     ToolSpec,
     UncertainHanging,
@@ -110,6 +111,9 @@ class StdioTransport:
         session_id: str,
         turn: int,
         step: int,
+        *,
+        operation_id: str | None,
+        effect: ToolEffect,
     ) -> Mapping[str, Any]:
         raise NotImplementedError
 
@@ -144,12 +148,20 @@ class StdioTransport:
         if remote_name is None or spec is None:
             return self._unknown_tool(call)
         if self._broken or self._process is None or self._process.returncode is not None:
-            return self._hanging(call.name, spec.resources, "stdio worker is not running")
+            return self._hanging(call.name, spec.uncertain_resources, "stdio worker is not running")
         request_id = self._reserve_request_id()
         operation = asyncio.create_task(
             self._request_message(
                 "tools/call",
-                self._call_params(remote_name, arguments, session_id, turn, step),
+                self._call_params(
+                    remote_name,
+                    arguments,
+                    session_id,
+                    turn,
+                    step,
+                    operation_id=call.operation_id,
+                    effect=spec.effect,
+                ),
                 request_id=request_id,
             )
         )
@@ -165,11 +177,13 @@ class StdioTransport:
             timed_out = cancellation not in done
             await self._cleanup_call(operation, request_id, remote_name)
             if timed_out:
-                return self._hanging(call.name, spec.resources, "stdio Tool call timed out")
+                return self._hanging(
+                    call.name, spec.uncertain_resources, "stdio Tool call timed out"
+                )
             return Cancelled(
                 settled=False,
                 partial_content=f"stdio Tool {call.name} was cancelled; effects are unknown",
-                resource_locks=spec.resources,
+                resource_locks=spec.uncertain_resources,
             )
         except asyncio.CancelledError:
             current = asyncio.current_task()
@@ -179,7 +193,7 @@ class StdioTransport:
             return Cancelled(
                 settled=False,
                 partial_content=f"stdio Tool {call.name} task was cancelled; effects are unknown",
-                resource_locks=spec.resources,
+                resource_locks=spec.uncertain_resources,
             )
         except (
             StdioProtocolError,
@@ -188,7 +202,7 @@ class StdioTransport:
             ValueError,
         ) as exc:
             await self._cleanup_call(operation, request_id, remote_name)
-            return self._hanging(call.name, spec.resources, str(exc))
+            return self._hanging(call.name, spec.uncertain_resources, str(exc))
         finally:
             cancellation.cancel()
             await asyncio.gather(cancellation, return_exceptions=True)

@@ -13,3 +13,5 @@ dist/
 htmlcov/
 .wheel-check/
 .live-check/
+*.sqlite3-shm
+*.sqlite3-wal

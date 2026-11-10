@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
@@ -13,6 +13,7 @@ from ..contracts import (
     NewEvent,
     SurfaceOp,
     ToolCall,
+    new_id,
 )
 from .project import message_to_data, usage_to_data
 
@@ -172,10 +173,15 @@ def decide_response(
             ),
             final_content=final_content,
         )
+    calls = tuple(
+        ToolCall(call.call_id, call.name, call.arguments, operation_id=new_id("op"))
+        for call in response.tool_calls
+    )
+    response = replace(response, tool_calls=calls)
     return ResponseDecision(
         action=ResponseAction.RUN_TOOLS,
         events=(_assistant_event(response, turn=turn, step=step, attempt=attempt, visible=True),),
-        calls=response.tool_calls,
+        calls=calls,
     )
 
 

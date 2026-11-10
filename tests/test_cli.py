@@ -41,14 +41,21 @@ def test_cli_commands(
     assert main(["--json", "check", str(config)]) == 0
     checked = json.loads(capsys.readouterr().out)
     assert checked["ok"] and checked["tools"] == ["echo", "skill_view", "read_tool_result"]
+    assert checked["warnings"] == ["tools[0].effect is unset; defaulting to NON_IDEMPOTENT"]
     assert main(["--json", "tools", "list", str(config)]) == 0
-    assert json.loads(capsys.readouterr().out)[0]["name"] == "echo"
+    listed = json.loads(capsys.readouterr().out)[0]
+    assert listed["name"] == "echo"
+    assert listed["effect"] == "non_idempotent"
     assert main(["--json", "tools", "call", "echo", '{"text":"ok"}', str(config)]) == 0
     assert json.loads(capsys.readouterr().out)["content"] == "ok"
     assert main(["--json", "skills", "list", str(config)]) == 0
     assert json.loads(capsys.readouterr().out)[0]["name"] == "demo"
     assert main(["--json", "skills", "view", "demo", str(config)]) == 0
     assert json.loads(capsys.readouterr().out)["body"] == "Read only."
+
+    config.write_text(BASE + 'effect = "read_only"\n', encoding="utf-8")
+    assert main(["--json", "check", str(config)]) == 0
+    assert json.loads(capsys.readouterr().out)["warnings"] == []
 
 
 def test_json_argparse_errors(capsys: pytest.CaptureFixture[str]) -> None:

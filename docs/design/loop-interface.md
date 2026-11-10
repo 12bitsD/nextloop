@@ -1,6 +1,6 @@
 # Loop interface and ownership
 
-Status: **v1 implemented for 0.5.0**, with public contracts in `src/nextloop/contracts.py`.
+Status: **v1.1 implemented for 0.6.0**, with public contracts in `src/nextloop/contracts.py`.
 
 ## Independence and version dependency
 
@@ -14,6 +14,10 @@ AgentLoop.steer(session_id, content, *, input_id=None) -> bool
 AgentLoop.cancel(session_id, cause="user_stop") -> bool
 AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
 AgentLoop.pending_inputs(session_id, store) -> tuple[PendingInput, ...]
+AgentLoop.resume(context, *, decisions=None, reject_all=False, new_input=None) -> TurnOutcome
+AgentLoop.retry_operation(context, operation_id) -> TurnOutcome
+AgentLoop.resource_locks(session_id, store) -> frozenset[str]
+AgentLoop.release_resource(session_id, store, resource, *, actor, evidence) -> bool
 ```
 
 `steer` and `cancel` return `False` when there is no active Turn or final commitment has already happened. Input after final commitment belongs to a later Turn. Pending Input is derived from the log by `input_id`; a new Turn commits recovered Pending as USER_MESSAGE at its first Step boundary without duplicating active inbox input.

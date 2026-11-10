@@ -10,9 +10,11 @@ from ..contracts import (
     EventType,
     InvariantViolation,
     NewEvent,
+    PayloadErasedError,
     SurfaceOp,
     utc_now,
 )
+from ..events.upcast import upcast_event, validate_event_schema
 
 
 class InMemoryEventStore:
@@ -78,7 +80,7 @@ class InMemoryEventStore:
                 default=1,
             )
             return tuple(
-                copy.deepcopy(event)
+                upcast_event(copy.deepcopy(event))
                 for event in events
                 if event.seq >= epoch_seq
                 and (
@@ -89,7 +91,7 @@ class InMemoryEventStore:
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:
         async with self._lock:
-            return tuple(copy.deepcopy(self._events[session_id]))
+            return tuple(upcast_event(copy.deepcopy(event)) for event in self._events[session_id])
 
     @staticmethod
     def _idempotent(existing: list[Event], drafts: Sequence[NewEvent]) -> Sequence[Event]:
@@ -99,6 +101,9 @@ class InMemoryEventStore:
             event = by_id.get(draft.event_id)
             if event is None:
                 raise InvariantViolation("Expected sequence does not match Session tail")
+            validate_event_schema(event)
+            if event.payload == {"_nextloop_erased": True}:
+                raise PayloadErasedError(f"Event payload is erased: {event.event_id}")
             if (
                 event.event_type != draft.event_type
                 or event.turn != draft.turn

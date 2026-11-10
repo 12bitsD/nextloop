@@ -14,6 +14,7 @@ from ..contracts import (
     Completed,
     ToolCall,
     ToolConfig,
+    ToolEffect,
     ToolExecutionMode,
     ToolOutcome,
     ToolSpec,
@@ -121,6 +122,7 @@ class McpStdioRuntime(StdioTransport):
                     mode=ToolExecutionMode.EXCLUSIVE,
                     resources=self.config.resources,
                     timeout_seconds=self.config.timeout_seconds,
+                    effect=ToolEffect(self.config.effect or ToolEffect.NON_IDEMPOTENT),
                 )
             )
             remote_names[name] = remote_name
@@ -149,8 +151,18 @@ class McpStdioRuntime(StdioTransport):
         session_id: str,
         turn: int,
         step: int,
+        *,
+        operation_id: str | None,
+        effect: ToolEffect,
     ) -> Mapping[str, Any]:
-        return {"name": remote_name, "arguments": dict(arguments)}
+        return {
+            "name": remote_name,
+            "arguments": dict(arguments),
+            "_meta": {
+                "nextloop/operation_id": operation_id,
+                "nextloop/effect": effect.value,
+            },
+        }
 
     def _response_outcome(self, response: Mapping[str, Any], call: ToolCall) -> ToolOutcome:
         if "error" in response:

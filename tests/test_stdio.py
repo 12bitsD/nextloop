@@ -32,9 +32,10 @@ async def call(
     name: str,
     arguments: dict[str, object],
     cancel: asyncio.Event | None = None,
+    operation_id: str | None = None,
 ):
     return await driver.execute(
-        ToolCall("call", name, "{}"),
+        ToolCall("call", name, "{}", operation_id=operation_id),
         arguments,
         session_id="s",
         turn=1,
@@ -111,4 +112,14 @@ async def test_namespace_uses_provider_compatible_double_underscore() -> None:
     assert isinstance(outcome, Completed) and outcome.content == "routed"
     assert [spec.name for spec in driver.catalog()][0] == "worker__echo"
     assert all("." not in spec.name for spec in driver.catalog())
+    await driver.close()
+
+
+async def test_worker_receives_operation_id_and_effect() -> None:
+    driver = StdioDriver(config())
+    outcome = await call(driver, "context", {}, operation_id="op-context")
+
+    assert isinstance(outcome, Completed)
+    assert outcome.structured["operation_id"] == "op-context"
+    assert outcome.structured["effect"] == "idempotent"
     await driver.close()

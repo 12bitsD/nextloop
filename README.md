@@ -6,12 +6,12 @@ nextloop is an embeddable Python AgentLoop for developers who want to build thei
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.5.0**.
+Current version: **0.6.0**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.5.0
+python -m pip install nextloop==0.6.0
 ```
 
 For local development:
@@ -60,6 +60,10 @@ AgentLoop.steer(session_id, content, *, input_id=None) -> bool
 AgentLoop.cancel(session_id, cause="user_stop") -> bool
 AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
 AgentLoop.pending_inputs(session_id, store) -> tuple[PendingInput, ...]
+AgentLoop.resume(context, *, decisions=None, reject_all=False, new_input=None) -> TurnOutcome
+AgentLoop.retry_operation(context, operation_id) -> TurnOutcome
+AgentLoop.resource_locks(session_id, store) -> frozenset[str]
+AgentLoop.release_resource(session_id, store, resource, *, actor, evidence) -> bool
 ```
 
 Core adapter seams are `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`. Additional extension points include `PreviewSink`, Exporters, Skills, and stdio/MCP workers. Context projection and Compaction are built in and configured through `LoopConfig`.
@@ -70,12 +74,14 @@ Core adapter seams are `EventStore`, `ModelProvider`, `ToolRuntime`, and `Delive
 |---|---|---|
 | Accepted input | Accepted inputs are projected from the log by `input_id` and can be queried with `AgentLoop.pending_inputs`. Explicit IDs are non-empty; identical retries deduplicate, conflicting content is rejected without consuming the original. | Automatic deduplication when callers retry with a different or missing ID. |
 | Delivery | Delivery is at least once; DeliveryOwner must deduplicate by stable `final_message_id`. | Exactly-once delivery or delivery without an idempotent owner. |
-| Tool execution | The library never automatically replays an already dispatched Tool. | No duplicate external effect when a model reissues a call or a Tool is not idempotent. |
-| Resource locks | Unresolved uncertain results block later calls sharing declared resources. | Global idempotency across different resources or Tools without resource declarations. |
+| Tool execution | The library never automatically replays an already dispatched Tool. Explicit reconciliation is limited to READ_ONLY and IDEMPOTENT operations. | No duplicate external effect when a model reissues a call or a Tool is not idempotent. |
+| Resource locks | Unresolved uncertain results retain declared resources; otherwise NON_IDEMPOTENT uses the Tool name. Successful reconciliation releases all locks associated with the operation. | Global idempotency across different resources or operations, or safe concurrent execution of NON_IDEMPOTENT calls. |
+| Approval | Any approval-required item suspends the whole batch before dispatch. Resume requires explicit decisions, binds original IDs/arguments, and rechecks expiry and prior dispatch inside the Session lock. | Automatic approval, execution before a durable grant, or replay after dispatch without recovery. |
+| Event compatibility | Schema 1.0 is upcast only during reads; original payload bytes are preserved for idempotent append. | Reading schema 1.1 with 0.5.0 or earlier, or accepting unknown future schemas. |
 | Recovery | Recovery writes crash closers; the caller starts a new Turn with projected prior messages and Pending Input. | In-place replay of the interrupted Turn or automatic execution of uncertain calls. |
 | Preview | Preview is transient and cannot execute partial Tool arguments. | Preview as a durable EventStore fact or a substitute for committed Delivery. |
 | Observability | Committed Events are authoritative and can be replayed for history. | The current in-memory Exporter queue as a durable outbox. |
-| MCP | stdio lifecycle, paginated static catalogs, and uncertain crash handling. | Remote MCP, OAuth, dynamic `listChanged`, or non-text content mapping. |
+| MCP | stdio lifecycle, paginated static catalogs, operation metadata, and uncertain crash handling. | Remote MCP, OAuth, dynamic `listChanged`, or non-text content mapping. |
 
 `Harness.load("harness.toml")` assembles those adapters without changing the Loop. Use `await harness.check()` for offline validation and `await harness.run("input")` for a model-backed Turn. See [Harness and extension interface](docs/design/harness.md) for the strict TOML schema, stdio protocol, lifecycle rules, and CLI.
 
@@ -196,7 +202,7 @@ The release checks cover:
 - 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
 - live DeepSeek text + Preview + usage and real Tool Call + Delivery smoke;
 - a 10,505-event benchmark with cross-Store, incremental, and required-content parity;
-- 299 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
+- 341 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 
@@ -218,7 +224,7 @@ Current limits:
 - [Development plan](docs/architecture/development-plan.md)
 - [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), and [ADR-0005 Pending Input](docs/adr/0005-pending-input.md)
+- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), and [ADR-0007 Approval](docs/adr/0007-approval.md)
 
 ## Release
 
