@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass, field
 
 from .contracts import (
+    Event,
     EventType,
     FinalMessage,
     InvariantViolation,
     Message,
+    ModelUsage,
     NewEvent,
     SurfaceOp,
     TurnContext,
@@ -28,6 +30,7 @@ from .events.project import (
 from .events.response import ResponseAction, decide_response, reject_batch
 from .execute.batch import BatchExecutor
 from .execute.model import ModelCaller
+from .execute.preview import PreviewChannel
 
 
 @dataclass
@@ -49,6 +52,15 @@ class SessionExecution:
     open_step: bool = False
     final_committed: bool = False
     resource_locks: set[str] = field(default_factory=set)
+    model_calls: int = 0
+    tool_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cancel_cause: str | None = None
+    terminal_reason: str | None = None
+    deadline_task: asyncio.Task[None] | None = None
+    surface: tuple[Event, ...] = ()
+    preview: PreviewChannel | None = None
 
     @property
     def session_id(self) -> str:
@@ -59,6 +71,79 @@ class SessionExecution:
         if not hasattr(self, "_cancel"):
             self._cancel = asyncio.Event()
         return self._cancel
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    def budget_snapshot(self) -> dict[str, int]:
+        return {
+            "steps": self.step,
+            "model_calls": self.model_calls,
+            "tool_calls": self.tool_calls,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+        }
+
+    def step_budget_reason(self) -> str | None:
+        limit = self.context.config.max_steps
+        if limit is not None and self.step >= limit:
+            return f"max_steps={limit}"
+        return None
+
+    def before_model_attempt(self) -> str | None:
+        limit = self.context.config.max_model_calls
+        if limit is not None and self.model_calls >= limit:
+            return f"max_model_calls={limit}"
+        self.model_calls += 1
+        return None
+
+    def admit_tool_batch(self, count: int) -> str | None:
+        limit = self.context.config.max_tool_calls
+        if limit is not None and self.tool_calls + count > limit:
+            return f"max_tool_calls={limit}"
+        self.tool_calls += count
+        return None
+
+    def record_usage(self, usage: ModelUsage | None) -> str | None:
+        config = self.context.config
+        limits = (
+            config.max_input_tokens,
+            config.max_output_tokens,
+            config.max_total_tokens,
+        )
+        if all(limit is None for limit in limits):
+            return None
+        if usage is None:
+            return "budget_usage_unavailable"
+        for value in (
+            usage.input_tokens,
+            usage.output_tokens,
+            usage.cached_input_tokens,
+        ):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                return "budget_usage_invalid"
+        if config.max_input_tokens is not None and usage.input_tokens is None:
+            return "budget_usage_unavailable"
+        if config.max_output_tokens is not None and usage.output_tokens is None:
+            return "budget_usage_unavailable"
+        if config.max_total_tokens is not None and (
+            usage.input_tokens is None or usage.output_tokens is None
+        ):
+            return "budget_usage_unavailable"
+        self.input_tokens += usage.input_tokens or 0
+        self.output_tokens += usage.output_tokens or 0
+        for name, value, limit in (
+            ("max_input_tokens", self.input_tokens, config.max_input_tokens),
+            ("max_output_tokens", self.output_tokens, config.max_output_tokens),
+            ("max_total_tokens", self.total_tokens, config.max_total_tokens),
+        ):
+            if limit is not None and value > limit:
+                return f"{name}={limit}"
+        return None
 
     async def append(self, events: Sequence[NewEvent]) -> None:
         async with self.actor.commit_lock:
@@ -73,7 +158,18 @@ class SessionExecution:
             self.seq + 1,
             events,
         )
+        previous_seq = self.seq
         self.seq = committed[-1].seq
+        if self.seq <= previous_seq:
+            return
+        for event in committed:
+            if event.surface_op == SurfaceOp.EPOCH:
+                self.surface = (event,)
+            elif (
+                event.surface_op == SurfaceOp.APPEND
+                or event.event_type == EventType.TOOL_BATCH_REJECTED
+            ):
+                self.surface = (*self.surface, event)
 
     async def has_steer(self) -> bool:
         async with self.actor.commit_lock:
@@ -84,12 +180,27 @@ class _CancelFinalization(Exception):
     pass
 
 
+class _DeliveryCancelled(Exception):
+    pass
+
+
 class TurnDriver:
     def __init__(self, execution: SessionExecution) -> None:
         self.execution = execution
         context = execution.context
-        self.model = ModelCaller(context.provider, context.config, execution.has_steer)
-        self.tools = BatchExecutor(context.tools, context.config.max_parallel_tools)
+        if context.preview is not None:
+            execution.preview = PreviewChannel(context.preview)
+        self.model = ModelCaller(
+            context.provider,
+            context.config,
+            execution.has_steer,
+            before_attempt=execution.before_model_attempt,
+            record_usage=execution.record_usage,
+            preview=execution.preview,
+        )
+        self.tools = BatchExecutor(
+            context.tools, context.config.max_parallel_tools, admit=execution.admit_tool_batch
+        )
 
     async def run(self) -> TurnOutcome:
         execution = self.execution
@@ -97,8 +208,11 @@ class TurnDriver:
             while True:
                 if execution.cancel.is_set():
                     return await self._finalize(TurnStatus.CANCELLED, "Cancelled")
+                reason = execution.step_budget_reason()
+                if reason is not None:
+                    return await self._budget_failure(reason)
                 await self._begin_step()
-                surface = await execution.context.store.load_surface(execution.session_id)
+                surface = execution.surface
                 projection = project_events(
                     surface,
                     session_id=execution.session_id,
@@ -114,6 +228,8 @@ class TurnDriver:
                         purpose="compaction",
                     )
                     await execution.append(compaction.events)
+                    if compaction.budget_reason is not None:
+                        return await self._budget_failure(compaction.budget_reason)
                     if compaction.rebuild_for_steer:
                         await self._end_step("steer")
                         continue
@@ -136,7 +252,7 @@ class TurnDriver:
                             step=execution.step,
                         )
                     )
-                    surface = await execution.context.store.load_surface(execution.session_id)
+                    surface = execution.surface
                     projection = project_events(
                         surface,
                         session_id=execution.session_id,
@@ -153,6 +269,8 @@ class TurnDriver:
 
                 result = await self.model.call(projection.request, execution.cancel)
                 await execution.append(result.events)
+                if result.budget_reason is not None:
+                    return await self._budget_failure(result.budget_reason)
                 if result.rebuild_for_steer:
                     await self._end_step("steer")
                     continue
@@ -173,6 +291,13 @@ class TurnDriver:
                     max_corrections=execution.context.config.max_protocol_corrections,
                 )
                 await execution.append(decision.events)
+                if execution.preview is not None:
+                    execution.preview.resolved(
+                        projection.request,
+                        attempt,
+                        action=decision.action.value,
+                        decision_event_ids=tuple(item.event_id for item in decision.events),
+                    )
                 if decision.action == ResponseAction.NEXT_STEP:
                     execution.corrections += 1
                     await self._end_step("protocol_correction")
@@ -199,6 +324,8 @@ class TurnDriver:
                     active_resources=frozenset(execution.resource_locks),
                     commit=execution.append,
                 )
+                if batch.budget_reason is not None:
+                    return await self._budget_failure(batch.budget_reason)
                 if batch.issues:
                     rejection = reject_batch(
                         [issue.to_dict() for issue in batch.issues],
@@ -223,10 +350,17 @@ class TurnDriver:
                     pacing_step_interval=execution.context.config.pacing_step_interval,
                     blocked_resources=batch.blocked_resources,
                     timings=batch.timings,
+                    result_bytes=execution.context.config.tool_result_bytes,
+                    full_max_bytes=execution.context.config.tool_result_full_max_bytes,
                 )
                 await execution.append(settled.events)
                 execution.resource_locks.update(settled.acquired_resources)
                 execution.resource_locks.difference_update(settled.released_resources)
+                if settled.action == BatchAction.FAILED:
+                    return await self._finalize(
+                        TurnStatus.FAILED,
+                        settled.error or "Tool result failed",
+                    )
                 if settled.action == BatchAction.BLOCKED:
                     return await self._finalize(
                         TurnStatus.BLOCKED,
@@ -240,10 +374,20 @@ class TurnDriver:
                         return outcome
                     continue
                 await self._end_step("tool_batch_completed")
+        except _CancelFinalization:
+            return await self._finalize(TurnStatus.CANCELLED, "Cancelled before final commitment")
         except InvariantViolation:
             raise
         except Exception as exc:
             return await self._finalize(TurnStatus.FAILED, f"{type(exc).__name__}: {exc}")
+
+    async def _budget_failure(self, reason: str) -> TurnOutcome:
+        self.execution.terminal_reason = (
+            reason
+            if reason in ("budget_usage_unavailable", "budget_usage_invalid")
+            else "budget_exceeded"
+        )
+        return await self._finalize(TurnStatus.FAILED, reason)
 
     async def _begin_step(self) -> None:
         execution = self.execution
@@ -307,7 +451,7 @@ class TurnDriver:
 
     async def _working_context_expiry(self) -> NewEvent | None:
         execution = self.execution
-        surface = await execution.context.store.load_surface(execution.session_id)
+        surface = execution.surface
         active = latest_working_context(surface)
         if active is None:
             return None
@@ -377,7 +521,7 @@ class TurnDriver:
             await execution._append_locked(events)
             execution.final_committed = True
         try:
-            await execution.context.delivery.deliver(final)
+            await _deliver_with_cancel(execution.context.delivery.deliver(final), execution.cancel)
             await execution.append(
                 [
                     NewEvent(
@@ -390,8 +534,19 @@ class TurnDriver:
             )
             status = TurnStatus.SUCCEEDED
             error = None
-        except _CancelFinalization:
-            return await self._finalize(TurnStatus.CANCELLED, "Cancelled before final commitment")
+        except _DeliveryCancelled:
+            error = "turn_deadline_exceeded"
+            await execution.append(
+                [
+                    NewEvent(
+                        event_type=EventType.DELIVERY_UNKNOWN,
+                        turn=execution.turn,
+                        step=execution.step,
+                        payload={"final_message_id": final_message_id, "error": error},
+                    )
+                ]
+            )
+            status = TurnStatus.DELIVERY_UNKNOWN
         except Exception as exc:
             error = str(exc)
             await execution.append(
@@ -416,6 +571,10 @@ class TurnDriver:
 
     async def _finalize(self, status: TurnStatus, error: str) -> TurnOutcome:
         execution = self.execution
+        if execution.cancel_cause == "turn_deadline_exceeded":
+            status = TurnStatus.FAILED
+            error = "turn_deadline_exceeded"
+            execution.terminal_reason = error
         events = []
         expiry = await self._working_context_expiry()
         if expiry is not None:
@@ -430,12 +589,18 @@ class TurnDriver:
                 )
             )
             execution.open_step = False
+        payload: dict[str, object] = {"status": status.value, "error": error}
+        if execution.terminal_reason is not None:
+            payload.update(
+                reason=execution.terminal_reason,
+                budget=execution.budget_snapshot(),
+            )
         events.append(
             NewEvent(
                 event_type=EventType.TURN_END,
                 turn=execution.turn,
                 step=execution.step,
-                payload={"status": status.value, "error": error},
+                payload=payload,
             )
         )
         await execution.append(events)
@@ -446,3 +611,21 @@ class TurnDriver:
             step=execution.step,
             error=error,
         )
+
+
+async def _deliver_with_cancel(awaitable: Awaitable[None], cancel: asyncio.Event) -> None:
+    operation = asyncio.ensure_future(awaitable)
+    cancellation = asyncio.create_task(cancel.wait())
+    try:
+        done, _ = await asyncio.wait({operation, cancellation}, return_when=asyncio.FIRST_COMPLETED)
+        if cancellation in done and not operation.done():
+            operation.cancel()
+            await asyncio.gather(operation, return_exceptions=True)
+            raise _DeliveryCancelled()
+        cancellation.cancel()
+        await operation
+    finally:
+        cancellation.cancel()
+        if not operation.done():
+            operation.cancel()
+        await asyncio.gather(operation, cancellation, return_exceptions=True)

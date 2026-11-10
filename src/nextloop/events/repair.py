@@ -55,19 +55,23 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
             event.step for event in turn_events if event.event_type == EventType.STEP_END
         }
         calls_started = {
-            str(event.payload["call_id"]): event
+            (event.step, str(event.payload["call_id"])): event
             for event in turn_events
             if event.event_type == EventType.TOOL_CALL
         }
         results = {
-            str(event.payload["call_id"])
+            (event.step, str(event.payload["call_id"]))
             for event in turn_events
             if event.event_type == EventType.TOOL_RESULT
+        }
+        rejected_steps = {
+            event.step for event in turn_events if event.event_type == EventType.TOOL_BATCH_REJECTED
         }
         for assistant in turn_events:
             if (
                 assistant.event_type != EventType.ASSISTANT_MESSAGE
                 or assistant.surface_op != SurfaceOp.APPEND
+                or assistant.step in rejected_steps
             ):
                 continue
             for raw_call in assistant.payload["message"].get("tool_calls", ()):
@@ -76,9 +80,10 @@ def repair_events(events: Sequence[Event]) -> RepairDecision:
                     name=str(raw_call["name"]),
                     arguments=str(raw_call["arguments"]),
                 )
-                if call.call_id in results:
+                key = (assistant.step, call.call_id)
+                if key in results:
                     continue
-                started = calls_started.get(call.call_id)
+                started = calls_started.get(key)
                 if started is None:
                     outcome: Any = Skipped("Interrupted before Runtime dispatch")
                 else:

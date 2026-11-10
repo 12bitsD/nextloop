@@ -7,6 +7,7 @@ import os
 import re
 import tomllib
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
@@ -18,16 +19,20 @@ from .adapters.sqlite import SQLiteEventStore
 from .contracts import (
     API_VERSION,
     HARNESS_SCHEMA,
+    DeliveryOwner,
+    EventStore,
     FinalMessage,
     HarnessError,
     HarnessSpec,
     LoopConfig,
+    ModelProvider,
     ProviderConfig,
     RecoveryOutcome,
     SkillConfig,
     StoreConfig,
     ToolConfig,
     ToolExecutionMode,
+    ToolRuntime,
     ToolSpec,
     TraceConfig,
     TraceExporterInput,
@@ -41,6 +46,7 @@ from .contracts import (
 )
 from .execute.cleanup import wait_for_cleanup
 from .execute.composite import CompositeToolRuntime
+from .execute.result_read import with_result_reads
 from .execute.tools import ToolRegistry
 from .loop import AgentLoop
 from .skills import SkillRegistry, skill_view
@@ -66,6 +72,15 @@ _LOOP_FIELDS = {
     "max_provider_attempts",
     "retry_backoff_seconds",
     "pacing_step_interval",
+    "max_steps",
+    "max_model_calls",
+    "max_tool_calls",
+    "max_input_tokens",
+    "max_output_tokens",
+    "max_total_tokens",
+    "turn_deadline_seconds",
+    "tool_result_bytes",
+    "tool_result_full_max_bytes",
 }
 _TOOL_FIELDS = {
     "driver",
@@ -95,20 +110,41 @@ class Harness:
         *,
         session_id: str | None = None,
         exporter: TraceExporterInput | Sequence[TraceExporterInput] | None = None,
+        provider: ModelProvider | None = None,
+        store: EventStore | None = None,
+        delivery: DeliveryOwner | None = None,
+        tools: ToolRuntime | None = None,
     ) -> None:
         self.spec = spec
         self.session_id = session_id or new_id("session")
-        self.tools = CompositeToolRuntime.from_configs(
-            spec.tools, sensitive_env=(spec.provider.api_key_env,)
+        self._provider = provider
+        self._owns_tools = tools is None
+        self.tools = (
+            CompositeToolRuntime.from_configs(
+                spec.tools, sensitive_env=(spec.provider.api_key_env,)
+            )
+            if tools is None
+            else tools
         )
-        base_store = _make_store(spec.store)
+        self._owns_store = store is None
+        base_store = _make_store(spec.store) if store is None else store
         exporters = _resolve_exporters(spec.trace.exporter, exporter)
-        self.store = ObservingEventStore(base_store, exporters) if exporters else base_store
-        self.delivery = MemoryDeliveryOwner()
+        self.store = (
+            ObservingEventStore(
+                base_store,
+                exporters,
+                close_store=self._owns_store,
+                close_exporters=exporters[:1] if spec.trace.exporter else (),
+            )
+            if exporters
+            else base_store
+        )
+        self._close_store_on_close = self._owns_store or bool(exporters)
+        self.delivery = MemoryDeliveryOwner() if delivery is None else delivery
         self.loop = AgentLoop()
         self.skills: SkillRegistry | None = None
         self._skill_registry: ToolRegistry | None = None
-        self._all_tools: CompositeToolRuntime | None = None
+        self._all_tools: ToolRuntime | None = None
 
     @classmethod
     def load(
@@ -117,12 +153,25 @@ class Harness:
         *,
         session_id: str | None = None,
         exporter: TraceExporterInput | Sequence[TraceExporterInput] | None = None,
+        provider: ModelProvider | None = None,
+        store: EventStore | None = None,
+        delivery: DeliveryOwner | None = None,
+        tools: ToolRuntime | None = None,
     ) -> Harness:
-        return cls(load_harness_spec(path), session_id=session_id, exporter=exporter)
+        return cls(
+            load_harness_spec(path),
+            session_id=session_id,
+            exporter=exporter,
+            provider=provider,
+            store=store,
+            delivery=delivery,
+            tools=tools,
+        )
 
     async def check(self) -> dict[str, Any]:
-        await self.tools.start_eager(self.spec.tools)
-        await self.tools.start()
+        if isinstance(self.tools, CompositeToolRuntime):
+            await self.tools.start_eager(self.spec.tools)
+            await self.tools.start()
         runtime = self._runtime_with_skills()
         return {
             "ok": True,
@@ -173,18 +222,21 @@ class Harness:
 
     async def _close(self) -> None:
         try:
-            await self.tools.close()
-            if self._all_tools is not None and self._all_tools is not self.tools:
-                await self._all_tools.close()
+            if self._owns_tools and isinstance(self.tools, CompositeToolRuntime):
+                await self.tools.close()
         finally:
-            close = getattr(self.store, "close", None)
+            close = getattr(self.store, "close", None) if self._close_store_on_close else None
             if callable(close):
                 result = close()
                 if inspect.isawaitable(result):
                     await result
 
-    def _make_provider(self) -> OpenAIProvider | AnthropicProvider:
+    def _make_provider(self) -> ModelProvider:
+        if self._provider is not None:
+            return self._provider
         config = self.spec.provider
+        if config.protocol not in ("openai", "anthropic"):
+            raise HarnessError(f"Unsupported Provider protocol: {config.protocol}")
         api_key = os.environ.get(config.api_key_env)
         if not api_key:
             raise HarnessError(
@@ -207,7 +259,7 @@ class Harness:
             timeout_seconds=config.timeout_seconds,
         )
 
-    def _runtime_with_skills(self) -> CompositeToolRuntime:
+    def _runtime_with_skills(self) -> ToolRuntime:
         if self._all_tools is not None:
             return self._all_tools
         paths = self.spec.skills.paths
@@ -215,25 +267,26 @@ class Harness:
             paths, available_tools=[item.name for item in self.tools.catalog()]
         )
         if not paths:
-            self._all_tools = self.tools
-            return self._all_tools
-        skill_tools = ToolRegistry()
-        skill_tools.register(
-            ToolSpec(
-                "skill_view",
-                "Load the instructions for an available Skill",
-                {
-                    "type": "object",
-                    "properties": {"name": {"type": "string"}},
-                    "required": ["name"],
-                    "additionalProperties": False,
-                },
-                mode=ToolExecutionMode.PARALLEL,
-            ),
-            skill_view(self.skills),
-        )
-        self._skill_registry = skill_tools
-        self._all_tools = CompositeToolRuntime([self.tools, skill_tools])
+            runtime = self.tools
+        else:
+            skill_tools = ToolRegistry()
+            skill_tools.register(
+                ToolSpec(
+                    "skill_view",
+                    "Load the instructions for an available Skill",
+                    {
+                        "type": "object",
+                        "properties": {"name": {"type": "string"}},
+                        "required": ["name"],
+                        "additionalProperties": False,
+                    },
+                    mode=ToolExecutionMode.PARALLEL,
+                ),
+                skill_view(self.skills),
+            )
+            self._skill_registry = skill_tools
+            runtime = CompositeToolRuntime([self.tools, skill_tools])
+        self._all_tools = with_result_reads(runtime, self.store, self.spec.loop.tool_result_bytes)
         return self._all_tools
 
     def _loop_config(self) -> LoopConfig:
@@ -245,18 +298,7 @@ class Harness:
             + "\n\nAvailable Skills (use skill_view to load instructions on demand):\n"
             + metadata
         )
-        return LoopConfig(
-            system_prompt=prompt,
-            compaction_prompt=self.spec.loop.compaction_prompt,
-            bootstrap_messages=self.spec.loop.bootstrap_messages,
-            context_window=self.spec.loop.context_window,
-            output_reserve=self.spec.loop.output_reserve,
-            max_parallel_tools=self.spec.loop.max_parallel_tools,
-            max_protocol_corrections=self.spec.loop.max_protocol_corrections,
-            max_provider_attempts=self.spec.loop.max_provider_attempts,
-            retry_backoff_seconds=self.spec.loop.retry_backoff_seconds,
-            pacing_step_interval=self.spec.loop.pacing_step_interval,
-        )
+        return replace(self.spec.loop, system_prompt=prompt)
 
 
 def load_harness_spec(path: str | Path) -> HarnessSpec:
@@ -356,7 +398,7 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
 def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig:
     prefix = f"tools[{index}]"
     _fields(raw, _TOOL_FIELDS, prefix, source)
-    driver = _choice(raw, "driver", ("python", "stdio"), source, prefix)
+    driver = _choice(raw, "driver", ("python", "stdio", "mcp"), source, prefix)
     target = raw.get("target")
     command_raw = raw.get("command", [])
     if target is not None and not isinstance(target, str):
@@ -367,11 +409,11 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
         _fail(source, f"{prefix}.command", "must be an array of nonempty strings")
     if driver == "python" and not target:
         _fail(source, f"{prefix}.target", "is required for the python driver")
-    if driver == "stdio" and not command_raw:
-        _fail(source, f"{prefix}.command", "is required for the stdio driver")
+    if driver in ("stdio", "mcp") and not command_raw:
+        _fail(source, f"{prefix}.command", f"is required for the {driver} driver")
     if driver == "python" and command_raw:
-        _fail(source, f"{prefix}.command", "is only valid for the stdio driver")
-    if driver == "stdio" and target:
+        _fail(source, f"{prefix}.command", "is only valid for the stdio and mcp drivers")
+    if driver in ("stdio", "mcp") and target:
         _fail(source, f"{prefix}.target", "is only valid for the python driver")
     command = tuple(
         str(_resolve_path(source, item)) if "/" in item or item.startswith(".") else item
@@ -482,6 +524,8 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
         "max_parallel_tools",
         "max_provider_attempts",
         "pacing_step_interval",
+        "tool_result_bytes",
+        "tool_result_full_max_bytes",
     ):
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
@@ -490,6 +534,26 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             _fail(source, f"loop.{name}", "must be a nonnegative integer")
+    for name in (
+        "max_steps",
+        "max_model_calls",
+        "max_tool_calls",
+        "max_input_tokens",
+        "max_output_tokens",
+        "max_total_tokens",
+    ):
+        value = getattr(config, name)
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        ):
+            _fail(source, f"loop.{name}", "must be null or a positive integer")
+    deadline = config.turn_deadline_seconds
+    if deadline is not None and (
+        not isinstance(deadline, (int, float)) or isinstance(deadline, bool) or deadline <= 0
+    ):
+        _fail(source, "loop.turn_deadline_seconds", "must be null or a positive number")
+    if config.tool_result_full_max_bytes < config.tool_result_bytes:
+        _fail(source, "loop.tool_result_full_max_bytes", "must be >= loop.tool_result_bytes")
     backoff = config.retry_backoff_seconds
     if not isinstance(backoff, (int, float)) or isinstance(backoff, bool) or backoff < 0:
         _fail(source, "loop.retry_backoff_seconds", "must be a nonnegative number")

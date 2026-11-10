@@ -234,6 +234,8 @@ class SQLiteEventStore:
 
     @staticmethod
     def _event_from_row(row: sqlite3.Row) -> Event:
+        if row["schema_version"] != EVENT_SCHEMA_VERSION:
+            raise InvariantViolation(f"Unsupported Event schema version: {row['schema_version']}")
         return Event(
             session_id=row["session_id"],
             seq=row["seq"],

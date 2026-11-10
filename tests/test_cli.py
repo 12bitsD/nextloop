@@ -40,7 +40,7 @@ def test_cli_commands(
 
     assert main(["--json", "check", str(config)]) == 0
     checked = json.loads(capsys.readouterr().out)
-    assert checked["ok"] and checked["tools"] == ["echo", "skill_view"]
+    assert checked["ok"] and checked["tools"] == ["echo", "skill_view", "read_tool_result"]
     assert main(["--json", "tools", "list", str(config)]) == 0
     assert json.loads(capsys.readouterr().out)[0]["name"] == "echo"
     assert main(["--json", "tools", "call", "echo", '{"text":"ok"}', str(config)]) == 0

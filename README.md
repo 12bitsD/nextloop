@@ -6,12 +6,12 @@ nextloop is an embeddable Python AgentLoop for developers who want to build thei
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.4.0rc1**.
+Current version: **0.5.0rc1**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.4.0rc1
+python -m pip install nextloop==0.5.0rc1
 ```
 
 For local development:
@@ -25,9 +25,11 @@ uv pip install --python .venv/bin/python -e '.[dev]'
 
 - **Execution you can reason about.** DSH-aligned Session/Turn/Step/attempt coordinates, writer fencing, and append-only Trajectory instead of implicit runner state.
 - **Crash recovery without blind replay.** Resource locks, uncertain outcomes, crash closers, and delivery-only recovery tell you what is known, what is unknown, and what must not run twice.
-- **Tools without framework lock-in.** Register Python functions directly, or run persistent Rust and C++ workers over stdio JSON-RPC. Schema validation, parallel calls, and exclusive barriers are built in.
+- **Tools without framework lock-in.** Register Python functions directly, connect MCP stdio servers, or run persistent Rust and C++ workers over stdio JSON-RPC. Schema validation, parallel calls, and exclusive barriers are built in.
 - **Observability from committed facts.** Structured Model/Tool/Turn traces, asynchronous Exporters, and Session history. No second execution path and no telemetry-driven control flow.
-- **Small, explicit integration.** Assemble Providers, Stores, Tools, and Skills with `harness.toml`, or keep everything in Python. OpenAI-compatible and Anthropic Providers are included.
+- **Small, explicit integration.** Assemble Providers, Stores, Tools, and Skills with `harness.toml`, or inject your own adapters in Python. OpenAI-compatible and Anthropic Providers are included.
+- **Bounded execution and context.** Optional Step, Provider-attempt, Tool, token, and deadline budgets. Large Tool Results use explicit preview/page/full policies with durable read-back.
+- **Transient previews, authoritative results.** Optional OpenAI/Anthropic deltas with bounded queues and snapshot recovery. Previews never enter the EventStore, execute partial Tool Calls, or replace committed Delivery.
 
 It is a library, not an HTTP service, product bot, Router, EventBus, or multi-agent framework. **The Loop stays in your application; the decisions stay with you.**
 
@@ -42,9 +44,13 @@ It is a library, not an HTTP service, product bot, Router, EventBus, or multi-ag
 - SQLite and in-memory EventStores, crash closers, and delivery-only recovery.
 - OpenAI-compatible and Anthropic streaming Provider adapters.
 - Directory-based `SkillRegistry` for progressive, on-demand `SKILL.md` loading with dependency and version validation.
-- Strict `harness.toml` assembly, Python `module:register`, and persistent Python/Rust/C++ stdio workers.
+- Strict `harness.toml` assembly, Python adapter injection, `module:register`, and persistent Python/Rust/C++ stdio workers.
+- MCP stdio lifecycle, paginated catalogs, request-scoped cancellation, and no replay after crashes.
+- Optional Step, model-call, Tool-call, token, and Turn-deadline budgets with structured terminal reasons.
+- Turn-private surface snapshots and `PREVIEW` / `PAGED` / `FULL` Tool Result policies with `read_tool_result`.
+- Optional transient `PreviewSink`, legacy-Provider snapshots, bounded queues, and RESET recovery.
 - Offline `nextloop` CLI for configuration, worker, Tool, and Skill diagnostics.
-- Committed-event observability with Model/Tool/Turn DTOs, asynchronous Exporters, and Session history.
+- Committed-event observability with Model/Tool/Turn DTOs, asynchronous Exporters, optional Exporter lifecycle, and Session history.
 
 ## Public API
 
@@ -58,6 +64,20 @@ AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
 The only four Adapter protocols are `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`. Context projection and Compaction are built in and configured through `LoopConfig`.
 
 `Harness.load("harness.toml")` assembles those adapters without changing the Loop. Use `await harness.check()` for offline validation and `await harness.run("input")` for a model-backed Turn. See [Harness and extension interface](docs/design/harness.md) for the strict TOML schema, stdio protocol, lifecycle rules, and CLI.
+
+Adapters can also be injected directly; caller-owned dependencies are not closed by Harness:
+
+```python
+harness = Harness.load(
+    "harness.toml",
+    provider=my_provider,
+    store=my_store,
+    delivery=my_delivery,
+    tools=my_runtime,
+)
+```
+
+Use `ToolSpec(result_mode=ToolResultMode.PREVIEW | PAGED | FULL)` to control model-visible Tool output. `read_tool_result` retrieves committed full results by `event_id` and UTF-8 byte range. Use `TurnContext(preview=my_sink)` for transient Provider previews; committed Turn results still come only from `AgentLoop.run()` and the EventStore.
 
 ```bash
 nextloop check examples/harness.toml
@@ -156,7 +176,8 @@ The release-candidate checks cover:
 - real subprocess exits during Tool execution and final delivery, followed by SQLite recovery;
 - recorded OpenAI and Anthropic SSE streams;
 - 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
-- `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
+- live DeepSeek text + Preview + usage and real Tool Call + Delivery smoke;
+- 185 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 

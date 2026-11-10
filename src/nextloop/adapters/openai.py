@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import httpx
@@ -43,6 +43,26 @@ class OpenAIProvider:
         *,
         attempt: int,
         cancel: asyncio.Event,
+    ) -> ModelResponse:
+        return await self._complete(request, attempt=attempt, cancel=cancel)
+
+    async def complete_with_preview(
+        self,
+        request: CandidateRequest,
+        *,
+        attempt: int,
+        cancel: asyncio.Event,
+        emit: Callable[[Mapping[str, Any]], None],
+    ) -> ModelResponse:
+        return await self._complete(request, attempt=attempt, cancel=cancel, emit=emit)
+
+    async def _complete(
+        self,
+        request: CandidateRequest,
+        *,
+        attempt: int,
+        cancel: asyncio.Event,
+        emit: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> ModelResponse:
         body = {
             **self.default_parameters,
@@ -101,21 +121,33 @@ class OpenAIProvider:
                     choice = choices[0]
                     delta = choice.get("delta") or {}
                     if delta.get("content"):
-                        content_parts.append(str(delta["content"]))
+                        text = str(delta["content"])
+                        content_parts.append(text)
+                        if emit is not None:
+                            emit({"channel": "content", "delta": text})
                     if delta.get("refusal"):
-                        refusal_parts.append(str(delta["refusal"]))
+                        text = str(delta["refusal"])
+                        refusal_parts.append(text)
+                        if emit is not None:
+                            emit({"channel": "refusal", "delta": text})
                     for fragment in delta.get("tool_calls") or []:
                         index = int(fragment["index"])
                         current = calls.setdefault(
                             index, {"id": f"call_{index}", "name": "", "arguments": ""}
                         )
+                        function = fragment.get("function") or {}
+                        preview = {"channel": "tool_call", "index": index}
                         if fragment.get("id"):
                             current["id"] = str(fragment["id"])
-                        function = fragment.get("function") or {}
+                            preview["call_id"] = current["id"]
                         if function.get("name"):
                             current["name"] += str(function["name"])
+                            preview["name_delta"] = str(function["name"])
                         if function.get("arguments"):
                             current["arguments"] += str(function["arguments"])
+                            preview["arguments_delta"] = str(function["arguments"])
+                        if emit is not None:
+                            emit(preview)
                     finish_reason = (
                         self._finish_reason(choice.get("finish_reason")) or finish_reason
                     )

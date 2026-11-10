@@ -16,9 +16,11 @@ from ..contracts import (
     ToolCall,
     ToolExecutionTiming,
     ToolOutcome,
+    ToolResultMode,
     ToolSpec,
     UncertainHanging,
     UncertainSettled,
+    new_id,
 )
 from .project import message_to_data
 
@@ -28,6 +30,7 @@ class BatchAction(StrEnum):
     FINALIZE = "finalize"
     CANCELLED = "cancelled"
     BLOCKED = "blocked"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True)
@@ -88,6 +91,71 @@ def outcome_text(call: ToolCall, outcome: ToolOutcome) -> str:
     return "[UNCERTAIN_EFFECT_HANGING]\n" + outcome.content
 
 
+def _utf8_prefix(data: bytes, limit: int) -> bytes:
+    page = data[:limit].decode("utf-8", errors="ignore").encode("utf-8")
+    if not page and data and limit > 0:
+        return data[:4].decode("utf-8", errors="ignore").encode("utf-8")
+    return page
+
+
+def _utf8_suffix(data: bytes, limit: int) -> bytes:
+    if limit <= 0:
+        return b""
+    return data[-limit:].decode("utf-8", errors="ignore").encode("utf-8")
+
+
+@dataclass(frozen=True)
+class ResultPage:
+    content: str
+    total_bytes: int
+    next_offset: int | None
+
+
+def result_page(content: str, offset: int, limit: int) -> ResultPage:
+    data = content.encode("utf-8")
+    page = _utf8_prefix(data[offset:], limit)
+    next_offset = offset + len(page)
+    return ResultPage(
+        content=page.decode("utf-8"),
+        total_bytes=len(data),
+        next_offset=next_offset if next_offset < len(data) else None,
+    )
+
+
+def project_result_content(content: str, mode: ToolResultMode, event_id: str, limit: int) -> str:
+    data = content.encode("utf-8")
+    total = len(data)
+    if total <= limit or mode == ToolResultMode.FULL:
+        return content
+    if mode == ToolResultMode.PAGED:
+        page = result_page(content, 0, limit)
+        return (
+            f"[Tool result page: event_id={event_id} total_bytes={total} "
+            f"next_offset={page.next_offset}]\n"
+        ) + page.content
+    omitted = 0
+    head = b""
+    tail = b""
+    for _ in range(4):
+        header = (
+            f"[Tool result preview: event_id={event_id} total_bytes={total} "
+            f"omitted_bytes={omitted}; use read_tool_result for missing content]\n"
+        )
+        budget = max(0, limit - len(header.encode("utf-8")))
+        head_budget = int(budget * 0.4)
+        head = _utf8_prefix(data, head_budget)
+        tail = _utf8_suffix(data, budget - head_budget)
+        updated = total - len(head) - len(tail)
+        if updated == omitted:
+            break
+        omitted = updated
+    header = (
+        f"[Tool result preview: event_id={event_id} total_bytes={total} "
+        f"omitted_bytes={omitted}; use read_tool_result for missing content]\n"
+    )
+    return header + head.decode("utf-8") + "\n[...]\n" + tail.decode("utf-8")
+
+
 def outcome_event(
     call: ToolCall,
     outcome: ToolOutcome,
@@ -97,10 +165,23 @@ def outcome_event(
     suffix: str = "",
     timing: ToolExecutionTiming | None = None,
     recovered: bool = False,
+    spec: ToolSpec | None = None,
+    result_bytes: int = 50_000,
 ) -> NewEvent:
+    event_id = new_id("evt")
+    if (
+        isinstance(outcome, Completed)
+        and not outcome.concludes_turn
+        and spec is not None
+        and spec.result_mode != ToolResultMode.FULL
+    ):
+        content = project_result_content(outcome.content, spec.result_mode, event_id, result_bytes)
+        content = ("[tool error]\n" if outcome.is_error else "") + content + suffix
+    else:
+        content = outcome_text(call, outcome) + suffix
     message = Message(
         role="tool",
-        content=outcome_text(call, outcome) + suffix,
+        content=content,
         tool_call_id=call.call_id,
         name=call.name,
     )
@@ -125,6 +206,7 @@ def outcome_event(
         step=step,
         surface_op=SurfaceOp.APPEND,
         payload=payload,
+        event_id=event_id,
     )
 
 
@@ -136,13 +218,16 @@ def settle_outcomes(
     pacing_step_interval: int,
     blocked_resources: frozenset[str] = frozenset(),
     timings: Mapping[str, ToolExecutionTiming] | None = None,
+    result_bytes: int = 50_000,
+    full_max_bytes: int = 1_048_576,
 ) -> BatchDecision:
     events: list[NewEvent] = []
     acquired: set[str] = set()
     released: set[str] = set()
     final_content = ""
     cancelled = False
-    for index, (call, _spec, outcome) in enumerate(outcomes):
+    overflow = False
+    for index, (call, spec, outcome) in enumerate(outcomes):
         suffix = ""
         if (
             index == len(outcomes) - 1
@@ -161,9 +246,15 @@ def settle_outcomes(
                 step=step,
                 suffix=suffix,
                 timing=(timings or {}).get(call.call_id),
+                spec=spec,
+                result_bytes=result_bytes,
             )
         )
         if isinstance(outcome, Completed):
+            if (spec.result_mode == ToolResultMode.FULL or outcome.concludes_turn) and len(
+                outcome.content.encode("utf-8")
+            ) > full_max_bytes:
+                overflow = True
             released.update(outcome.release_resources)
             for message in outcome.additional_messages:
                 marker = message.provider_data.get("working_context")
@@ -193,6 +284,8 @@ def settle_outcomes(
         action = BatchAction.BLOCKED
     elif cancelled:
         action = BatchAction.CANCELLED
+    elif overflow:
+        action = BatchAction.FAILED
     elif final_content:
         action = BatchAction.FINALIZE
     else:
@@ -202,6 +295,8 @@ def settle_outcomes(
         error = "Execution is blocked by unresolved resources: " + ", ".join(
             sorted(blocked_resources | acquired)
         )
+    elif action == BatchAction.FAILED:
+        error = "tool_result_full_limit"
     return BatchDecision(
         action=action,
         events=tuple(events),

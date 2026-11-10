@@ -27,6 +27,15 @@ max_protocol_corrections = 2
 max_provider_attempts = 3
 retry_backoff_seconds = 0.1
 pacing_step_interval = 15
+max_steps = 50
+max_model_calls = 20
+max_tool_calls = 100
+max_input_tokens = 100000
+max_output_tokens = 10000
+max_total_tokens = 110000
+turn_deadline_seconds = 300
+# tool_result_bytes = 50000
+# tool_result_full_max_bytes = 1048576
 
 [[tools]]
 driver = "python"
@@ -40,6 +49,14 @@ start = "lazy" # or eager
 resources = ["filesystem"]
 timeout_seconds = 30
 cancel_grace_seconds = 0.25
+
+[[tools]]
+driver = "mcp"
+command = ["python3", "workers/mcp_server.py"]
+namespace = "public"
+start = "lazy"
+resources = ["remote_read"]
+timeout_seconds = 30
 
 [skills]
 paths = ["skills"]
@@ -58,6 +75,22 @@ await harness.close()
 ```
 
 Skills remain instructions only. Their metadata is added to the system prompt, and the read-only `skill_view` Tool loads a body on demand. Loading a Skill never runs adjacent scripts or expands Tool permissions.
+
+## Adapter injection and ownership
+
+`Harness.load()` and the `Harness` constructor accept optional `provider`, `store`, `delivery`, and `tools` objects. These are the existing four Adapter protocols; no plugin registry is involved. Harness-created dependencies are closed by Harness. Caller-injected dependencies remain caller-owned and are not closed. An ObservingEventStore created around an external Store flushes and closes its own worker without closing that Store.
+
+Exporters may optionally implement `flush()` and `close()`, synchronously or asynchronously. The queue is flushed before Exporter lifecycle calls. Harness closes Exporters created from `[trace]`; runtime-injected Exporters are flushed but not closed. `nextloop.testing.check_event_store(store)` exposes the same basic atomicity, idempotency, fencing, surface, and recovery-read contract used by the built-in Stores.
+
+## Budgets and Tool Results
+
+All budget fields default to `None`. Step, model-attempt, and validated Tool-batch limits stop the next side effect. Model attempts include retries and compaction. Token limits use Provider-reported usage and fail closed when required usage is missing or invalid. `turn_deadline_seconds` reuses cancellation and uncertain Tool semantics. Budgets are Turn-local; recovery closes an interrupted Turn and a later Turn gets a new budget.
+
+`ToolSpec.result_mode` supports `PREVIEW`, `PAGED`, and `FULL`, with `PREVIEW` as the default. Small results are unchanged. Large previews retain UTF-8-safe head/tail content and an `event_id`; pages are continuous. The durable outcome retains full content while the model Message contains the projection. `read_tool_result` reads committed content from the recovery log by `event_id`, UTF-8 byte offset, and bounded limit. FULL and terminal results are not generically truncated; exceeding the hard limit commits the full result and ends the Turn as failed without final delivery.
+
+## Transient Preview
+
+`TurnContext.preview` accepts one optional synchronous `PreviewSink`. Providers may implement `complete_with_preview`; Providers that only implement `complete` remain compatible and produce a response snapshot rather than synthetic token deltas. Preview events are transient, never enter the EventStore, never execute partial Tool Calls, and never trigger Delivery. The bounded worker queue replaces overflow with a RESET containing the latest transient snapshot. Slow or failing sinks do not change the Turn result, and closing a subscription does not cancel the Turn.
 
 ## Observability
 
@@ -87,6 +120,14 @@ history = await harness.history(from_turn=1, to_turn=10)
 ```
 
 History reads the complete EventStore log and uses the same TraceProjector as live export. Only new-format Events are supported; missing measured Model/Tool fields produce `timing_source="unknown"`, not estimated durations.
+
+## MCP stdio
+
+`driver = "mcp"` starts a standard MCP `2025-06-18` stdio server. The adapter performs initialize, the initialized notification, and paginated `tools/list` until the cursor is exhausted, then keeps a static catalog for the process lifetime. Remote annotations do not grant parallel execution, resources, or approval privileges.
+
+MCP calls use ordinary ToolRuntime routing and the existing JSON Schema validation. Text and `structuredContent` are supported; `isError` maps to a normal Tool error. Cancellation uses the original JSON-RPC requestId. Timeout, transport failure, and process crash become uncertain outcomes with local resource locks, never automatic restart or replay. Closing uses stdin EOF followed by bounded process termination, not the private stdio `shutdown` method.
+
+HTTP transports, OAuth, `listChanged`, dynamic catalog revisions, prompts/resources/sampling, and non-text content mapping are outside this version.
 
 ## Stdio protocol
 

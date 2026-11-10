@@ -19,8 +19,11 @@ from ..contracts import (
     ValidationIssue,
 )
 from .cleanup import wait_for_cleanup
+from .mcp import McpStdioRuntime
 from .stdio import StdioDriver
 from .tools import ToolRegistry, validate_calls
+
+ManagedRuntime = StdioDriver | McpStdioRuntime
 
 
 class CompositeToolRuntime:
@@ -28,7 +31,7 @@ class CompositeToolRuntime:
         self,
         runtimes: Sequence[ToolRuntime] = (),
         *,
-        stdio: Sequence[StdioDriver] = (),
+        stdio: Sequence[ManagedRuntime] = (),
         origins: Sequence[str] = (),
         stdio_origins: Sequence[str] = (),
     ) -> None:
@@ -51,7 +54,7 @@ class CompositeToolRuntime:
     ) -> CompositeToolRuntime:
         runtimes: list[ToolRuntime] = []
         origins: list[str] = []
-        stdio: list[StdioDriver] = []
+        stdio: list[ManagedRuntime] = []
         stdio_origins: list[str] = []
         for config in configs:
             if config.driver == "python":
@@ -62,6 +65,9 @@ class CompositeToolRuntime:
             elif config.driver == "stdio":
                 stdio.append(StdioDriver(config, sensitive_env=sensitive_env))
                 stdio_origins.append(f"stdio worker {' '.join(config.command)}")
+            elif config.driver == "mcp":
+                stdio.append(McpStdioRuntime(config, sensitive_env=sensitive_env))
+                stdio_origins.append(f"MCP server {' '.join(config.command)}")
             else:
                 raise HarnessError(f"Unsupported Tool driver: {config.driver}")
         return cls(
@@ -173,4 +179,4 @@ def load_python_tools(target: str) -> ToolRegistry:
 
 
 def _stdio_configs(configs: Sequence[ToolConfig]) -> tuple[ToolConfig, ...]:
-    return tuple(config for config in configs if config.driver == "stdio")
+    return tuple(config for config in configs if config.driver in ("stdio", "mcp"))

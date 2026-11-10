@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+import pytest
+
+from nextloop.adapters.memory import InMemoryEventStore
+from nextloop.adapters.sqlite import SQLiteEventStore
+from nextloop.contracts import EventType, InvariantViolation, NewEvent
+from nextloop.testing import check_event_store
+
+
+@pytest.fixture(params=["memory", "sqlite"])
+def store(request, tmp_path):
+    if request.param == "memory":
+        yield InMemoryEventStore()
+        return
+    value = SQLiteEventStore(str(tmp_path / "contract.sqlite3"))
+    yield value
+    value.close()
+
+
+@pytest.mark.asyncio
+async def test_public_store_contract(store):
+    await check_event_store(store)
+
+
+class Unserializable:
+    def __deepcopy__(self, memo):
+        raise ValueError("cannot copy")
+
+
+@pytest.mark.asyncio
+async def test_failed_batch_is_atomic(store):
+    epoch, _, _ = await store.attach_writer("s")
+    drafts = [
+        NewEvent(EventType.TURN_START, turn=1, step=0),
+        NewEvent(EventType.STEP_START, turn=1, step=1, payload={"bad": Unserializable()}),
+    ]
+    with pytest.raises((TypeError, ValueError)):
+        await store.append("s", epoch, 1, drafts)
+    assert await store.load_recovery("s") == ()
+
+
+@pytest.mark.asyncio
+async def test_sqlite_rejects_unknown_event_schema(tmp_path):
+    store = SQLiteEventStore(str(tmp_path / "schema.sqlite3"))
+    epoch, _, _ = await store.attach_writer("s")
+    await store.append("s", epoch, 1, [NewEvent(EventType.TURN_START, turn=1, step=0)])
+    store._connection.execute("UPDATE session_events SET schema_version = 'future'")
+
+    with pytest.raises(InvariantViolation, match="future"):
+        await store.load_recovery("s")
+    store.close()

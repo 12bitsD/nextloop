@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import httpx
@@ -43,6 +43,26 @@ class AnthropicProvider:
         *,
         attempt: int,
         cancel: asyncio.Event,
+    ) -> ModelResponse:
+        return await self._complete(request, attempt=attempt, cancel=cancel)
+
+    async def complete_with_preview(
+        self,
+        request: CandidateRequest,
+        *,
+        attempt: int,
+        cancel: asyncio.Event,
+        emit: Callable[[Mapping[str, Any]], None],
+    ) -> ModelResponse:
+        return await self._complete(request, attempt=attempt, cancel=cancel, emit=emit)
+
+    async def _complete(
+        self,
+        request: CandidateRequest,
+        *,
+        attempt: int,
+        cancel: asyncio.Event,
+        emit: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> ModelResponse:
         system = "\n\n".join(
             message.content for message in request.messages if message.role == "system"
@@ -102,24 +122,48 @@ class AnthropicProvider:
                         index = int(payload["index"])
                         block = payload["content_block"]
                         if block["type"] == "text":
-                            text_blocks[index] = [block.get("text", "")]
+                            text = str(block.get("text", ""))
+                            text_blocks[index] = [text]
+                            if emit is not None and text:
+                                emit({"channel": "content", "delta": text})
                         elif block["type"] == "tool_use":
+                            arguments = (
+                                json.dumps(block["input"], separators=(",", ":"))
+                                if block.get("input")
+                                else ""
+                            )
                             tool_blocks[index] = {
                                 "id": block["id"],
                                 "name": block["name"],
-                                "arguments": (
-                                    json.dumps(block["input"], separators=(",", ":"))
-                                    if block.get("input")
-                                    else ""
-                                ),
+                                "arguments": arguments,
                             }
+                            if emit is not None:
+                                emit(
+                                    {
+                                        "channel": "tool_call",
+                                        "index": index,
+                                        "call_id": str(block["id"]),
+                                        "name_delta": str(block["name"]),
+                                        "arguments_delta": arguments,
+                                    }
+                                )
                     elif event == "content_block_delta":
                         index = int(payload["index"])
                         delta = payload["delta"]
                         if delta["type"] == "text_delta":
                             text_blocks.setdefault(index, []).append(delta["text"])
+                            if emit is not None:
+                                emit({"channel": "content", "delta": str(delta["text"])})
                         elif delta["type"] == "input_json_delta":
                             tool_blocks[index]["arguments"] += delta["partial_json"]
+                            if emit is not None:
+                                emit(
+                                    {
+                                        "channel": "tool_call",
+                                        "index": index,
+                                        "arguments_delta": str(delta["partial_json"]),
+                                    }
+                                )
                     elif event == "message_delta":
                         stop_reason = payload.get("delta", {}).get("stop_reason")
                         finish_reason = self._finish_reason(stop_reason) or finish_reason

@@ -30,12 +30,19 @@ class BatchResult:
     issues: tuple[ValidationIssue, ...] = ()
     blocked_resources: frozenset[str] = frozenset()
     timings: Mapping[str, ToolExecutionTiming] = field(default_factory=dict)
+    budget_reason: str | None = None
 
 
 class BatchExecutor:
-    def __init__(self, registry: ToolRuntime, max_parallel: int) -> None:
+    def __init__(
+        self,
+        registry: ToolRuntime,
+        max_parallel: int,
+        admit: Callable[[int], str | None] | None = None,
+    ) -> None:
         self.registry = registry
         self.max_parallel = max_parallel
+        self.admit = admit
 
     async def execute(
         self,
@@ -69,6 +76,10 @@ class BatchExecutor:
                 ),
                 blocked_resources=blocked,
             )
+        if self.admit is not None:
+            reason = self.admit(len(validated))
+            if reason is not None:
+                return BatchResult(budget_reason=reason)
 
         outcomes: list[tuple[ToolCall, ToolSpec, ToolOutcome]] = []
         timings: dict[str, ToolExecutionTiming] = {}
@@ -122,6 +133,7 @@ class BatchExecutor:
                             "Truncated after uncertain parallel outcome",
                         )
                     )
+                    break
         return BatchResult(outcomes=tuple(outcomes), timings=timings)
 
     async def _run_one(

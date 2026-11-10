@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.4.0rc1"
+API_VERSION = "0.5.0rc1"
 EVENT_SCHEMA_VERSION = "1.0"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
@@ -148,6 +148,12 @@ class ToolExecutionMode(StrEnum):
     EXCLUSIVE = "exclusive"  # Mutating barrier; failure truncates remaining batch
 
 
+class ToolResultMode(StrEnum):
+    PREVIEW = "preview"
+    PAGED = "paged"
+    FULL = "full"
+
+
 @dataclass(frozen=True)
 class ToolCall:
     call_id: str
@@ -163,6 +169,7 @@ class ToolSpec:
     mode: ToolExecutionMode = ToolExecutionMode.EXCLUSIVE
     resources: tuple[str, ...] = ()
     timeout_seconds: float | None = None
+    result_mode: ToolResultMode = ToolResultMode.PREVIEW
 
 
 @dataclass(frozen=True)
@@ -310,6 +317,33 @@ class ModelResponse:
     provider_data: Mapping[str, Any] = field(default_factory=dict)
 
 
+class PreviewKind(StrEnum):
+    ATTEMPT_STARTED = "attempt_started"
+    DELTA = "delta"
+    SNAPSHOT = "snapshot"
+    ATTEMPT_ENDED = "attempt_ended"
+    RESET = "reset"
+    RESOLVED = "resolved"
+
+
+@dataclass(frozen=True)
+class PreviewEvent:
+    stream_id: str
+    seq: int
+    session_id: str
+    turn: int
+    step: int
+    attempt: int
+    kind: PreviewKind
+    delta: Mapping[str, Any] = field(default_factory=dict)
+    snapshot: ModelResponse | None = None
+    decision_event_ids: tuple[str, ...] = ()
+
+
+class PreviewSink(Protocol):
+    def publish(self, event: PreviewEvent) -> None: ...
+
+
 @dataclass(frozen=True)
 class CandidateRequest:
     session_id: str
@@ -417,6 +451,15 @@ class LoopConfig:
     max_provider_attempts: int = 3
     retry_backoff_seconds: float = 0.1
     pacing_step_interval: int = 15
+    max_steps: int | None = None
+    max_model_calls: int | None = None
+    max_tool_calls: int | None = None
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
+    max_total_tokens: int | None = None
+    turn_deadline_seconds: float | None = None
+    tool_result_bytes: int = 50_000
+    tool_result_full_max_bytes: int = 1_048_576
 
 
 @dataclass(frozen=True)
@@ -545,3 +588,4 @@ class TurnContext:
     tools: ToolRuntime
     delivery: DeliveryOwner
     input_id: str = field(default_factory=lambda: new_id("in"))
+    preview: PreviewSink | None = None

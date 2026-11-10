@@ -41,23 +41,28 @@ class InMemoryEventStore:
             existing = self._events[session_id]
             if expected_seq != len(existing) + 1:
                 return self._idempotent(existing, events)
+            known_ids = {event.event_id for event in existing}
             committed = []
             for offset, draft in enumerate(events):
-                event = Event(
-                    session_id=session_id,
-                    seq=expected_seq + offset,
-                    turn=draft.turn,
-                    step=draft.step,
-                    attempt=draft.attempt,
-                    writer_epoch=writer_epoch,
-                    event_id=draft.event_id,
-                    event_type=draft.event_type,
-                    surface_op=draft.surface_op,
-                    payload=copy.deepcopy(dict(draft.payload)),
-                    occurred_at=utc_now(),
+                if draft.event_id in known_ids:
+                    raise InvariantViolation("Event ID reused with different content")
+                known_ids.add(draft.event_id)
+                committed.append(
+                    Event(
+                        session_id=session_id,
+                        seq=expected_seq + offset,
+                        turn=draft.turn,
+                        step=draft.step,
+                        attempt=draft.attempt,
+                        writer_epoch=writer_epoch,
+                        event_id=draft.event_id,
+                        event_type=draft.event_type,
+                        surface_op=draft.surface_op,
+                        payload=copy.deepcopy(dict(draft.payload)),
+                        occurred_at=utc_now(),
+                    )
                 )
-                existing.append(event)
-                committed.append(event)
+            existing.extend(committed)
             return committed
 
     async def load_surface(self, session_id: str) -> Sequence[Event]:

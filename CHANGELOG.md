@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.0rc1 - 2026-11-10
+
+### Added
+
+- Optional Turn-local Step, Provider-attempt, Tool-call, input/output/total-token, and deadline budgets with structured terminal reasons and fail-closed usage handling.
+- Provider, EventStore, DeliveryOwner, and ToolRuntime injection on Harness, explicit dependency ownership, and optional Exporter `flush()` / `close()` lifecycle.
+- `PREVIEW`, `PAGED`, and `FULL` Tool Result policies with durable full outcomes, UTF-8-safe projections, and committed-result read-back through `read_tool_result`.
+- Optional transient Provider previews with OpenAI/Anthropic deltas, legacy-Provider snapshots, bounded queues, RESET recovery, and committed assistant resolution.
+- MCP stdio runtime with `2025-06-18` initialization, paginated catalogs, ordinary Tool Calls, requestId cancellation, structured results, and crash uncertainty.
+- Turn-private surface snapshots and a public `nextloop.testing.check_event_store()` conformance entrypoint for third-party Stores.
+
+### Fixed
+
+- Recovery pairs Tool calls by `(step, call_id)`, skips rejected batches, and no longer duplicates parallel Tool results or misclassifies finalization cancellation.
+- Delivery waits now honor Turn deadlines, returning `DELIVERY_UNKNOWN` while preserving the committed final for idempotent recovery.
+- Invalid Provider usage can no longer reduce budgets or bypass token limits; synchronous Tool timeout configuration now fails at registration unless the handler is async.
+- Preview overflow preserves the latest recoverable snapshot and control state, synchronous sinks run off the event loop, and worker shutdown drains bounded output.
+- Stdio and MCP share one lifecycle for lazy startup, request identity, cancellation, timeout, uncertain outcomes, and protected process cleanup without replay.
+- Malformed MCP handshakes and schemas become structured protocol errors; UTF-8 result pages always advance; Memory Store commits stage before becoming visible.
+
+### Verified
+
+- 185 offline tests, ruff, strict mypy, wheel/sdist builds, twine checks, and clean wheel installation.
+- Python/Rust/C++ worker conformance, real MCP subprocess scenarios, and live DeepSeek text + Preview + usage and Tool Call + Delivery smoke.
+
 ## 0.4.0rc1 - 2026-11-09
 
 ### Added

@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 
 from ..contracts import (
     CandidateRequest,
@@ -11,11 +12,13 @@ from ..contracts import (
     LoopConfig,
     ModelProvider,
     ModelResponse,
+    ModelUsage,
     NewEvent,
     ProviderError,
     utc_now,
 )
 from ..events.project import usage_to_data
+from .preview import PreviewChannel
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,7 @@ class ModelCallResult:
     error: ProviderError | None = None
     cancelled: bool = False
     rebuild_for_steer: bool = False
+    budget_reason: str | None = None
 
 
 class ModelCaller:
@@ -33,10 +37,16 @@ class ModelCaller:
         provider: ModelProvider,
         config: LoopConfig,
         has_steer: Callable[[], Awaitable[bool]],
+        before_attempt: Callable[[], str | None] | None = None,
+        record_usage: Callable[[ModelUsage | None], str | None] | None = None,
+        preview: PreviewChannel | None = None,
     ) -> None:
         self.provider = provider
         self.config = config
         self.has_steer = has_steer
+        self.before_attempt = before_attempt
+        self.record_usage = record_usage
+        self.preview = preview
 
     async def call(
         self,
@@ -49,20 +59,45 @@ class ModelCaller:
         for attempt in range(1, self.config.max_provider_attempts + 1):
             if cancel.is_set():
                 return ModelCallResult(events=tuple(events), cancelled=True)
+            if self.before_attempt is not None:
+                reason = self.before_attempt()
+                if reason is not None:
+                    return ModelCallResult(events=tuple(events), budget_reason=reason)
+            preview = self.preview if purpose == "inference" else None
+            streaming_complete = (
+                getattr(self.provider, "complete_with_preview", None) if preview else None
+            )
+            if preview is not None:
+                preview.attempt_started(request, attempt, streaming=callable(streaming_complete))
             started_at = utc_now()
             started = time.monotonic()
             events.append(
                 self._event(request, attempt, "started", purpose=purpose, started_at=started_at)
             )
             try:
-                response = await _await_with_cancel(
-                    self.provider.complete(request, attempt=attempt, cancel=cancel),
-                    cancel,
-                )
+                if preview is not None and callable(streaming_complete):
+                    response = await _await_with_cancel(
+                        streaming_complete(
+                            request,
+                            attempt=attempt,
+                            cancel=cancel,
+                            emit=partial(preview.delta, request, attempt),
+                        ),
+                        cancel,
+                    )
+                else:
+                    response = await _await_with_cancel(
+                        self.provider.complete(request, attempt=attempt, cancel=cancel),
+                        cancel,
+                    )
+                    if preview is not None:
+                        preview.snapshot(request, attempt, response)
             except (_CancelledByUser, asyncio.CancelledError):
                 events.append(
                     self._timed_event(request, attempt, "cancelled", purpose, started_at, started)
                 )
+                if preview is not None:
+                    preview.attempt_ended(request, attempt, status="cancelled")
                 return ModelCallResult(events=tuple(events), cancelled=True)
             except ProviderError as exc:
                 events.append(
@@ -79,13 +114,22 @@ class ModelCaller:
                         code=exc.code,
                     )
                 )
+                will_retry = (
+                    not exc.partial_output
+                    and exc.retryable
+                    and attempt < self.config.max_provider_attempts
+                )
+                if preview is not None:
+                    preview.attempt_ended(
+                        request,
+                        attempt,
+                        status="error",
+                        will_retry=will_retry,
+                        error=str(exc),
+                    )
                 if cancel.is_set():
                     return ModelCallResult(events=tuple(events), cancelled=True)
-                if (
-                    exc.partial_output
-                    or not exc.retryable
-                    or attempt >= self.config.max_provider_attempts
-                ):
+                if not will_retry:
                     return ModelCallResult(events=tuple(events), error=exc)
                 if await self.has_steer():
                     return ModelCallResult(events=tuple(events), rebuild_for_steer=True)
@@ -106,6 +150,8 @@ class ModelCaller:
                         error=str(error),
                     )
                 )
+                if preview is not None:
+                    preview.attempt_ended(request, attempt, status="error", error=str(error))
                 return ModelCallResult(events=tuple(events), error=error)
             events.append(
                 self._timed_event(
@@ -121,7 +167,12 @@ class ModelCaller:
                     tool_call_count=len(response.tool_calls),
                 )
             )
-            return ModelCallResult(events=tuple(events), response=response)
+            if preview is not None:
+                preview.attempt_ended(request, attempt, status="response", response=response)
+            budget_reason = self.record_usage(response.usage) if self.record_usage else None
+            return ModelCallResult(
+                events=tuple(events), response=response, budget_reason=budget_reason
+            )
         return ModelCallResult(
             events=tuple(events),
             error=ProviderError("Provider retry loop exited without a response"),

@@ -32,6 +32,9 @@ from .contracts import (
     ModelUsage,
     NewEvent,
     NextloopError,
+    PreviewEvent,
+    PreviewKind,
+    PreviewSink,
     ProtocolExhausted,
     ProviderConfig,
     ProviderError,
@@ -51,6 +54,7 @@ from .contracts import (
     ToolExecutionTiming,
     ToolOutcome,
     ToolOutcomeKind,
+    ToolResultMode,
     ToolRuntime,
     ToolSpec,
     TraceConfig,
@@ -71,11 +75,14 @@ from .contracts import (
 )
 from .events.trace import TraceProjector, project_traces
 from .execute.composite import CompositeToolRuntime
+from .execute.mcp import McpStdioRuntime
+from .execute.result_read import with_result_reads
 from .execute.stdio import StdioDriver, StdioProtocolError
 from .execute.tools import ToolContext, ToolRegistry
 from .harness import Harness, MemoryDeliveryOwner, load_harness_spec
 from .loop import AgentLoop
 from .skills import SkillRegistry, skill_view
+from .testing import check_event_store
 
 __all__ = [
     "API_VERSION",
@@ -89,6 +96,7 @@ __all__ = [
     "Cancelled",
     "CapacityError",
     "Completed",
+    "check_event_store",
     "CompositeToolRuntime",
     "DeliveryOwner",
     "Event",
@@ -102,6 +110,7 @@ __all__ = [
     "InMemoryEventStore",
     "InvariantViolation",
     "LoopConfig",
+    "McpStdioRuntime",
     "MemoryDeliveryOwner",
     "Message",
     "ModelCallPurpose",
@@ -114,6 +123,9 @@ __all__ = [
     "NextloopError",
     "ObservingEventStore",
     "OpenAIProvider",
+    "PreviewEvent",
+    "PreviewKind",
+    "PreviewSink",
     "ProtocolExhausted",
     "ProviderConfig",
     "ProviderError",
@@ -140,6 +152,7 @@ __all__ = [
     "ToolOutcome",
     "ToolOutcomeKind",
     "ToolRegistry",
+    "ToolResultMode",
     "ToolRuntime",
     "ToolSpec",
     "TraceConfig",
@@ -161,4 +174,5 @@ __all__ = [
     "project_traces",
     "skill_view",
     "utc_now",
+    "with_result_reads",
 ]

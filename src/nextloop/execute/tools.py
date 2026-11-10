@@ -77,6 +77,10 @@ class ToolRegistry:
     def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
         if spec.name in self._specs:
             raise ValueError(f"Duplicate Tool name: {spec.name}")
+        if spec.timeout_seconds is not None and not inspect.iscoroutinefunction(handler):
+            raise TypeError(
+                f"Tool {spec.name} requires an async handler when timeout is configured"
+            )
         self._specs[spec.name] = spec
         self._handlers[spec.name] = handler
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 
 from .contracts import (
@@ -35,7 +36,11 @@ class AgentLoop:
                 turn=last_turn + 1,
                 resource_locks=set(self._resource_locks.get(context.session_id, set())),
             )
+            execution.surface = tuple(await context.store.load_surface(context.session_id))
             self._active[context.session_id] = execution
+            deadline = context.config.turn_deadline_seconds
+            if deadline is not None:
+                execution.deadline_task = asyncio.create_task(self._expire(execution, deadline))
             try:
                 await execution.append(
                     [
@@ -55,7 +60,16 @@ class AgentLoop:
                 self._resource_locks[context.session_id] = set(execution.resource_locks)
                 return outcome
             finally:
+                if execution.deadline_task is not None:
+                    execution.deadline_task.cancel()
+                    await asyncio.gather(execution.deadline_task, return_exceptions=True)
+                if execution.preview is not None:
+                    await execution.preview.close()
                 self._active.pop(context.session_id, None)
+
+    async def _expire(self, execution: SessionExecution, seconds: float) -> None:
+        await asyncio.sleep(seconds)
+        await self._request_cancel(execution, "turn_deadline_exceeded")
 
     async def steer(self, session_id: str, content: str, *, input_id: str | None = None) -> bool:
         execution = self._active.get(session_id)
@@ -84,8 +98,13 @@ class AgentLoop:
         execution = self._active.get(session_id)
         if execution is None:
             return False
+        return await self._request_cancel(execution, cause)
+
+    async def _request_cancel(self, execution: SessionExecution, cause: str) -> bool:
         async with execution.actor.commit_lock:
-            if execution.final_committed:
+            if execution.cancel_cause is not None:
+                return False
+            if execution.final_committed and cause != "turn_deadline_exceeded":
                 return False
             await execution._append_locked(
                 [
@@ -97,6 +116,7 @@ class AgentLoop:
                     )
                 ]
             )
+            execution.cancel_cause = cause
             execution.cancel.set()
             return True
 

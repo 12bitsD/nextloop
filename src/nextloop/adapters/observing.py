@@ -55,11 +55,15 @@ class ObservingEventStore:
         max_queue_size: int = 1000,
         close_timeout: float = 5.0,
         on_error: TraceErrorHandler | None = None,
+        close_store: bool = True,
+        close_exporters: Sequence[TraceExporterInput] = (),
     ) -> None:
         if max_queue_size <= 0 or close_timeout <= 0:
             raise ValueError("max_queue_size and close_timeout must be positive")
         self._store = store
+        self._close_store = close_store
         self._exporters = tuple(exporters)
+        self._close_exporters = tuple(close_exporters)
         self._projector = TraceProjector()
         self._projector_lock = asyncio.Lock()
         self._seeded_sessions: set[str] = set()
@@ -152,10 +156,16 @@ class ObservingEventStore:
     async def flush(self, timeout_seconds: float | None = None) -> bool:
         try:
             await asyncio.wait_for(self._queue.join(), timeout=timeout_seconds)
-            return True
         except TimeoutError:
             self._report_error(TimeoutError("Timed out flushing trace exports"), None)
             return False
+        for exporter in self._exporters:
+            try:
+                await _exporter_lifecycle(exporter, "flush")
+            except Exception as exc:
+                self._report_error(exc, None)
+                return False
+        return True
 
     async def close(self) -> None:
         async with self._close_lock:
@@ -189,8 +199,13 @@ class ObservingEventStore:
                 except asyncio.CancelledError:
                     if not self._worker_task.done():
                         raise
+            for exporter in self._close_exporters:
+                try:
+                    await _exporter_lifecycle(exporter, "close")
+                except Exception as exc:
+                    self._report_error(exc, None)
         finally:
-            close = getattr(self._store, "close", None)
+            close = getattr(self._store, "close", None) if self._close_store else None
             if callable(close):
                 result = close()
                 if inspect.isawaitable(result):
@@ -212,6 +227,18 @@ async def _export(exporter: TraceExporterInput, record: TraceRecord) -> None:
         result = callback(record)
     else:
         result = await asyncio.to_thread(callback, record)
+    if inspect.isawaitable(result):
+        await result
+
+
+async def _exporter_lifecycle(exporter: TraceExporterInput, method: str) -> None:
+    callback = getattr(exporter, method, None)
+    if not callable(callback):
+        return
+    if inspect.iscoroutinefunction(callback):
+        result = callback()
+    else:
+        result = await asyncio.to_thread(callback)
     if inspect.isawaitable(result):
         await result
 
