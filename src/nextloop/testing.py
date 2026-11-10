@@ -79,6 +79,9 @@ class FaultInjectingEventStore(_FaultInjector):
         )
         self._store = store
 
+    async def session_ids(self) -> Sequence[str]:
+        return await self._store.session_ids()
+
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         return await self._store.attach_writer(session_id, force=force)
 

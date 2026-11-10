@@ -6,12 +6,12 @@ nextloop is an embeddable Python AgentLoop for developers who want to build thei
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.7.0**.
+Current version: **0.8.0**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.7.0
+python -m pip install nextloop==0.8.0
 ```
 
 For local development:
@@ -26,7 +26,7 @@ uv pip install --python .venv/bin/python -e '.[dev]'
 - **Execution you can reason about.** DSH-aligned Session/Turn/Step/attempt coordinates, writer fencing, and append-only Trajectory instead of implicit runner state.
 - **Crash recovery without blind replay.** Resource locks, uncertain outcomes, crash closers, and delivery-only recovery tell you what is known, what is unknown, and what must not run twice.
 - **Tools without framework lock-in.** Register Python functions directly, connect MCP stdio servers, or run persistent Rust and C++ workers over stdio JSON-RPC. Schema validation, parallel calls, and exclusive barriers are built in.
-- **Observability from committed facts.** Structured Model/Tool/Turn traces, asynchronous Exporters, and Session history. No second execution path and no telemetry-driven control flow.
+- **Observability from committed facts.** Structured Model/Tool/Turn traces, asynchronous Exporters, Session history, and a durable caller-driven SQLite Outbox. No second execution path and no telemetry-driven control flow.
 - **Small, explicit integration.** Assemble Providers, Stores, Tools, and Skills with `harness.toml`, or inject your own adapters in Python. OpenAI-compatible and Anthropic Providers are included.
 - **Bounded execution and context.** Optional Step, Provider-attempt, Tool, token, and deadline budgets. Large Tool Results use explicit preview/page/full policies with durable read-back.
 - **Transient previews, authoritative results.** Optional OpenAI/Anthropic deltas with bounded queues and snapshot recovery. Previews never enter the EventStore, execute partial Tool Calls, or replace committed Delivery.
@@ -82,7 +82,7 @@ Core adapter seams are `EventStore`, `ModelProvider`, `ToolRuntime`, and `Delive
 | Event compatibility | Schema 1.0 is upcast only during reads; original payload bytes are preserved for idempotent append. | Reading schema 1.1 with 0.5.0 or earlier, or accepting unknown future schemas. |
 | Recovery | Recovery writes crash closers; the caller starts a new Turn with projected prior messages and Pending Input. | In-place replay of the interrupted Turn or automatic execution of uncertain calls. |
 | Preview | Preview is transient and cannot execute partial Tool arguments. | Preview as a durable EventStore fact or a substitute for committed Delivery. |
-| Observability | Committed Events are authoritative and can be replayed for history. | The current in-memory Exporter queue as a durable outbox. |
+| Observability | Committed Events are authoritative. The live queue is best-effort; `SQLiteOutbox` durably replays closed Turns with cursors, bounded attempts, gaps, and owner-token locks. | Exactly-once export, exporting active Turns, or cleanup of third-party exported copies. |
 | MCP | stdio lifecycle, paginated static catalogs, operation metadata, and uncertain crash handling. | Remote MCP, OAuth, dynamic `listChanged`, or non-text content mapping. |
 
 `Harness.load("harness.toml")` assembles those adapters without changing the Loop. Use `await harness.check()` for offline validation and `await harness.run("input")` for a model-backed Turn. See [Harness and extension interface](docs/design/harness.md) for the strict TOML schema, stdio protocol, lifecycle rules, and CLI.
@@ -136,6 +136,17 @@ history = await harness.history(from_turn=1, to_turn=10)
 ```
 
 History works with memory and SQLite Stores even when no Exporter is configured.
+
+For replay that survives process restart, drive a durable Outbox from your application:
+
+```python
+outbox = SQLiteOutbox(store, "outbox.sqlite3", [my_exporter], max_attempts=3)
+report = await outbox.export_pending()  # all Sessions; pass session_id to select one
+print(report.exported, outbox.gaps())
+outbox.close()
+```
+
+Only closed Turns are eligible. Successful Exporter calls advance an independent cursor; failures persist attempts and eventually produce auditable gaps. Owner-token locks and heartbeats prevent concurrent callers from exporting the same pending records, while expired locks allow crash takeover. Export is at least once; synchronous calls that time out can still produce late side effects. Asynchronous Exporters must respond to cancellation, because code that suppresses cancellation can delay cleanup. Neither case counts as a successful acknowledgement.
 
 `ToolRegistry` is the built-in `ToolRuntime` implementation:
 
@@ -203,14 +214,15 @@ The release checks cover:
 - recorded OpenAI and Anthropic SSE streams;
 - 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
 - live DeepSeek text + Preview + usage and real Tool Call + Delivery smoke;
+- durable Outbox ack/crash windows, replay identity, bounded retries/gaps, lock heartbeat/takeover, and concurrent schema migration;
 - a 10,505-event benchmark with cross-Store, incremental, and required-content parity;
-- 357 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
+- 373 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 
 - nika integration is separate acceptance work.
-- Concurrent writers across multiple processes fail closed; they are not coordinated by time-based leases.
-- Large-asset lifecycle, backup, and GC are not part of this release.
+- Writer leases coordinate same-host processes only; distributed locks and exactly-once export are not provided.
+- Large-asset lifecycle, backup, Session deletion, and GC are not part of this release.
 - Official OpenAI and Anthropic API acceptance remains a 1.0 hard gate; recorded streams and DeepSeek do not substitute for it.
 
 ## Documents
@@ -226,7 +238,7 @@ Current limits:
 - [Development plan](docs/architecture/development-plan.md)
 - [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), and [ADR-0007 Approval](docs/adr/0007-approval.md), and [ADR-0008 Owner leases](docs/adr/0008-lease.md)
+- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), [ADR-0007 Approval](docs/adr/0007-approval.md), [ADR-0008 Owner leases](docs/adr/0008-lease.md), and [ADR-0009 Durable Outbox](docs/adr/0009-outbox.md)
 
 ## Release
 

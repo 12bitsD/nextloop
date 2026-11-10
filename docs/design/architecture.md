@@ -32,7 +32,7 @@ The Loop coordinates execution; the Store owns ordering and writer fencing. `eve
 - Pending Input is derived from INPUT_ACCEPTED and USER_MESSAGE by `input_id`. A later Step boundary commits its consumption; the in-memory inbox is only a wake-up signal.
 - Trace records are projections of committed Events. Export failures cannot change Turn outcomes.
 
-Owner leases are optional. Same-owner restarts take over immediately; different owners require expiry or explicit force. Heartbeat renewal is independent of appends, and the Store clock decides expiry. SQLite promises same-host multi-process contention only, not distributed coordination. Persistent Outbox and Session deletion remain later milestones.
+Owner leases are optional. Same-owner restarts take over immediately; different owners require expiry or explicit force. Heartbeat renewal is independent of appends, and the Store clock decides expiry. SQLite promises same-host multi-process contention only, not distributed coordination. Durable Trace export is implemented by the caller-driven `SQLiteOutbox`; Session deletion remains a later milestone.
 
 ## Complexity boundaries
 
@@ -50,7 +50,7 @@ The benchmark checks Memory/SQLite Conversation Projection parity, Model/Tool Tr
 
 ## Frozen import contract
 
-The root `nextloop` package keeps its existing convenience re-exports. `tests/test_import_contract.py` snapshots all 97 names and rejects accidental additions, removals, and duplicate entries.
+The root `nextloop` package keeps its existing convenience re-exports. `tests/test_import_contract.py` snapshots all 100 names and rejects accidental additions, removals, and duplicate entries.
 
 Core integration paths:
 

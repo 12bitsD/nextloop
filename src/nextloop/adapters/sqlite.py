@@ -19,6 +19,7 @@ from ..contracts import (
     utc_now,
 )
 from ..events.upcast import upcast_event, validate_event_schema
+from ._sqlite import execute_with_busy_retry
 
 
 class SQLiteEventStore:
@@ -95,22 +96,18 @@ class SQLiteEventStore:
 
     @staticmethod
     def _enable_wal(connection: sqlite3.Connection) -> None:
-        deadline = time.monotonic() + 5.0
-        while True:
-            try:
-                connection.execute("PRAGMA journal_mode=WAL")
-                return
-            except sqlite3.OperationalError as exc:
-                message = str(exc).lower()
-                if "locked" not in message and "busy" not in message:
-                    raise
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.01)
+        execute_with_busy_retry(connection, "PRAGMA journal_mode=WAL")
 
     def close(self) -> None:
         with self._lock:
             self._connection.close()
+
+    async def session_ids(self) -> Sequence[str]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT DISTINCT session_id FROM session_events ORDER BY session_id"
+            ).fetchall()
+            return tuple(str(row["session_id"]) for row in rows)
 
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         with self._lock:

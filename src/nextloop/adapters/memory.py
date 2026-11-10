@@ -47,6 +47,10 @@ class InMemoryEventStore:
         self.lease_seconds = lease_seconds if owner_id is not None else None
         self._clock = clock
 
+    async def session_ids(self) -> Sequence[str]:
+        async with self._lock:
+            return tuple(sorted(self._events))
+
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         async with self._lock:
             if self.lease_seconds is not None:

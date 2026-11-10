@@ -2,7 +2,7 @@
 
 Purpose: distinguish implemented capabilities from remaining work. Executable evidence is owned by the [verification matrix](../design/verification-matrix.md).
 
-## Implemented in the current 0.7 line
+## Implemented in the current 0.8 line
 
 | Feature | Implementation | Evidence |
 |---|---|---|
@@ -19,6 +19,7 @@ Purpose: distinguish implemented capabilities from remaining work. Executable ev
 | Approval | Atomic Intent/request, new-Turn resume, origin pairing, lazy expiry | Zero pre-grant dispatch, crash windows, concurrent resume, rejection, cancellation, and fresh budgets |
 | Providers | OpenAI-compatible and Anthropic streaming adapters | Recorded protocol streams plus separately identified live-provider smoke |
 | Observability | Model/Tool/Turn Trace DTOs, async Exporters, history | Live/history parity, failure isolation, bounded close, and 10k incremental parity |
+| Durable Outbox | Caller-driven replay, persistent cursor/attempts/gaps, owner-token locks and heartbeat | Ack/crash windows, retry exhaustion, lock ownership/timeout/migration, and closed-Turn filtering |
 | Integrations | Harness, directory Skills, stdio workers, MCP stdio | Offline diagnostics, subprocess conformance, lifecycle, and clean-wheel examples |
 | Release contract | Frozen root/module re-exports, Python 3.11–3.14 CI | Import snapshot, complete gates, wheel/sdist, and clean-install checks |
 
@@ -26,7 +27,6 @@ Purpose: distinguish implemented capabilities from remaining work. Executable ev
 
 | Feature | Target and boundary |
 |---|---|
-| Durable Outbox | 0.8; caller-driven export, persistent acknowledgement, auditable gaps |
 | Whole-Session deletion | 0.9; tombstones and local derived-state cleanup |
 | Official OpenAI/Anthropic acceptance | 1.0 hard gate; recorded streams and DeepSeek do not substitute |
 | nika product integration | Separate consumer acceptance; no Feishu/Wiki dependency enters nextloop |

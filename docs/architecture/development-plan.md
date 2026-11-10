@@ -1,6 +1,6 @@
 # nextloop development and verification plan
 
-Current stage: **0.7.0 release verification**. `0.6.0` is published; later milestones are not claimed as implemented.
+Current stage: **0.8.0 release verification**. `0.7.0` is published; later milestones are not claimed as implemented.
 
 ## Delivery order
 
@@ -51,6 +51,7 @@ See [Architecture and import contract](../design/architecture.md), [Verification
 - `export_pending(session_id=None)` is caller-driven and can enumerate Sessions with unexported closed Turns without starting recovery.
 - Watermarks advance only after durable Export acknowledgement. Bounded retries record auditable gaps rather than blocking forever or pretending success.
 - Trace replay uses stable OTel 128-bit trace IDs and 64-bit span IDs. No OTel Exporter implementation is included in this milestone.
+- Per-Session export locks carry owner tokens and are renewed only during a caller-driven export. Renewal and release reject stale owners; expired locks support crash takeover and old schemas migrate under a write transaction.
 
 ## 0.9 — whole-Session deletion
 

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.7.0"
+API_VERSION = "0.8.0"
 EVENT_SCHEMA_VERSION = "1.1"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
@@ -629,6 +629,22 @@ class TurnOutcome:
 
 
 @dataclass(frozen=True)
+class ExportGap:
+    session_id: str
+    from_seq: int
+    to_seq: int
+    reason: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class ExportReport:
+    session_ids: tuple[str, ...] = ()
+    exported: int = 0
+    gaps: tuple[ExportGap, ...] = ()
+
+
+@dataclass(frozen=True)
 class RecoveryOutcome:
     session_id: str
     writer_epoch: int
@@ -639,6 +655,7 @@ class RecoveryOutcome:
 
 
 class EventStore(Protocol):
+    async def session_ids(self) -> Sequence[str]: ...
     async def attach_writer(
         self, session_id: str, *, force: bool = False
     ) -> tuple[int, int, int]: ...

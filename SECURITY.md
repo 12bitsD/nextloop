@@ -15,4 +15,4 @@ Include the affected version or commit, a minimal reproduction, the security imp
 - Delivery is at least once. Delivery owners must deduplicate by `final_message_id`; Tool callers remain responsible for external idempotency.
 - Trace Exporters are caller-provided side effects. Exported copies and third-party retention are outside the EventStore's control.
 
-Current releases do not provide time-based writer leases, persistent Outbox, Session deletion, remote MCP/OAuth, or event-level PII erasure. Do not represent those planned capabilities as existing controls.
+Current releases provide optional same-host time-based writer leases and persistent Trace Outbox state. They do not provide distributed writer coordination, Session deletion, remote MCP/OAuth, or event-level PII erasure. Do not represent those planned capabilities as existing controls.

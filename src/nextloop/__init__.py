@@ -2,6 +2,7 @@ from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
 from .adapters.observing import ObservingEventStore, StdoutExporter
 from .adapters.openai import OpenAIProvider
+from .adapters.outbox import SQLiteOutbox
 from .adapters.sqlite import SQLiteEventStore
 from .contracts import (
     API_VERSION,
@@ -18,6 +19,8 @@ from .contracts import (
     Event,
     EventStore,
     EventType,
+    ExportGap,
+    ExportReport,
     FinalMessage,
     FinishReason,
     HarnessError,
@@ -110,6 +113,8 @@ __all__ = [
     "Event",
     "EventStore",
     "EventType",
+    "ExportGap",
+    "ExportReport",
     "FinalMessage",
     "FinishReason",
     "Harness",
@@ -141,6 +146,7 @@ __all__ = [
     "ProviderError",
     "RecoveryOutcome",
     "SQLiteEventStore",
+    "SQLiteOutbox",
     "SkillConfig",
     "SkillDocument",
     "SkillError",

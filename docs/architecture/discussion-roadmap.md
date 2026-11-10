@@ -2,7 +2,7 @@
 
 Purpose: preserve the accepted direction and remaining decision boundaries without duplicating nika's product roadmap.
 
-Current entry: **0.5.0 falsification and integration-contract closure**. The executable implementation plan is [development-plan.md](development-plan.md).
+Current entry: **0.8.0 durable Outbox and release closure**. The executable implementation plan is [development-plan.md](development-plan.md).
 
 ## Fixed guardrails
 
@@ -23,11 +23,11 @@ Current entry: **0.5.0 falsification and integration-contract closure**. The exe
 | Execution and ReAct | Turn/Step driver, bounded correction, ordered steer, common finalization | Implemented; normal and terminal behavior covered |
 | Model and Context | Frozen in-memory requests, external Provider configuration, append-only projection, Compaction | Implemented; recorded Adapter contracts and separately identified live smoke |
 | Tool contracts | Admission, parallel/exclusive scheduling, ordered Observations, explicit uncertainty | Implemented; full append and side-effect fault scenarios covered |
-| Durable state | Atomic conditional append, idempotency, writer fencing, crash closers | Implemented for single-process fencing; timed leases remain 0.7 |
-| Pending Input | Log projection by `input_id` and Step-boundary consumption | Implemented; cross-process steering reasons remain 0.7 |
-| Observability | Committed-event Trace projection with failure isolation | Implemented; persistent Outbox remains 0.8 |
-| Schema evolution | Read-only upcasting and versioned real fixtures | 0.6, not currently claimed |
-| Operation identity and approval | Persistent `operation_id`, effect declarations, approved new-Turn resume | 0.6, not currently claimed |
+| Durable state | Atomic conditional append, idempotency, writer fencing, crash closers | Implemented with optional same-host timed leases; distributed coordination is not claimed |
+| Pending Input | Log projection by `input_id` and Step-boundary consumption | Implemented with structured steer_result rejection reasons |
+| Observability | Committed-event Trace projection with failure isolation | Implemented with caller-driven durable Outbox, acknowledgement cursors, and export gaps |
+| Schema evolution | Read-only upcasting and versioned real fixtures | Implemented for Event schema 1.0→1.1 |
+| Operation identity and approval | Persistent `operation_id`, effect declarations, approved new-Turn resume | Implemented with explicit reconciliation and approval recovery evidence |
 | Retention | Reentrant whole-Session deletion with tombstones | 0.9, not currently claimed |
 | Consumer integration | Public versioned Adapters; nika is a consumer, not a dependency | Separate acceptance |
 | Release | Python 3.11–3.14, frozen imports, fault matrix, benchmark, official API gates | 0.5 verifies engineering; official OpenAI/Anthropic acceptance blocks 1.0 |

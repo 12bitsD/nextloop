@@ -1,6 +1,6 @@
 # AgentLoop verification matrix
 
-Status: 0.7.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
+Status: 0.8.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
 
 ## Evidence rules
 
@@ -117,10 +117,25 @@ The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch,
 | Idempotent input is not capacity-rejected | Accepted ID replay precedes queue_full checks; non-writers never append facts |
 | Lease cancellation is writer-scoped | Active stale writers and inactive non-owners are rejected before cancellation append |
 
+## 0.8 durable Outbox evidence
+
+| Claim | Closing evidence |
+|---|---|
+| Only committed closed Turns export | Active Turns are excluded; closed earlier Turns replay without `recover()` |
+| Ack and cursor have distinct crash windows | Ack-before-cursor replays identical content and identity; post-cursor crash does not replay |
+| Export failures cannot block forever | Persistent attempts, immediate `max_attempts` gap recording, cursor advance, and later-Session continuation |
+| Replay identity is OTel-compatible | Deterministic 32-hex Trace IDs and unique 16-hex Span IDs across replay |
+| Export locks exclude concurrent owners | Async and same-instance serialization, monotonic cursor, bounded acquisition with original IntegrityError cause |
+| Long calls retain ownership | Heartbeat renewal across `lock_timeout_seconds`, with no premature duplicate export |
+| Lock cleanup and takeover are owner-scoped | Old-owner release cannot delete a new lock; failed renewal cannot advance cursor and still releases an owned lock |
+| Existing Outbox state migrates safely | Missing owner-token column is added once under concurrent initialization |
+| Session cleanup is bounded to Outbox state | Cursor, attempts, gaps, and locks are removed without deleting Events or changing writer epochs |
+| Approval waiting is not Tool execution | Tool duration excludes approval delay; Turn duration remains separate |
+
 ## Review and external evidence
 
 Standards, Spec, and Risk reviews run independently. Original counterexamples must become regressions, and fixes receive incremental review. The 0.5.0 review closed stale dispatch, Pending consumption, ID conflicts, Compaction identity, export-contract gaps, wrapper duplication, and erased-content test oracles.
 
 Recorded OpenAI and Anthropic SSE scenarios are Adapter evidence, not official API acceptance. Twelve live Kimi scenarios and live DeepSeek text/Preview/usage and Tool/Delivery smoke are separately identified. Official OpenAI and Anthropic API acceptance remains a **1.0 hard gate**.
 
-Current non-guarantees: time-based writer leases, durable Outbox, Session deletion, remote MCP/OAuth, event-level erasure, and external large-asset lifecycle.
+Current non-guarantees: distributed writer coordination, exactly-once export, Session deletion, remote MCP/OAuth, event-level erasure, and external large-asset lifecycle.

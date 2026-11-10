@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.0 - 2026-11-11
+
+### Added
+
+- Caller-driven `SQLiteOutbox` with durable per-Session cursors, export attempts, auditable gaps, and closed-Turn replay without starting AgentLoop recovery.
+- Stable OTel-compatible 128-bit Trace IDs and 64-bit Span IDs for replayed records; an OTel Exporter is not included.
+- Stable `EventStore.session_ids()` enumeration for caller-driven export, including decorator delegation and a third-party migration contract.
+- Owner-token export locks with heartbeat renewal during long Exporter calls, bounded acquisition, expiry takeover, and concurrent old-schema migration.
+
+### Changed
+
+- `SQLiteOutbox.delete_session()` clears Outbox cursors, attempts, gaps, and locks; whole-Session Event deletion remains in 0.9.
+- Export acknowledgement advances its own cursor in a separate transaction and never consumes an Event writer epoch. Ack-before-cursor crashes can replay; post-cursor crashes do not.
+
+### Fixed
+
+- Long Exporter calls retain ownership instead of allowing premature takeover and duplicate export.
+- Heartbeat failure still releases an owned lock; stale owners cannot renew or delete a successor's lock.
+- Export timeout paths preserve bounded attempts/gaps, and lock-acquisition timeout retains the original SQLite error as its cause.
+
+### Verified
+
+- 373 offline tests, ruff, format check, strict mypy, wheel/sdist builds, Twine, and a clean wheel-installed Turn.
+- Python 3.11 and 3.14 clean-environment verification plus the 10,505-event parity benchmark.
+- Live DeepSeek Tool/Preview/Delivery smoke and independent Standards / Spec / Risk review with regression closure.
+
 ## 0.7.0 - 2026-11-11
 
 ### Added

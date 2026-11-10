@@ -145,6 +145,14 @@ history = await harness.history(from_turn=1, to_turn=10)
 
 History reads the complete EventStore log and uses the same TraceProjector as live export. Only new-format Events are supported; missing measured Model/Tool fields produce `timing_source="unknown"`, not estimated durations.
 
+### Durable Outbox
+
+The live queue is best-effort. For replay after process restart, construct `SQLiteOutbox(store, path, exporters)` and call `await outbox.export_pending()` from the application. Passing a `session_id` restricts one run; omitting it enumerates `store.session_ids()`. Only Turns with a committed `TURN_END` are exported.
+
+Each successful Exporter return advances an independent durable cursor. A crash before that commit can replay; a crash after it cannot. Failed calls persist attempts and become auditable `ExportGap` records at `max_attempts`, allowing later records to proceed. `watermark()`, `gaps()`, and `delete_session()` inspect or clear Outbox-owned state without consuming writer epochs or deleting Events.
+
+Concurrent exporters use per-Session owner-token locks. A heartbeat renews only during `export_pending()` at one-third of `lock_timeout_seconds`; stale locks can be reclaimed after a crash. `export_timeout_seconds` bounds cooperative calls, but a timed-out synchronous Exporter thread can still produce late side effects. An asynchronous Exporter that suppresses cancellation can delay cleanup and must be made cancellation-aware by the caller. Neither case is a successful acknowledgement or hard isolation of user code. Delivery is therefore at least once, not exactly once, and exporters should deduplicate using the stable OTel `trace_id` and `span_id` emitted by `StdoutExporter`.
+
 ## MCP stdio
 
 `driver = "mcp"` starts a standard MCP `2025-06-18` stdio server. The adapter performs initialize, the initialized notification, and paginated `tools/list` until the cursor is exhausted, then keeps a static catalog for the process lifetime. Remote annotations do not grant parallel execution, resources, or approval privileges.

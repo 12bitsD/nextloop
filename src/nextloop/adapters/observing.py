@@ -20,6 +20,7 @@ from ..contracts import (
     TurnTrace,
 )
 from ..events.trace import TraceProjector, project_traces
+from ..events.trace_ids import span_id, trace_id
 from ..execute.cleanup import wait_for_cleanup
 
 TraceErrorHandler = Callable[[Exception, TraceRecord | None], None]
@@ -39,6 +40,8 @@ class StdoutExporter:
         output = {
             "schema": TRACE_SCHEMA,
             "trace_type": trace_type,
+            "trace_id": trace_id(trace.session_id),
+            "span_id": span_id(trace),
             "data": dataclasses.asdict(trace),
         }
         stream = self.stream or sys.stdout
@@ -75,6 +78,9 @@ class ObservingEventStore:
         self._closed = False
         self._close_lock = asyncio.Lock()
         self.dropped_count = 0
+
+    async def session_ids(self) -> Sequence[str]:
+        return await self._store.session_ids()
 
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         result = await self._store.attach_writer(session_id, force=force)
