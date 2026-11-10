@@ -62,7 +62,7 @@ _PROVIDER_FIELDS = {
     "default_parameters",
     "timeout_seconds",
 }
-_STORE_FIELDS = {"driver", "path"}
+_STORE_FIELDS = {"driver", "path", "owner_id", "lease_seconds"}
 _LOOP_FIELDS = {
     "system_prompt",
     "compaction_prompt",
@@ -82,6 +82,7 @@ _LOOP_FIELDS = {
     "turn_deadline_seconds",
     "tool_result_bytes",
     "tool_result_full_max_bytes",
+    "max_pending_inputs",
 }
 _TOOL_FIELDS = {
     "driver",
@@ -342,14 +343,19 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     )
     store_raw = _optional_table(raw, "store", source)
     _fields(store_raw, _STORE_FIELDS, "store", source)
+    owner_id = store_raw.get("owner_id")
+    if owner_id is not None and not isinstance(owner_id, str):
+        _fail(source, "store.owner_id", "must be a string")
     store = StoreConfig(
         driver=_choice(store_raw, "driver", ("memory", "sqlite"), source, default="memory"),
         path=_string(store_raw, "path", source, "store", default=":memory:"),
+        owner_id=owner_id,
+        lease_seconds=_number(store_raw, "lease_seconds", 5.0, source, "store"),
     )
     if store.driver == "memory" and store.path != ":memory:":
         _fail(source, "store.path", "memory Store only supports ':memory:'")
     if store.driver == "sqlite":
-        store = StoreConfig(driver="sqlite", path=str(_resolve_path(source, store.path)))
+        store = replace(store, path=str(_resolve_path(source, store.path)))
     loop_raw = _optional_table(raw, "loop", source)
     _fields(loop_raw, _LOOP_FIELDS, "loop", source)
     loop_values: dict[str, Any] = {}
@@ -454,8 +460,10 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
 
 def _make_store(config: StoreConfig) -> InMemoryEventStore | SQLiteEventStore:
     if config.driver == "memory":
-        return InMemoryEventStore()
-    return SQLiteEventStore(config.path)
+        return InMemoryEventStore(owner_id=config.owner_id, lease_seconds=config.lease_seconds)
+    return SQLiteEventStore(
+        config.path, owner_id=config.owner_id, lease_seconds=config.lease_seconds
+    )
 
 
 def _resolve_exporters(
@@ -543,7 +551,7 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             _fail(source, f"loop.{name}", "must be a positive integer")
-    for name in ("max_protocol_corrections",):
+    for name in ("max_protocol_corrections", "max_pending_inputs"):
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             _fail(source, f"loop.{name}", "must be a nonnegative integer")

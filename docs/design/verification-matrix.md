@@ -1,6 +1,6 @@
 # AgentLoop verification matrix
 
-Status: 0.6.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
+Status: 0.7.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
 
 ## Evidence rules
 
@@ -77,7 +77,7 @@ Conversation Projection is bounded by the returned Surface and serialized messag
 
 ## Public contracts and packaging
 
-- `tests/test_import_contract.py` freezes all 94 root re-exports and the complete `__all__` of `events`, `adapters`, `execute`, and `testing`, plus explicit supported names on other integration modules.
+- `tests/test_import_contract.py` freezes all 97 root re-exports and the complete `__all__` of `events`, `adapters`, `execute`, and `testing`, plus explicit supported names on other integration modules.
 - `tests/test_store_contract.py` is the third-party Store conformance entrypoint.
 - Python 3.11, 3.12, 3.13, and 3.14 run CI. Local clean Python 3.11 and 3.14 environments also run the full suite and benchmark before 0.6.0 publication.
 - `ruff`, format check, strict mypy, wheel/sdist build, Twine, clean wheel installation, examples, and CLI diagnostics are required gates.
@@ -99,6 +99,23 @@ Conversation Projection is bounded by the returned Surface and serialized messag
 | Resume uses fresh budgets | Tool, Step, model, and deadline configuration on the resume Turn |
 
 The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch, concurrent reconciliation, repeated-retry lock leakage, unknown-schema bypass, resource/budget approval bypass, finalization divergence, and input/dedup duplication. Every original counterexample has a regression and incremental Risk verification.
+
+## 0.7 lease and input evidence
+
+| Claim | Closing evidence |
+|---|---|
+| No-owner behavior remains compatible | Legacy epoch checks and raw 1.0/1.1 fixture bytes remain unchanged; lease tables are opt-in |
+| Same-owner restart and renewal | Immediate takeover, independent renewal during a long Tool, and expiry rejection |
+| Different-owner takeover | Expiry or `recover(force=True)` with increasing epoch and stale-writer rejection |
+| Legacy takeover fences old lease owners | Global epoch plus owner/expiry validation in check/append/has_writer |
+| Heartbeat failure cannot continue silently | Operational RuntimeError cancels execution without CANCELLATION_REQUESTED |
+| Late results never fabricate completion | No result before recovery; recovered result is uncertain_hanging |
+| Lease resume/recovery is idempotent | Concurrent resume has one winner and repeated recover does not duplicate facts |
+| Same-host multiprocess works | Spawn-based simultaneous initialization and contention pass 20 consecutive runs with bounded WAL lock backoff |
+| Renewal cannot silently succeed after expiry | Atomic UPDATE with `rowcount == 1` and has_writer=False afterward |
+| Input rejection is machine-readable | accepted, session_missing, not_writer, turn_closed, queue_full, invalid_input, and approval_pending |
+| Idempotent input is not capacity-rejected | Accepted ID replay precedes queue_full checks; non-writers never append facts |
+| Lease cancellation is writer-scoped | Active stale writers and inactive non-owners are rejected before cancellation append |
 
 ## Review and external evidence
 

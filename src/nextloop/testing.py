@@ -79,11 +79,21 @@ class FaultInjectingEventStore(_FaultInjector):
         )
         self._store = store
 
-    async def attach_writer(self, session_id: str) -> tuple[int, int, int]:
-        return await self._store.attach_writer(session_id)
+    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
+        return await self._store.attach_writer(session_id, force=force)
+
+    @property
+    def lease_seconds(self) -> float | None:
+        return getattr(self._store, "lease_seconds", None)
 
     async def check_writer(self, session_id: str, writer_epoch: int) -> None:
         await self._store.check_writer(session_id, writer_epoch)
+
+    async def renew_writer(self, session_id: str, writer_epoch: int) -> None:
+        await self._store.renew_writer(session_id, writer_epoch)
+
+    async def has_writer(self, session_id: str) -> bool:
+        return await self._store.has_writer(session_id)
 
     async def append(
         self,

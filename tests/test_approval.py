@@ -15,6 +15,7 @@ from nextloop import (
     InMemoryEventStore,
     InvariantViolation,
     ModelResponse,
+    SteerStatus,
     ToolCallTrace,
     ToolRegistry,
     ToolSpec,
@@ -65,6 +66,8 @@ async def test_approval_suspends_then_resume_dispatches_original_operation():
     operation_id = request.payload["items"][0]["operation_id"]
     assert approval_events(events, EventType.TOOL_CALL) == []
     assert not await loop.steer("s", "not while suspended")
+    result = await loop.steer_result("s", "not while suspended")
+    assert result.status == SteerStatus.APPROVAL_PENDING
     with pytest.raises(InvariantViolation, match="Approval pending"):
         await loop.run(context(store, FakeProvider([]), tools, FakeDelivery()))
 

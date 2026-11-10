@@ -17,6 +17,8 @@ from .contracts import (
     PendingInput,
     RecoveryOutcome,
     Skipped,
+    SteerResult,
+    SteerStatus,
     SurfaceOp,
     ToolCall,
     ToolEffect,
@@ -104,11 +106,16 @@ class AgentLoop:
         deadline = context.config.turn_deadline_seconds
         if deadline is not None:
             execution.deadline_task = asyncio.create_task(self._expire(execution, deadline))
+        interval = getattr(context.store, "lease_seconds", None)
+        if interval is not None:
+            execution.heartbeat_task = asyncio.create_task(self._heartbeat(execution, interval / 3))
 
     async def _cleanup_execution(self, execution: SessionExecution) -> None:
-        if execution.deadline_task is not None:
-            execution.deadline_task.cancel()
-            await asyncio.gather(execution.deadline_task, return_exceptions=True)
+        tasks = [execution.deadline_task, execution.heartbeat_task]
+        for task in tasks:
+            if task is not None:
+                task.cancel()
+        await asyncio.gather(*(task for task in tasks if task is not None), return_exceptions=True)
         if execution.preview is not None:
             await execution.preview.close()
         self._active.pop(execution.session_id, None)
@@ -160,34 +167,77 @@ class AgentLoop:
         await asyncio.sleep(seconds)
         await self._request_cancel(execution, "turn_deadline_exceeded")
 
-    async def steer(self, session_id: str, content: str, *, input_id: str | None = None) -> bool:
-        if input_id is not None and not input_id.strip():
-            raise ValueError("input_id must be non-empty")
-        execution = self._active.get(session_id)
-        if execution is None or not content.strip():
-            return False
-        async with execution.actor.commit_lock:
-            if execution.final_committed:
-                return False
-            if input_id in execution.accepted_inputs:
-                if execution.accepted_inputs[input_id] != content:
-                    raise InvariantViolation("input_id reused with different content")
-                return True
-            accepted_id = (
-                input_id or f"in_{len(execution.actor.inbox) + 1}_{execution.turn}_{execution.step}"
-            )
-            await execution._append_locked(
-                [
-                    NewEvent(
-                        event_type=EventType.INPUT_ACCEPTED,
-                        turn=execution.turn,
-                        step=execution.step,
-                        payload={"input_id": accepted_id, "content": content},
-                    )
-                ]
-            )
-            execution.actor.inbox.append((accepted_id, content))
+    async def _lease_writer_available(self, store: EventStore, session_id: str) -> bool:
+        if getattr(store, "lease_seconds", None) is None:
             return True
+        return await store.has_writer(session_id)
+
+    async def _heartbeat(self, execution: SessionExecution, seconds: float) -> None:
+        while True:
+            await asyncio.sleep(seconds)
+            try:
+                await execution.context.store.renew_writer(
+                    execution.session_id, execution.writer_epoch
+                )
+            except Exception:
+                execution.cancel_cause = "writer_lease_lost"
+                execution.cancel.set()
+                return
+
+    async def steer(self, session_id: str, content: str, *, input_id: str | None = None) -> bool:
+        result = await self.steer_result(session_id, content, input_id=input_id)
+        if result.status == SteerStatus.INVALID_INPUT and input_id is not None:
+            raise ValueError("input_id must be non-empty")
+        return result.status == SteerStatus.ACCEPTED
+
+    async def steer_result(
+        self, session_id: str, content: str, *, input_id: str | None = None
+    ) -> SteerResult:
+        if (input_id is not None and not input_id.strip()) or not content.strip():
+            return SteerResult(SteerStatus.INVALID_INPUT, input_id)
+        execution = self._active.get(session_id)
+        if execution is not None:
+            async with execution.actor.commit_lock:
+                if execution.final_committed:
+                    return SteerResult(SteerStatus.TURN_CLOSED, input_id)
+                try:
+                    await execution.context.store.check_writer(session_id, execution.writer_epoch)
+                except InvariantViolation:
+                    return SteerResult(SteerStatus.NOT_WRITER, input_id)
+                if input_id in execution.accepted_inputs:
+                    if execution.accepted_inputs[input_id] != content:
+                        raise InvariantViolation("input_id reused with different content")
+                    return SteerResult(SteerStatus.ACCEPTED, input_id)
+                if len(execution.actor.inbox) >= execution.context.config.max_pending_inputs:
+                    return SteerResult(SteerStatus.QUEUE_FULL, input_id)
+                accepted_id = (
+                    input_id
+                    or f"in_{len(execution.actor.inbox) + 1}_{execution.turn}_{execution.step}"
+                )
+                await execution._append_locked(
+                    [
+                        NewEvent(
+                            event_type=EventType.INPUT_ACCEPTED,
+                            turn=execution.turn,
+                            step=execution.step,
+                            payload={"input_id": accepted_id, "content": content},
+                        )
+                    ]
+                )
+                execution.actor.inbox.append((accepted_id, content))
+                return SteerResult(SteerStatus.ACCEPTED, accepted_id)
+
+        store = self._stores.get(session_id)
+        if store is None:
+            return SteerResult(SteerStatus.SESSION_MISSING, input_id)
+        history = await store.load_recovery(session_id)
+        if not history:
+            return SteerResult(SteerStatus.SESSION_MISSING, input_id)
+        if pending_approval(history) is not None:
+            return SteerResult(SteerStatus.APPROVAL_PENDING, input_id)
+        if not await self._lease_writer_available(store, session_id):
+            return SteerResult(SteerStatus.NOT_WRITER, input_id)
+        return SteerResult(SteerStatus.TURN_CLOSED, input_id)
 
     async def cancel(self, session_id: str, cause: str = "user_stop") -> bool:
         execution = self._active.get(session_id)
@@ -195,6 +245,8 @@ class AgentLoop:
             return await self._request_cancel(execution, cause)
         store = self._stores.get(session_id)
         if store is None:
+            return False
+        if not await self._lease_writer_available(store, session_id):
             return False
         request = pending_approval(await store.load_recovery(session_id))
         if request is None:
@@ -234,6 +286,13 @@ class AgentLoop:
                 return False
             if execution.final_committed and cause != "turn_deadline_exceeded":
                 return False
+            if getattr(execution.context.store, "lease_seconds", None) is not None:
+                try:
+                    await execution.context.store.check_writer(
+                        execution.session_id, execution.writer_epoch
+                    )
+                except InvariantViolation:
+                    return False
             await execution._append_locked(
                 [
                     NewEvent(
@@ -693,13 +752,15 @@ class AgentLoop:
         session_id: str,
         store: EventStore,
         delivery: DeliveryOwner,
+        *,
+        force: bool = False,
     ) -> RecoveryOutcome:
         self._stores[session_id] = store
         actor = self._actors.setdefault(session_id, SessionActor())
         async with actor.run_lock:
             if session_id in self._active:
                 raise RuntimeError("Cannot recover a Session with an active Turn")
-            writer_epoch, last_seq, _ = await store.attach_writer(session_id)
+            writer_epoch, last_seq, _ = await store.attach_writer(session_id, force=force)
             events = list(await store.load_recovery(session_id))
             repaired = repair_events(events)
             seq = last_seq

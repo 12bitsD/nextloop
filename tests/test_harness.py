@@ -40,13 +40,26 @@ def test_load_valid_config_without_credentials(tmp_path: Path) -> None:
     assert spec.store.driver == "memory"
 
 
+def test_store_lease_and_pending_limit_config(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        '[store]\nowner_id = "owner-a"\nlease_seconds = 0.25\n[loop]\nmax_pending_inputs = 0\n',
+    )
+
+    harness = Harness.load(path)
+
+    assert harness.spec.store.owner_id == "owner-a"
+    assert harness.store.lease_seconds == 0.25
+    assert harness.spec.loop.max_pending_inputs == 0
+
+
 @pytest.mark.parametrize(
     ("fragment", "message"),
     [
         ('api_key = "literal"', "plaintext credentials"),
         ("unknown = true", "unknown field"),
         ('min_nextloop = "9.0.0"', "requires nextloop"),
-        ('min_nextloop = "0.6.1"', "requires nextloop"),
+        ('min_nextloop = "0.7.1"', "requires nextloop"),
         ('min_nextloop = "0.3"', "full x.y.z"),
         ('min_nextloop = "1"', "full x.y.z"),
         ('[provider.default_parameters]\nACCESS_TOKEN = "literal"', "plaintext credentials"),

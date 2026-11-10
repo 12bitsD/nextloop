@@ -76,8 +76,8 @@ class ObservingEventStore:
         self._close_lock = asyncio.Lock()
         self.dropped_count = 0
 
-    async def attach_writer(self, session_id: str) -> tuple[int, int, int]:
-        result = await self._store.attach_writer(session_id)
+    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
+        result = await self._store.attach_writer(session_id, force=force)
         try:
             async with self._projector_lock:
                 self._projector.advance_seq(session_id, result[1])
@@ -85,8 +85,18 @@ class ObservingEventStore:
             self._report_error(exc, None)
         return result
 
+    @property
+    def lease_seconds(self) -> float | None:
+        return getattr(self._store, "lease_seconds", None)
+
     async def check_writer(self, session_id: str, writer_epoch: int) -> None:
         await self._store.check_writer(session_id, writer_epoch)
+
+    async def renew_writer(self, session_id: str, writer_epoch: int) -> None:
+        await self._store.renew_writer(session_id, writer_epoch)
+
+    async def has_writer(self, session_id: str) -> bool:
+        return await self._store.has_writer(session_id)
 
     async def load_surface(self, session_id: str) -> Sequence[Event]:
         return await self._store.load_surface(session_id)

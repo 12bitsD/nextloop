@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0 - 2026-11-11
+
+### Added
+
+- Optional `owner_id` / `lease_seconds` on Memory and SQLite Stores, with same-owner restart, different-owner expiry or forced takeover, and legacy behavior when unconfigured.
+- Independent heartbeat renewal during long Tools, `recover(force=True)`, and owner/lease configuration in Harness.
+- `steer_result()` with structured accepted, session_missing, not_writer, turn_closed, queue_full, invalid_input, and approval_pending outcomes; `steer()` retains bool behavior and legacy empty-ID errors.
+- Lease-aware cancellation, bounded Pending inboxes, and spawn-based same-host multiprocess evidence.
+
+### Fixed
+
+- Legacy takeover now fences the previous lease owner through both global epoch and owner/expiry checks.
+- Operational heartbeat failures cancel execution without fabricating cancellation facts; late results remain uncertain.
+- Concurrent SQLite initialization uses a write transaction and bounded WAL lock backoff; renewal is atomic and rejects zero-row updates.
+- Lease tables are created only when leasing is enabled, preserving raw historical database bytes.
+
+### Verified
+
+- 357 offline tests, ruff, format check, strict mypy, wheel/sdist builds, Twine, and a clean wheel-installed Turn.
+- Python 3.11 and 3.14 clean-environment verification plus the 10,505-event parity benchmark.
+- Twenty consecutive spawn-based multiprocess contention runs and live DeepSeek Tool/Preview/Delivery smoke.
+- Independent Standards / Spec / Risk review and incremental closure of all reported counterexamples.
+
 ## 0.6.0 - 2026-11-11
 
 ### Breaking changes

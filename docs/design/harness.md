@@ -82,6 +82,12 @@ Skills remain instructions only. Their metadata is added to the system prompt, a
 
 Exporters may optionally implement `flush()` and `close()`, synchronously or asynchronously. The queue is flushed before Exporter lifecycle calls. Harness closes Exporters created from `[trace]`; runtime-injected Exporters are flushed but not closed. `nextloop.testing.check_event_store(store)` exposes the same basic atomicity, idempotency, fencing, surface, and recovery-read contract used by the built-in Stores.
 
+## Store leases and Pending limits
+
+`[store]` accepts optional `owner_id` and `lease_seconds`. When `owner_id` is absent, Store construction and writer semantics stay legacy. When configured, same-owner restarts take over immediately, another owner needs expiry or `recover(force=True)`, and active Turns renew through an independent heartbeat. SQLite initialization includes bounded lock backoff for same-host process contention.
+
+`loop.max_pending_inputs` bounds the active in-memory inbox (default 100). Pending Input remains recoverable from the Event log; the limit is not a second persistence policy. `steer_result()` reports `session_missing`, `not_writer`, `turn_closed`, `queue_full`, `invalid_input`, or `approval_pending` alongside `accepted`.
+
 ## Tool effects and approval
 
 Each `[[tools]]` entry accepts optional `effect = "read_only" | "idempotent" | "non_idempotent"`. The default is NON_IDEMPOTENT, and `nextloop check` reports a migration warning when it is unset. Explicit `resources` still control normal conflict checks; otherwise only uncertain outcomes use the Tool name as a lock.

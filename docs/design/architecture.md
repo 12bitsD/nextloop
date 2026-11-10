@@ -25,14 +25,14 @@ The Loop coordinates execution; the Store owns ordering and writer fencing. `eve
 
 ## Invariants
 
-- Event append checks `writer_epoch` and `expected_seq` atomically. Repeating an append with identical event IDs is idempotent; changing their content is rejected.
+- Event append checks `writer_epoch` and `expected_seq` atomically. With an optional owner lease, it also validates owner identity and expiry in the same transaction. Legacy attach behavior is unchanged when no owner is configured.
 - TOOL_CALL is committed before Tool dispatch. A second `check_writer()` runs after that commit and immediately before `ToolRuntime.execute()`.
 - Recovery does not replay a dispatched Tool. Missing results become explicit skipped or uncertain outcomes.
 - FINAL_MESSAGE and TURN_END are durable before Delivery. Delivery is at least once and owners deduplicate by `final_message_id`.
 - Pending Input is derived from INPUT_ACCEPTED and USER_MESSAGE by `input_id`. A later Step boundary commits its consumption; the in-memory inbox is only a wake-up signal.
 - Trace records are projections of committed Events. Export failures cannot change Turn outcomes.
 
-Writer epochs currently fence stale writers; they are not time-based leases. Multi-process coordination, persistent Outbox, and Session deletion are separate later milestones.
+Owner leases are optional. Same-owner restarts take over immediately; different owners require expiry or explicit force. Heartbeat renewal is independent of appends, and the Store clock decides expiry. SQLite promises same-host multi-process contention only, not distributed coordination. Persistent Outbox and Session deletion remain later milestones.
 
 ## Complexity boundaries
 
@@ -50,7 +50,7 @@ The benchmark checks Memory/SQLite Conversation Projection parity, Model/Tool Tr
 
 ## Frozen import contract
 
-The root `nextloop` package keeps its existing convenience re-exports. `tests/test_import_contract.py` snapshots all 94 names and rejects accidental additions, removals, and duplicate entries.
+The root `nextloop` package keeps its existing convenience re-exports. `tests/test_import_contract.py` snapshots all 97 names and rejects accidental additions, removals, and duplicate entries.
 
 Core integration paths:
 

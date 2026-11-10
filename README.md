@@ -6,12 +6,12 @@ nextloop is an embeddable Python AgentLoop for developers who want to build thei
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.6.0**.
+Current version: **0.7.0**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.6.0
+python -m pip install nextloop==0.7.0
 ```
 
 For local development:
@@ -57,8 +57,9 @@ It is a library, not an HTTP service, product bot, Router, EventBus, or multi-ag
 ```python
 AgentLoop.run(TurnContext) -> TurnOutcome
 AgentLoop.steer(session_id, content, *, input_id=None) -> bool
+AgentLoop.steer_result(session_id, content, *, input_id=None) -> SteerResult
 AgentLoop.cancel(session_id, cause="user_stop") -> bool
-AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
+AgentLoop.recover(session_id, store, delivery, *, force=False) -> RecoveryOutcome
 AgentLoop.pending_inputs(session_id, store) -> tuple[PendingInput, ...]
 AgentLoop.resume(context, *, decisions=None, reject_all=False, new_input=None) -> TurnOutcome
 AgentLoop.retry_operation(context, operation_id) -> TurnOutcome
@@ -72,7 +73,8 @@ Core adapter seams are `EventStore`, `ModelProvider`, `ToolRuntime`, and `Delive
 
 | Area | Guarantee | Not a guarantee |
 |---|---|---|
-| Accepted input | Accepted inputs are projected from the log by `input_id` and can be queried with `AgentLoop.pending_inputs`. Explicit IDs are non-empty; identical retries deduplicate, conflicting content is rejected without consuming the original. | Automatic deduplication when callers retry with a different or missing ID. |
+| Accepted input | Accepted inputs are projected from the log by `input_id` and can be queried with `AgentLoop.pending_inputs`. Explicit IDs are non-empty; identical retries deduplicate, conflicting content is rejected without consuming the original. `steer_result` exposes structured rejection reasons. | Automatic deduplication when callers retry with a different or missing ID. |
+| Writer lease | Optional owner/epoch/expiry checks with heartbeat, same-owner restart, expiry or forced takeover, and spawn-verified same-host contention. Legacy behavior remains when no owner is configured. | Distributed locks, cross-host leases, or execution after an expired/stale writer check. |
 | Delivery | Delivery is at least once; DeliveryOwner must deduplicate by stable `final_message_id`. | Exactly-once delivery or delivery without an idempotent owner. |
 | Tool execution | The library never automatically replays an already dispatched Tool. Explicit reconciliation is limited to READ_ONLY and IDEMPOTENT operations. | No duplicate external effect when a model reissues a call or a Tool is not idempotent. |
 | Resource locks | Unresolved uncertain results retain declared resources; otherwise NON_IDEMPOTENT uses the Tool name. Successful reconciliation releases all locks associated with the operation. | Global idempotency across different resources or operations, or safe concurrent execution of NON_IDEMPOTENT calls. |
@@ -202,7 +204,7 @@ The release checks cover:
 - 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
 - live DeepSeek text + Preview + usage and real Tool Call + Delivery smoke;
 - a 10,505-event benchmark with cross-Store, incremental, and required-content parity;
-- 341 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
+- 357 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 
@@ -224,7 +226,7 @@ Current limits:
 - [Development plan](docs/architecture/development-plan.md)
 - [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), and [ADR-0007 Approval](docs/adr/0007-approval.md)
+- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), and [ADR-0007 Approval](docs/adr/0007-approval.md), and [ADR-0008 Owner leases](docs/adr/0008-lease.md)
 
 ## Release
 

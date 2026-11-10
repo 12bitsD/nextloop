@@ -21,7 +21,7 @@ This map records reusable execution requirements and verification ownership. No 
 | L15 | Retry delivery without rerunning model or Tools | [DeliveryOwner](../design/loop-interface.md#deliveryowner) | **Design closed.** `final_message_id`, delivery_unknown, durable handoff and writer-release tests |
 | L16 | Prove consumer independence through public Adapters | [Loop interface](../design/loop-interface.md) | **Open.** Fake Adapters and public Store conformance are implemented; nika consumer acceptance remains separate |
 | L18 | Load third-party instruction Skills from directories on demand | [SkillRegistry](../design/skills.md) | **Implemented.** Metadata discovery, current-body loading, duplicate/dependency/version errors, and `skill_view` tests |
-| L17 | Package and release only after protocol verification | [Development plan](development-plan.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) | **0.6.0 implemented and verified.** The complete fault matrix, benchmark, Python 3.14, import contract, upcasting, operation, approval, and clean package gates pass; publication and later milestones remain separate |
+| L17 | Package and release only after protocol verification | [Development plan](development-plan.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) | **0.7.0 implemented and verified.** Fault matrix, benchmark, Python 3.14, import contract, upcasting, operation, approval, owner lease, and clean package gates pass; publication and later milestones remain separate |
 
 ## Independence rule
 

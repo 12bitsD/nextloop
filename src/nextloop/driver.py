@@ -61,6 +61,7 @@ class SessionExecution:
     cancel_cause: str | None = None
     terminal_reason: str | None = None
     deadline_task: asyncio.Task[None] | None = None
+    heartbeat_task: asyncio.Task[None] | None = None
     surface: tuple[Event, ...] = ()
     recovered_inputs: list[tuple[str, str]] = field(default_factory=list)
     accepted_inputs: dict[str, str] = field(default_factory=dict)

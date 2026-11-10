@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from ..contracts import (
@@ -14,22 +15,37 @@ from ..contracts import (
     NewEvent,
     PayloadErasedError,
     SurfaceOp,
+    WriterLeaseError,
     utc_now,
 )
 from ..events.upcast import upcast_event, validate_event_schema
 
 
 class SQLiteEventStore:
-    def __init__(self, path: str) -> None:
+    def __init__(
+        self,
+        path: str,
+        *,
+        owner_id: str | None = None,
+        lease_seconds: float = 5.0,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        if owner_id is not None and not owner_id.strip():
+            raise ValueError("owner_id must be non-empty")
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._connection.row_factory = sqlite3.Row
         self._lock = threading.RLock()
-        with self._lock:
-            self._connection.execute("PRAGMA journal_mode=WAL")
-            self._connection.execute("PRAGMA synchronous=FULL")
+        self._owner_id = owner_id
+        self.lease_seconds = lease_seconds if owner_id is not None else None
+        self._clock = clock
+        with self._lock, self._connection:
             self._connection.execute("PRAGMA busy_timeout=5000")
+            self._enable_wal(self._connection)
+            self._connection.execute("PRAGMA synchronous=FULL")
             self._connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS session_writers (
@@ -38,6 +54,17 @@ class SQLiteEventStore:
                 )
                 """
             )
+            if self.lease_seconds is not None:
+                self._connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS session_leases (
+                        session_id TEXT PRIMARY KEY,
+                        owner_id TEXT NOT NULL,
+                        writer_epoch INTEGER NOT NULL,
+                        expires_at REAL NOT NULL
+                    )
+                    """
+                )
             self._connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS session_events (
@@ -66,14 +93,42 @@ class SQLiteEventStore:
                 "ON session_events(session_id, turn, step, seq)"
             )
 
+    @staticmethod
+    def _enable_wal(connection: sqlite3.Connection) -> None:
+        deadline = time.monotonic() + 5.0
+        while True:
+            try:
+                connection.execute("PRAGMA journal_mode=WAL")
+                return
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                if "locked" not in message and "busy" not in message:
+                    raise
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
+
     def close(self) -> None:
         with self._lock:
             self._connection.close()
 
-    async def attach_writer(self, session_id: str) -> tuple[int, int, int]:
+    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
+                if self.lease_seconds is not None:
+                    lease = self._connection.execute(
+                        "SELECT owner_id, expires_at FROM session_leases WHERE session_id = ?",
+                        (session_id,),
+                    ).fetchone()
+                    now = self._clock()
+                    if (
+                        lease is not None
+                        and lease["owner_id"] != self._owner_id
+                        and float(lease["expires_at"]) > now
+                        and not force
+                    ):
+                        raise WriterLeaseError("Another owner holds an unexpired Session lease")
                 row = self._connection.execute(
                     "SELECT writer_epoch FROM session_writers WHERE session_id = ?",
                     (session_id,),
@@ -84,6 +139,15 @@ class SQLiteEventStore:
                     "ON CONFLICT(session_id) DO UPDATE SET writer_epoch = excluded.writer_epoch",
                     (session_id, epoch),
                 )
+                if self.lease_seconds is not None:
+                    self._connection.execute(
+                        "INSERT INTO session_leases(session_id, owner_id, writer_epoch, "
+                        "expires_at) VALUES (?, ?, ?, ?) "
+                        "ON CONFLICT(session_id) DO UPDATE SET "
+                        "owner_id = excluded.owner_id, writer_epoch = excluded.writer_epoch, "
+                        "expires_at = excluded.expires_at",
+                        (session_id, self._owner_id, epoch, self._clock() + self.lease_seconds),
+                    )
                 tail = self._connection.execute(
                     "SELECT COALESCE(MAX(seq), 0) AS last_seq, COALESCE(MAX(turn), 0) AS last_turn "
                     "FROM session_events WHERE session_id = ?",
@@ -95,14 +159,70 @@ class SQLiteEventStore:
                 self._connection.execute("ROLLBACK")
                 raise
 
+    def _check_writer_locked(self, session_id: str, writer_epoch: int) -> None:
+        row = self._connection.execute(
+            "SELECT writer_epoch FROM session_writers WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None or int(row["writer_epoch"]) != writer_epoch:
+            raise InvariantViolation("Stale writer_epoch")
+        if self.lease_seconds is None:
+            return
+        lease = self._connection.execute(
+            "SELECT owner_id, writer_epoch, expires_at FROM session_leases WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if (
+            lease is None
+            or lease["owner_id"] != self._owner_id
+            or int(lease["writer_epoch"]) != writer_epoch
+            or float(lease["expires_at"]) <= self._clock()
+        ):
+            raise InvariantViolation("Stale writer_epoch")
+
     async def check_writer(self, session_id: str, writer_epoch: int) -> None:
         with self._lock:
+            self._check_writer_locked(session_id, writer_epoch)
+
+    async def renew_writer(self, session_id: str, writer_epoch: int) -> None:
+        with self._lock:
+            if self.lease_seconds is None:
+                raise InvariantViolation("Writer leases are not configured")
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._check_writer_locked(session_id, writer_epoch)
+                now = self._clock()
+                cursor = self._connection.execute(
+                    "UPDATE session_leases SET expires_at = ? WHERE session_id = ? "
+                    "AND owner_id = ? AND writer_epoch = ? AND expires_at > ?",
+                    (
+                        now + self.lease_seconds,
+                        session_id,
+                        self._owner_id,
+                        writer_epoch,
+                        now,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise InvariantViolation("Stale writer_epoch")
+                self._connection.execute("COMMIT")
+            except Exception:
+                self._connection.execute("ROLLBACK")
+                raise
+
+    async def has_writer(self, session_id: str) -> bool:
+        with self._lock:
+            if self.lease_seconds is None:
+                return False
             row = self._connection.execute(
-                "SELECT writer_epoch FROM session_writers WHERE session_id = ?",
-                (session_id,),
+                "SELECT 1 FROM session_leases AS lease "
+                "JOIN session_writers AS writer "
+                "ON lease.session_id = writer.session_id "
+                "AND lease.writer_epoch = writer.writer_epoch "
+                "WHERE lease.session_id = ? AND lease.owner_id = ? AND lease.expires_at > ?",
+                (session_id, self._owner_id, self._clock()),
             ).fetchone()
-            if row is None or int(row["writer_epoch"]) != writer_epoch:
-                raise InvariantViolation("Stale writer_epoch")
+            return row is not None
 
     async def append(
         self,
@@ -116,12 +236,7 @@ class SQLiteEventStore:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                row = self._connection.execute(
-                    "SELECT writer_epoch FROM session_writers WHERE session_id = ?",
-                    (session_id,),
-                ).fetchone()
-                if row is None or int(row["writer_epoch"]) != writer_epoch:
-                    raise InvariantViolation("Stale writer_epoch")
+                self._check_writer_locked(session_id, writer_epoch)
                 last_seq = int(
                     self._connection.execute(
                         "SELECT COALESCE(MAX(seq), 0) AS last_seq "

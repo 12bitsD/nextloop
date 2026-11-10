@@ -2,7 +2,7 @@
 
 Purpose: distinguish implemented capabilities from remaining work. Executable evidence is owned by the [verification matrix](../design/verification-matrix.md).
 
-## Implemented in the current 0.6 line
+## Implemented in the current 0.7 line
 
 | Feature | Implementation | Evidence |
 |---|---|---|
@@ -14,6 +14,7 @@ Purpose: distinguish implemented capabilities from remaining work. Executable ev
 | Context | Append-only projection, WorkingContext, Compaction, result preview/page/full | Projection parity, compaction, UTF-8 paging, read-back, and capacity tests |
 | EventStore | Memory and SQLite, atomic conditional append, idempotency, writer checks | Public conformance plus deliberately broken Store rejection |
 | Event compatibility | Read-only 1.0→1.1 upcasting, raw append comparison | Real 1.0/1.1 SQLite fixtures and unknown-schema negative paths |
+| Owner leases | Optional owner/epoch/expiry, heartbeat, forced takeover, steer_result | Same/different owner, renewal failure, concurrent resume, late results, and spawn-based multiprocess contention |
 | Operation identity | operation_id, ToolEffect, resource locks, explicit Reconciliation | End-to-end propagation, dynamic locks, repeated/concurrent retry, and no-replay evidence |
 | Approval | Atomic Intent/request, new-Turn resume, origin pairing, lazy expiry | Zero pre-grant dispatch, crash windows, concurrent resume, rejection, cancellation, and fresh budgets |
 | Providers | OpenAI-compatible and Anthropic streaming adapters | Recorded protocol streams plus separately identified live-provider smoke |
@@ -25,7 +26,6 @@ Purpose: distinguish implemented capabilities from remaining work. Executable ev
 
 | Feature | Target and boundary |
 |---|---|
-| Time-based writer leases | 0.7; opt-in owner identity, heartbeat, expiry, and takeover |
 | Durable Outbox | 0.8; caller-driven export, persistent acknowledgement, auditable gaps |
 | Whole-Session deletion | 0.9; tombstones and local derived-state cleanup |
 | Official OpenAI/Anthropic acceptance | 1.0 hard gate; recorded streams and DeepSeek do not substitute |

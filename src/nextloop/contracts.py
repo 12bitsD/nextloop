@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.6.0"
+API_VERSION = "0.7.0"
 EVENT_SCHEMA_VERSION = "1.1"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
@@ -62,6 +62,10 @@ class SkillError(NextloopError):
 
 class InvariantViolation(NextloopError):
     """Raised when seq, idempotency, or writer_epoch invariants fail."""
+
+
+class WriterLeaseError(InvariantViolation):
+    """Raised when another owner holds an unexpired Session lease."""
 
 
 class PayloadErasedError(NextloopError):
@@ -494,6 +498,22 @@ class SkillDocument:
     body: str
 
 
+class SteerStatus(StrEnum):
+    ACCEPTED = "accepted"
+    SESSION_MISSING = "session_missing"
+    NOT_WRITER = "not_writer"
+    TURN_CLOSED = "turn_closed"
+    QUEUE_FULL = "queue_full"
+    INVALID_INPUT = "invalid_input"
+    APPROVAL_PENDING = "approval_pending"
+
+
+@dataclass(frozen=True)
+class SteerResult:
+    status: SteerStatus
+    input_id: str | None = None
+
+
 class TurnStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -524,6 +544,7 @@ class LoopConfig:
     turn_deadline_seconds: float | None = None
     tool_result_bytes: int = DEFAULT_TOOL_RESULT_BYTES
     tool_result_full_max_bytes: int = DEFAULT_TOOL_RESULT_FULL_MAX_BYTES
+    max_pending_inputs: int = 100
 
 
 @dataclass(frozen=True)
@@ -540,6 +561,8 @@ class ProviderConfig:
 class StoreConfig:
     driver: str = "memory"
     path: str = ":memory:"
+    owner_id: str | None = None
+    lease_seconds: float = 5.0
 
 
 @dataclass(frozen=True)
@@ -616,8 +639,12 @@ class RecoveryOutcome:
 
 
 class EventStore(Protocol):
-    async def attach_writer(self, session_id: str) -> tuple[int, int, int]: ...
+    async def attach_writer(
+        self, session_id: str, *, force: bool = False
+    ) -> tuple[int, int, int]: ...
     async def check_writer(self, session_id: str, writer_epoch: int) -> None: ...
+    async def renew_writer(self, session_id: str, writer_epoch: int) -> None: ...
+    async def has_writer(self, session_id: str) -> bool: ...
     async def append(
         self, session_id: str, writer_epoch: int, expected_seq: int, events: Sequence[NewEvent]
     ) -> Sequence[Event]: ...

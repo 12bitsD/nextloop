@@ -1,6 +1,6 @@
 # Loop interface and ownership
 
-Status: **v1.1 implemented for 0.6.0**, with public contracts in `src/nextloop/contracts.py`.
+Status: **v1.1 implemented for 0.7.0**, with public contracts in `src/nextloop/contracts.py`.
 
 ## Independence and version dependency
 
@@ -11,8 +11,9 @@ This document and `src/nextloop/contracts.py` are the integration dependency bet
 ```text
 AgentLoop.run(TurnContext) -> TurnOutcome
 AgentLoop.steer(session_id, content, *, input_id=None) -> bool
+AgentLoop.steer_result(session_id, content, *, input_id=None) -> SteerResult
 AgentLoop.cancel(session_id, cause="user_stop") -> bool
-AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
+AgentLoop.recover(session_id, store, delivery, *, force=False) -> RecoveryOutcome
 AgentLoop.pending_inputs(session_id, store) -> tuple[PendingInput, ...]
 AgentLoop.resume(context, *, decisions=None, reject_all=False, new_input=None) -> TurnOutcome
 AgentLoop.retry_operation(context, operation_id) -> TurnOutcome

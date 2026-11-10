@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import time
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 from ..contracts import (
     Event,
@@ -12,28 +14,94 @@ from ..contracts import (
     NewEvent,
     PayloadErasedError,
     SurfaceOp,
+    WriterLeaseError,
     utc_now,
 )
 from ..events.upcast import upcast_event, validate_event_schema
 
 
+@dataclass
+class _Lease:
+    owner_id: str
+    writer_epoch: int
+    expires_at: float
+
+
 class InMemoryEventStore:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        owner_id: str | None = None,
+        lease_seconds: float = 5.0,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        if owner_id is not None and not owner_id.strip():
+            raise ValueError("owner_id must be non-empty")
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds must be positive")
         self._events: dict[str, list[Event]] = defaultdict(list)
         self._epochs: dict[str, int] = defaultdict(int)
+        self._leases: dict[str, _Lease] = {}
         self._lock = asyncio.Lock()
+        self._owner_id = owner_id
+        self.lease_seconds = lease_seconds if owner_id is not None else None
+        self._clock = clock
 
-    async def attach_writer(self, session_id: str) -> tuple[int, int, int]:
+    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         async with self._lock:
+            if self.lease_seconds is not None:
+                lease = self._leases.get(session_id)
+                if (
+                    lease is not None
+                    and lease.owner_id != self._owner_id
+                    and lease.expires_at > self._clock()
+                    and not force
+                ):
+                    raise WriterLeaseError("Another owner holds an unexpired Session lease")
+                self._leases[session_id] = _Lease(
+                    self._owner_id or "",
+                    self._epochs[session_id] + 1,
+                    self._clock() + self.lease_seconds,
+                )
             self._epochs[session_id] += 1
             events = self._events[session_id]
             last_turn = max((event.turn for event in events), default=0)
             return self._epochs[session_id], len(events), last_turn
 
-    async def check_writer(self, session_id: str, writer_epoch: int) -> None:
-        async with self._lock:
+    def _check_writer_locked(self, session_id: str, writer_epoch: int) -> None:
+        if self.lease_seconds is None:
             if self._epochs[session_id] != writer_epoch:
                 raise InvariantViolation("Stale writer_epoch")
+            return
+        lease = self._leases.get(session_id)
+        if (
+            lease is None
+            or lease.owner_id != self._owner_id
+            or lease.writer_epoch != writer_epoch
+            or lease.expires_at <= self._clock()
+        ):
+            raise InvariantViolation("Stale writer_epoch")
+
+    async def check_writer(self, session_id: str, writer_epoch: int) -> None:
+        async with self._lock:
+            self._check_writer_locked(session_id, writer_epoch)
+
+    async def renew_writer(self, session_id: str, writer_epoch: int) -> None:
+        async with self._lock:
+            if self.lease_seconds is None:
+                raise InvariantViolation("Writer leases are not configured")
+            self._check_writer_locked(session_id, writer_epoch)
+            self._leases[session_id].expires_at = self._clock() + self.lease_seconds
+
+    async def has_writer(self, session_id: str) -> bool:
+        async with self._lock:
+            if self.lease_seconds is None:
+                return False
+            try:
+                lease = self._leases[session_id]
+            except KeyError:
+                return False
+            return lease.owner_id == self._owner_id and lease.expires_at > self._clock()
 
     async def append(
         self,
@@ -43,8 +111,7 @@ class InMemoryEventStore:
         events: Sequence[NewEvent],
     ) -> Sequence[Event]:
         async with self._lock:
-            if self._epochs[session_id] != writer_epoch:
-                raise InvariantViolation("Stale writer_epoch")
+            self._check_writer_locked(session_id, writer_epoch)
             existing = self._events[session_id]
             if expected_seq != len(existing) + 1:
                 return self._idempotent(existing, events)

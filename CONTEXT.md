@@ -9,7 +9,10 @@ This is the public domain glossary. Names describe execution semantics, not a re
 | Turn | Monotonic integer (`turn >= 1`) identifying one input-driven execution cycle. An interrupted Turn closes through crash closers and later work uses a new Turn. |
 | Step | Monotonic integer (`step >= 1`) within a Turn identifying one logical model request and its Tool batch. |
 | Attempt | Monotonic integer (`attempt >= 1`) within a Step identifying one Provider network attempt. Retries keep the Step and increment Attempt. |
-| Writer epoch | Monotonic fencing token issued by `attach_writer`. Conditional append and `check_writer` reject stale writers. It is not yet a time-based lease. |
+| Writer epoch | Monotonic fencing token issued by `attach_writer`. Conditional append and `check_writer` reject stale writers. Legacy behavior is unchanged without an owner. |
+| Owner lease | Optional binding of `owner_id`, writer epoch, and expiry. Same owner may reattach immediately; another owner needs expiry or forced takeover. Renewal does not advance epoch. |
+| Heartbeat | Independent renewal while a Turn is active, including long Tools. Store time decides expiry; heartbeat failure cancels execution without writing a cancellation fact. |
+| SteerResult | Machine-readable input outcome: accepted, session_missing, not_writer, turn_closed, queue_full, invalid_input, or approval_pending. `steer()` retains its bool API. |
 | Conditional append | Atomic validation of `writer_epoch` and `expected_seq` together with Event insertion. |
 | Trajectory | The append-only factual Event history of a Session (`seq >= 1`). Preview deltas never enter Trajectory. |
 | Event | A committed fact with Session, seq, Turn, Step, Attempt, writer epoch, stable event ID, type, surface operation, payload, and schema version. |
