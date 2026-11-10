@@ -1,53 +1,50 @@
 # nextloop discussion and delivery roadmap
 
-Purpose: track reusable execution contracts and release work without duplicating nika's product roadmap.
+Purpose: preserve the accepted direction and remaining decision boundaries without duplicating nika's product roadmap.
 
-Current entry: **0.2.0rc1 release-candidate validation and publication**. The DSH-aligned runtime and failure suite are implemented; hosted-model smoke and nika consumer acceptance remain separate.
+Current entry: **0.5.0 falsification and integration-contract closure**. The executable implementation plan is [development-plan.md](development-plan.md).
 
 ## Fixed guardrails
 
-- Follow DSH Session/Turn/Step, projection and crash-closer structure without forking DSH or adopting Cordis.
 - One embeddable Loop, not a service or multi-agent framework.
-- Append-only Trajectory is authoritative; Conversation is derived.
+- Append-only Trajectory is authoritative; Conversation and Traces are derived.
 - Whole-batch validation precedes every Tool side effect.
-- Bounded parallel/exclusive scheduling preserves model-order results.
+- TOOL_CALL precedes dispatch, and a writer check follows that commit immediately before execution.
 - Unknown effects stop new dispatch and are never automatically replayed.
-- Every exit has one finalization path; committed finals recover by delivery only.
-- Provider connection configuration is external; execution Trajectory is persistent.
-- No Feishu, Wiki, concrete product Tools or Proactive product policy here.
+- Every exit has one finalization path; committed finals recover by Delivery only.
+- Pending Input is derived from the Event log; in-memory inboxes do not become a second authority.
+- Provider connection configuration stays outside Trajectory.
+- No Feishu, Wiki, concrete product Tools, or Proactive product policy in nextloop.
 
-## Topics
+## Topic closure
 
-| Topic | Accepted design | Status |
+| Topic | Accepted direction | Current state |
 |---|---|---|
-| T1 Execution and ReAct | DSH Turn/Step driver, response decision table, two-correction bound, ordered steer and common finalization | **Design closed** in [AgentLoop](../design/agent-loop.md) and [ReAct](../design/react-protocol.md); verification pending |
-| T2 Model and Context | Configured OpenAI/Anthropic Adapters, frozen in-memory requests, external Provider configuration, append-only context, usage/preflight and compaction | **Design closed**; Adapter contracts and wire tests pending |
-| T3 Tool contracts | Whole-batch admission, parallel/exclusive scheduling, model-order Observations, ordinary errors, unknown/cancellation close rules | **Generic design closed**; resource mechanisms and per-consumer Tool Schemas pending |
-| T4 Durable state | Event types, transaction groups, seq/idempotency/lease guards, projection, crash closers and delivery-only recovery | **Design closed**; field-level schema, migrations and fault tests pending |
-| T5 Adapter integration | Public versioned Adapters; nika is the first consumer example, not a protocol dependency | Pending after core contracts |
-| T6 Release and maintenance | Python 3.11+, centralized `contracts.py`, single-driver layout, CI, versioning, migrations, examples and release notes | **Engineering direction closed** in [ADR-0003](../adr/0003-python-and-centralized-contracts.md); implementation and the full verification matrix pending |
+| Execution and ReAct | Turn/Step driver, bounded correction, ordered steer, common finalization | Implemented; normal and terminal behavior covered |
+| Model and Context | Frozen in-memory requests, external Provider configuration, append-only projection, Compaction | Implemented; recorded Adapter contracts and separately identified live smoke |
+| Tool contracts | Admission, parallel/exclusive scheduling, ordered Observations, explicit uncertainty | Implemented; full append and side-effect fault scenarios covered |
+| Durable state | Atomic conditional append, idempotency, writer fencing, crash closers | Implemented for single-process fencing; timed leases remain 0.7 |
+| Pending Input | Log projection by `input_id` and Step-boundary consumption | Implemented; cross-process steering reasons remain 0.7 |
+| Observability | Committed-event Trace projection with failure isolation | Implemented; persistent Outbox remains 0.8 |
+| Schema evolution | Read-only upcasting and versioned real fixtures | 0.6, not currently claimed |
+| Operation identity and approval | Persistent `operation_id`, effect declarations, approved new-Turn resume | 0.6, not currently claimed |
+| Retention | Reentrant whole-Session deletion with tombstones | 0.9, not currently claimed |
+| Consumer integration | Public versioned Adapters; nika is a consumer, not a dependency | Separate acceptance |
+| Release | Python 3.11–3.14, frozen imports, fault matrix, benchmark, official API gates | 0.5 verifies engineering; official OpenAI/Anthropic acceptance blocks 1.0 |
 
-## Remaining implementation contracts
+## Decision order
 
-- Field-level event payloads in `contracts.py`, schema migration and malformed-history handling.
-- Resource-restriction persistence, responsibility transfer, numeric cleanup deadlines and verified release.
-- Deterministic OpenAI/Anthropic request/response fixtures and exact-byte retry evidence.
-- Package implementation and CI using the accepted Python/dependency baseline.
-- Fake-adapter conformance, real SQLite process-exit tests and one consumer Adapter.
+1. Falsify current guarantees before freezing them.
+2. Add operation identity and approval before changing writer ownership.
+3. Add leases before promising coordinated multi-process behavior.
+4. Add persistent export acknowledgement before calling Traces durable.
+5. Add tombstones before promising deletion.
+6. Require official Provider evidence before 1.0.
 
-These are implementation and verification tasks, not new architecture topics.
-
-## Required evidence per topic
-
-1. Accepted input and behavior.
-2. Interface and unique commit owner.
-3. Normal, failure, cancellation and recovery scenarios.
-4. Verification evidence and explicit remaining consumer work.
-
-The accepted [verification matrix](../design/verification-matrix.md) is the release checklist. Do not mark a requirement implemented from documentation alone.
+The [verification matrix](../design/verification-matrix.md) is the executable checklist. Documentation alone never marks a requirement implemented.
 
 ## Integration links
 
-- [nika](https://github.com/12bitsD/nika) independently owns personal agent and superagent behavior, Feishu, AgentWiki, Skills, Prompts, deployment and Proactive behavior.
+- [nika](https://github.com/12bitsD/nika) independently owns personal-agent behavior, Feishu, AgentWiki, Skills, Prompts, deployment, and Proactive behavior.
 - [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md) records the DSH-aligned decision and deltas.
 - [Open-source evaluation](../research/2026-11-06-open-source-agent-loops.md) preserves the earlier candidate comparison.

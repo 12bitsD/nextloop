@@ -5,7 +5,12 @@ import pytest
 from nextloop.adapters.memory import InMemoryEventStore
 from nextloop.adapters.sqlite import SQLiteEventStore
 from nextloop.contracts import EventType, InvariantViolation, NewEvent
-from nextloop.testing import check_event_store
+from nextloop.testing import (
+    DuplicateEventIdStore,
+    UncheckedWriterStore,
+    WrongSurfaceStore,
+    check_event_store,
+)
 
 
 @pytest.fixture(params=["memory", "sqlite"])
@@ -64,3 +69,13 @@ async def test_sqlite_rejects_unknown_event_schema(tmp_path):
     with pytest.raises(InvariantViolation, match="future"):
         await store.load_recovery("s")
     store.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "broken_store",
+    [UncheckedWriterStore(), DuplicateEventIdStore(), WrongSurfaceStore()],
+)
+async def test_public_store_contract_rejects_known_bad_implementations(broken_store):
+    with pytest.raises(AssertionError):
+        await check_event_store(broken_store)

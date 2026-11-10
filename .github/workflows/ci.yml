@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -25,6 +25,7 @@ jobs:
       - run: .venv/bin/ruff format --check src tests examples
       - run: .venv/bin/mypy --strict src/nextloop
       - run: .venv/bin/pytest -q
+      - run: .venv/bin/python tests/projection_benchmark.py
       - run: .venv/bin/python -m build
       - run: .venv/bin/twine check dist/*
       - run: .venv/bin/python examples/basic.py

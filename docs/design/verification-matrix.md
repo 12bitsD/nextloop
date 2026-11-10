@@ -1,93 +1,91 @@
 # AgentLoop verification matrix
 
-Status: accepted release gate, 2026-11-06. No scenario is marked passing until executable evidence exists.
-
-## Current 0.2.0rc1 evidence
-
-The current suite has 38 passing tests plus passing `ruff` and `mypy` checks, including eight directory-Skill scenarios for recursive discovery, current-body reload, duplicate names, required fields, Tool dependencies, version compatibility, and `skill_view` misses. It includes deterministic parallel gates, recovered-resource conflict prevention, real subprocess exits during Tool execution and final delivery, SQLite close/reopen, and recorded OpenAI/Anthropic streams. Wheel and sdist pass `twine check`; a clean virtual environment installs the wheel and completes the fake-Provider Tool round trip.
-
-All 12 live Kimi scenarios pass. They cover OpenAI and Anthropic text, Tool rounds, real parallel execution, exclusive truncation, unknown/resource recovery, steer, cancellation, Compaction, protocol correction, WorkingContext, `concludes_turn`, and delivery-only recovery. Live smoke also caught and now guards the rejected-Tool projection bug that previously emitted dangling assistant `tool_calls`.
-
-nika consumer acceptance, multi-process writer coordination, and large-asset lifecycle remain outside this release candidate's evidence.
+Status: 0.5.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
 
 ## Evidence rules
 
-- Use fake Provider, Tool and Delivery adapters for deterministic protocol tests.
-- Use controllable gates for parallel scheduling; do not infer timing from sleeps.
-- Use real SQLite close/reopen and process-exit injection for persistence evidence.
-- Use recorded OpenAI and Anthropic protocol streams for Adapter contract tests; real-model smoke is separate evidence.
-- Keep nika Feishu, Wiki, Browser and Computer acceptance in nika.
-- A happy-path run, import check or document review is not release evidence.
+- Use fake Provider, Tool, and Delivery adapters for deterministic protocol tests.
+- Use controllable gates for scheduling and takeover; do not infer correctness from sleeps.
+- Inject both ordinary exceptions and `InjectedCrash` before and after the underlying side effect.
+- Recover through the public `AgentLoop.recover()` and continue a real new Turn where applicable.
+- Use real SQLite close/reopen and real subprocess exits for persistence evidence.
+- Recorded OpenAI/Anthropic streams, live DeepSeek/Kimi scenarios, and official OpenAI/Anthropic acceptance are separate evidence classes.
+- Keep nika Feishu, Wiki, Browser, and Computer acceptance in nika.
 
-## V1 — DSH main loop and responses
+## Execution and input
 
-| Scenario | Required evidence |
+| Claim | Closing evidence |
 |---|---|
-| Text only | Input, assistant, final and delivery have one ordered Trajectory |
-| Multiple Steps | Tool Observation precedes the next Step; final facts precede delivery |
-| Mixed text and Tool Calls | Text remains process content and is not delivered separately |
-| Empty, truncated and malformed responses | No invalid dispatch; bounded correction works; exhaustion finalizes as failed |
-| Append-only projection | Existing provider-visible bytes remain unchanged; new facts append |
-| Compaction | Valid summary creates a new projection; failed/uncommitted summaries have no effect |
+| Text, Tool, multi-Step, mixed, empty, truncated, and malformed responses follow one protocol | `tests/test_loop.py`, `test_provider_terminal.py`, and recorded Provider tests |
+| Whole-batch rejection produces zero Tool side effects | Invalid name, JSON, identity, arguments, required-field, and truncated-tail cases |
+| Parallel/exclusive scheduling preserves bounds and model-order results | Deterministic gates, exclusive truncation, and partial-parallel recovery tests |
+| Steer and final commitment have one deterministic order | Active steer, cancellation, final-race, and multi-Step tests |
+| Accepted input is not lost after a crash | `tests/test_pending_inputs.py` plus every-append fault matrix |
+| Recovered Pending is consumed once | New-Turn USER_MESSAGE assertions; Pending becomes empty after the next Turn; repeated recover does not change it |
+| `input_id` deduplication cannot replace content | Same-ID/different-content run and steer reject before acceptance; original Pending and log remain unchanged |
+| Empty IDs cannot become unrecoverable accepted input | Initial and steer empty-ID rejection with zero accepted Events |
+| Compaction cannot bypass identity checks | Post-Compaction conflicting steer and consumed-history conflict regressions |
 
-## V2 — Tool scheduling and Observations
+## Fault injection and recovery
 
-| Scenario | Required evidence |
+The standard scenario has 13 append calls covering initial input, Step, model attempts/message, TOOL_CALL, steer, Tool Result, final, and Delivery acknowledgement. `tests/test_fault_matrix.py` traverses every call on Memory and SQLite with failure before and after commit: **52 scenarios**.
+
+Every scenario checks contiguous seq, unique event IDs, Pending preservation, interrupted-Turn closure, Tool Result pairing, resource locks, stable Final Message delivery, repeated recovery, and a subsequent successful Turn without Tool replay.
+
+Additional boundaries:
+
+| Window | Required result and evidence |
 |---|---|
-| Whole-batch rejection | Bad name, JSON, type, required field, identity and truncated tail each produce zero side effects |
-| Parallel and exclusive calls | Pool never exceeds `max_parallel`; exclusive calls wait for prior started work |
-| Commit order | Every call precedes its dispatch; results commit in model order despite completion order |
-| Ordinary errors | Independent admitted calls continue; failed calls are not automatically replayed |
-| Dependent actions | Validation or dependent writes occur only after a later model decision |
-| Unknown outcome | No new dispatch; started work settles; unstarted calls become `not_executed` |
-| Cancellation | No new dispatch/model call; actual, cancelled, unknown and skipped outcomes remain distinct |
-| Large results | Asset bytes and reference exist before Observation commitment |
-| Resource restrictions | Restrictions survive Run closure and process recovery until verified release |
+| TOOL_CALL committed, writer paused, takeover, old writer resumes | `check_writer` rejects before `ToolRuntime.execute`; zero dispatch and uncertain recovery |
+| Tool executed, writer takeover, late result returns | Late append is rejected; no committed completion; recovery retains uncertainty |
+| Tool crashes before/after execution | No automatic replay; recovered result is uncertain and declared resources remain locked |
+| Parallel batch crashes after one sibling finishes | Every started call receives one recovered uncertain Result; no replay |
+| Compaction response committed or not committed | Only durable Compaction survives; interrupted Turn closes once |
+| Final committed, Delivery not attempted | Recovery delivers the same `final_message_id` |
+| Delivery sent, acknowledgement absent | At-least-once retry with the same ID; owner deduplication is required |
+| Delivery acknowledgement committed, caller sees failure | No duplicate recovery Delivery |
+| Recovery repeats | No duplicate crash closers, Pending input, or Delivery |
 
-## V3 — Steer and finalization
+`tests/test_fault_injection.py` provides the public Store/Tool/Delivery injectors. Real subprocess exits during Tool execution and final Delivery remain separate process-level evidence in `tests/test_failures.py`.
 
-- Steer arrives during streaming, Tool execution, retry backoff and compaction.
-- Several pending inputs retain Session order.
-- Final-versus-steer races have exactly one Store-determined order.
-- Input after final commitment belongs to a later Turn even while delivery is pending.
-- Stop with pending steer preserves that input for a later Turn.
-- Success, failure, cancellation and blocked unknown outcomes all use finalization.
+## Store conformance
 
-## V4 — Provider contracts
+`nextloop.testing.check_event_store()` covers:
 
-Run equivalent recorded-stream cases for OpenAI-compatible and Anthropic Adapters:
+- atomic multi-Event append and failed-batch preservation;
+- contiguous seq and idempotent identical retries;
+- rejection of reused IDs with changed content;
+- stale-writer rejection by both `append` and `check_writer`;
+- Surface epoch, append, none, INPUT_ACCEPTED, and correction behavior;
+- full recovery reads and optional corrupt-schema validation.
 
-- text and Tool argument deltas assemble into one logical response;
-- duplicate/ambiguous identities and incomplete tails fail before dispatch;
-- refusal, content filter, terminal errors and cancellation map honestly;
-- no-output retry reuses identical request bytes and Step identity;
-- new steer or partial output prevents exact-byte retry;
-- usage absence is unknown, never zero;
-- Adapter has no hidden model retry, Tool execution, Session write or fallback;
-- model ID, base URL, credentials and request defaults come from the consumer and do not enter Trajectory;
-- required opaque response/continuation data survives projection where needed.
+Memory and SQLite must pass. `UncheckedWriterStore`, `DuplicateEventIdStore`, and `WrongSurfaceStore` must each be rejected. These negative fixtures are permanent public test assets in `nextloop.testing`.
 
-## V5 — Crash and recovery windows
+## Projection benchmark
 
-Inject process exit at each point:
+`tests/projection_benchmark.py` builds **10,505 Events** with 1,500 model/tool Steps and one Compaction. The report must contain:
 
-1. Step started, assistant not committed.
-2. Assistant committed, Tool not called.
-3. `tool/call` committed, result absent.
-4. Parallel batch partially complete.
-5. Result committed before the next dispatch.
-6. Final committed, delivery not attempted.
-7. External delivery completed, receipt not committed.
-8. Compaction produced but not committed.
+- `events = 10505`, `surface_events = 1502`, `trace_records = 3001`;
+- Memory/SQLite Conversation Projection parity;
+- Memory/SQLite Model and Tool Trace payload parity;
+- incremental versus whole-history Trace parity;
+- required-content canaries for the summary, assistant output, Tool arguments/result, and final content.
 
-Recovery must close old history without replay, pair every admitted Tool Call with one Observation, retain unknown resource restrictions, and recover committed finals by delivery only.
+The benchmark reports median timings but does not impose a cross-machine latency threshold. `tests/test_projection_parity.py` runs the full benchmark in the normal suite; CI and Release also run the standalone command to emit measurements.
 
-## V6 — EventStore and release
+Conversation Projection is bounded by the returned Surface and serialized message bytes. Pending calculation scans ordered history once per new Turn. No O(1) Pending or full-history claim is made.
 
-- Multi-event transactions commit all or none.
-- Expected-seq conflicts and stale writer fences fail closed.
-- Repeated event IDs are idempotent; reused IDs with different content are rejected.
-- Final/no-pending-steer and steer/no-final guards hold under concurrency.
-- SQLite close/reopen produces the same projection and recovery decisions.
-- Corrupt, invalid or noncontiguous history is reported rather than silently converted to success.
-- Public API and event-schema versions, migration notes, package checks and consumer Adapter conformance are present before release.
+## Public contracts and packaging
+
+- `tests/test_import_contract.py` freezes all 91 root re-exports and the complete `__all__` of `events`, `adapters`, `execute`, and `testing`, plus explicit supported names on other integration modules.
+- `tests/test_store_contract.py` is the third-party Store conformance entrypoint.
+- Python 3.11, 3.12, 3.13, and 3.14 run CI. Local clean Python 3.11 and 3.14 environments also run the full suite and benchmark before 0.5.0 publication.
+- `ruff`, format check, strict mypy, wheel/sdist build, Twine, clean wheel installation, examples, and CLI diagnostics are required gates.
+
+## Review and external evidence
+
+Standards, Spec, and Risk reviews run independently. Original counterexamples must become regressions, and fixes receive incremental review. The 0.5.0 review closed stale dispatch, Pending consumption, ID conflicts, Compaction identity, export-contract gaps, wrapper duplication, and erased-content test oracles.
+
+Recorded OpenAI and Anthropic SSE scenarios are Adapter evidence, not official API acceptance. Twelve live Kimi scenarios and live DeepSeek text/Preview/usage and Tool/Delivery smoke are separately identified. Official OpenAI and Anthropic API acceptance remains a **1.0 hard gate**.
+
+Current non-guarantees: time-based writer leases, durable Outbox, Session deletion, remote MCP/OAuth, event-level erasure, and external large-asset lifecycle.

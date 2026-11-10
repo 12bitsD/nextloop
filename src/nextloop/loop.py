@@ -7,6 +7,7 @@ from .contracts import (
     DeliveryOwner,
     EventStore,
     EventType,
+    InvariantViolation,
     NewEvent,
     PendingInput,
     RecoveryOutcome,
@@ -25,6 +26,8 @@ class AgentLoop:
         self._resource_locks: dict[str, set[str]] = {}
 
     async def run(self, context: TurnContext) -> TurnOutcome:
+        if not context.input_id.strip():
+            raise ValueError("input_id must be non-empty")
         actor = self._actors.setdefault(context.session_id, SessionActor())
         async with actor.run_lock:
             writer_epoch, last_seq, last_turn = await context.store.attach_writer(
@@ -39,6 +42,20 @@ class AgentLoop:
                 resource_locks=set(self._resource_locks.get(context.session_id, set())),
             )
             execution.surface = tuple(await context.store.load_surface(context.session_id))
+            history = await context.store.load_recovery(context.session_id)
+            execution.accepted_inputs = {
+                str(event.payload["input_id"]): str(event.payload.get("content", ""))
+                for event in history
+                if event.event_type == EventType.INPUT_ACCEPTED and event.payload.get("input_id")
+            }
+            if (
+                context.input_id in execution.accepted_inputs
+                and execution.accepted_inputs[context.input_id] != context.initial_input
+            ):
+                raise InvariantViolation("input_id reused with different content")
+            execution.recovered_inputs.extend(
+                (item.input_id, item.content) for item in pending_inputs(history)
+            )
             self._active[context.session_id] = execution
             deadline = context.config.turn_deadline_seconds
             if deadline is not None:
@@ -74,12 +91,18 @@ class AgentLoop:
         await self._request_cancel(execution, "turn_deadline_exceeded")
 
     async def steer(self, session_id: str, content: str, *, input_id: str | None = None) -> bool:
+        if input_id is not None and not input_id.strip():
+            raise ValueError("input_id must be non-empty")
         execution = self._active.get(session_id)
         if execution is None or not content.strip():
             return False
         async with execution.actor.commit_lock:
             if execution.final_committed:
                 return False
+            if input_id in execution.accepted_inputs:
+                if execution.accepted_inputs[input_id] != content:
+                    raise InvariantViolation("input_id reused with different content")
+                return True
             accepted_id = (
                 input_id or f"in_{len(execution.actor.inbox) + 1}_{execution.turn}_{execution.step}"
             )

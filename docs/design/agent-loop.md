@@ -1,6 +1,6 @@
 # DSH-aligned AgentLoop core design
 
-- Status: implemented for 0.2.0rc1; the current failure suite and package checks pass
+- Status: implemented for the 0.5 line; release evidence is tracked in the [verification matrix](verification-matrix.md)
 - Last decisions: 2026-11-06 — refined with 4D integer coordinates, closed 5-variant `ToolOutcome` ADT, in-memory actor serialization with DB crash invariants, and `surface_op` epoch watermark projection
 - Structural reference: [DSH ReactLoopAgent](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/agent-loop/src/agent.ts) and [DSH Surface/Repair](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/session/src/repair.ts)
 
@@ -13,7 +13,7 @@ The agreed engineering principles and deltas are:
 - **4D integer coordinates (`session_id`, `turn`, `step`, `attempt`) + `writer_epoch`** instead of nested UUIDs;
 - **closed 5-variant `ToolOutcome` ADT** instead of orthogonal boolean/enum combinations;
 - **in-memory single-actor control flow** with SQLite constraints reserved strictly as crash/split-brain invariants;
-- **`surface_op` (`append | epoch | none`) watermark projection** for O(Δ) context assembly;
+- **`surface_op` (`append | epoch | none`) watermark projection** for Surface-bounded context assembly;
 - whole-batch Tool validation, bounded parallel/exclusive barrier scheduling, one finalization path, delivery-only recovery, and externally managed Provider configuration.
 
 The library is an on-demand execution procedure, not a long-lived product service. Chat and coding use the same Loop.
@@ -37,10 +37,11 @@ Every event in `session_events` carries `(session_id, seq, turn, step, writer_ep
 ## 3. DSH-style Turn/Step driver
 
 ```text
-Session: append-only events + O(Δ) surface projection from last epoch watermark
+Session: append-only events + Surface-bounded projection from last epoch watermark
   → turn/start (turn = last_turn + 1, step = 0)
   → loop Step (step = step + 1):
-       claim pending input from in-memory Inbox → commit step/start + user/message*
+       load recovered Pending from the log and active steer from the inbox
+       commit step/start + user/message* to record input consumption
        assemble and freeze in-memory CandidateRequest from surface projection
        Provider Attempt(s) (attempt = 1..N) → commit assistant/message
        if no Tool Calls:
@@ -50,7 +51,7 @@ Session: append-only events + O(Δ) surface projection from last epoch watermark
        if Tool Calls:
            validate whole batch against Tool Catalog + JSON Schema
            if invalid → commit tool/batch-rejected + correction user/message, continue to step + 1
-           if valid   → run parallel/exclusive barrier scheduler, commit ordered tool/result, step/end
+           if valid   → commit tool/call, recheck writer, execute, commit ordered tool/result
   → mandatory finalization (settle resources, persist terminal facts)
   → deliver final_message_id via DeliveryOwner
 ```
@@ -59,14 +60,14 @@ Every request is derived from the Session's surface projection. Previously deriv
 
 A model stop signal permits finalization; it does not prove business-task success.
 
-## 4. In-memory Inbox & control flow vs. DB crash invariants
+## 4. Input log, in-memory signaling & DB crash invariants
 
 In a single-container runtime, each active Session is driven by a single in-memory `SessionDriver` serialized by a per-Session lock and fenced by `writer_epoch`:
 
-- **No database exceptions as `if/else` control flow:** `steer()` and `final` commitment do not race blindly against SQLite to catch `PendingSteer` exceptions. Instead, `steer()` acquires the Session's in-memory intake lock, verifies the Turn has not sealed its final decision, commits `input/accepted`, and appends to the in-memory `next_step` Inbox.
-- **Deterministic Step boundary:** When a Step produces a final candidate (no Tool Calls), the driver checks `inbox.has_next_step()` under the same in-memory lock. If non-empty, it immediately opens `step + 1` in the same `turn`. If empty, it seals the Turn and commits `final/message + turn/end` in one atomic SQLite transaction.
-- **SQLite as the safety net:** `PRIMARY KEY (session_id, seq)`, `UNIQUE (session_id, event_id)`, and `writer_epoch` checks in SQLite act strictly as **crash and split-brain invariants**. A violation indicates a bug or a zombie process and fails closed immediately.
-- **Stop semantics:** `/stop` sets the current Turn's cancellation signal and records `cancellation/requested`. Unclaimed steer in the Inbox is preserved for the next Turn.
+- **The log is the input authority:** `steer()` acquires the Session's intake lock, verifies the Turn has not sealed its final decision, commits `input/accepted`, then signals the in-memory Inbox. A new Turn reads recovered Pending from the log and commits USER_MESSAGE at its first Step boundary; inbox contents never override the log.
+- **Deterministic Step boundary:** When a Step produces a final candidate (no Tool Calls), the driver checks the inbox under the same in-memory lock. If non-empty, it opens `step + 1` in the same `turn`. If empty, it seals the Turn and commits `final/message + turn/end` in one atomic Store transaction.
+- **SQLite as the safety net:** `PRIMARY KEY (session_id, seq)`, global `UNIQUE(event_id)`, and transactional `writer_epoch` checks act as crash and stale-writer invariants. A violation indicates a bug or a zombie process and fails closed immediately.
+- **Stop semantics:** `/stop` sets the current Turn's cancellation signal and records `cancellation/requested`. Unclaimed steer remains Pending in the log for the next Turn.
 
 ## 5. Model responses and Provider ownership
 
@@ -110,53 +111,62 @@ Every admitted Tool Call produces exactly one `tool/result` containing its seria
 
 `session_events` is the sole authority. To avoid scanning full Session history on every Step, each event carries a `surface_op` tag inspired by DSH's surface fold:
 
-- **`surface_op = 'none'` (Log-only):** `input/accepted`, `turn/start`, `step/start`, `assistant/attempt`, `tool/call`, `tool/batch-rejected`, `step/end`, `turn/end`, `delivery/committed`, `delivery/unknown`. Used for audit, metrics, and crash repair.
+- **`surface_op = 'none'` (Audit/lifecycle):** `input/accepted`, `turn/start`, `step/start`, `assistant/attempt`, `tool/call`, `tool/batch-rejected`, `step/end`, `turn/end`, `delivery/committed`, `delivery/unknown`. Used for audit, metrics, Pending calculation, and crash repair.
 - **`surface_op = 'append'` (Model-visible):** `user/message` (carries `input_id` + `turn` + `step`), `assistant/message`, `tool/result`.
 - **`surface_op = 'epoch'` (Compaction watermark):** `compaction`. Marks a new projection baseline (`epoch_seq = seq`).
 
-**O(Δ) Projection:** Building the Conversation for a Step queries only:
+**Surface-bounded Projection:** Building the Conversation for a Step queries only the latest surface. INPUT_ACCEPTED and TOOL_BATCH_REJECTED are retained alongside `surface_op != 'none'` because Pending recovery and protocol correction need them; INPUT_ACCEPTED alone does not become a model message.
+
 ```sql
 SELECT * FROM session_events
 WHERE session_id = ?
-  AND seq >= COALESCE((SELECT MAX(seq) FROM session_events WHERE session_id = ? AND surface_op = 'epoch'), 1)
-  AND surface_op != 'none'
+  AND seq >= COALESCE((
+      SELECT MAX(seq) FROM session_events
+      WHERE session_id = ? AND surface_op = 'epoch'
+  ), 1)
+  AND (
+      surface_op != 'none'
+      OR event_type IN ('tool/batch-rejected', 'input/accepted')
+  )
 ORDER BY seq ASC;
 ```
+
+Pending Input additionally requires an ordered log scan when a new Turn starts; that scan is not claimed to be O(1).
 
 ### Atomic transaction groups
 
 | Boundary | Atomic events committed together |
 |---|---|
 | Turn start | `input/accepted` (if idle start) + `turn/start` |
-| Step start | `step/start` + claimed `user/message*` (initial input, steer, WorkingContext, or protocol feedback) |
+| Step start | `step/start` + claimed `user/message*` (initial input, recovered Pending, steer, WorkingContext, or protocol feedback) |
 | Tool rejection | `tool/batch-rejected` + protocol-correction `user/message` |
 | Final decision | `final/message` + `step/end` + `turn/end` |
 | Compaction | Single `compaction` (`surface_op = 'epoch'`) + folded active `WorkingContext` `user/message` (if any) |
 | Crash repair | Synthetic `tool/result` closers (`Skipped` / `Uncertain*`) + `step/end` + `turn/end(interrupted)` |
 
-`tool/call` and `tool/result` are committed in separate transactions around the actual side effect.
+`tool/call` and `tool/result` are committed in separate transactions around the actual side effect. The writer is checked again after the TOOL_CALL commit and immediately before dispatch.
 
 ## 9. Crash closers and delivery-only recovery
 
-On startup or Session attach, `SessionManager` inspects the tail of `session_events` for any `turn/start` without a matching `turn/end`:
+`AgentLoop.recover()` inspects ordered Session Events for any `turn/start` without a matching `turn/end`:
 
 1. Increments `writer_epoch` to fence off any zombie writer.
-2. Runs a pure `interrupted_turn_closers(tail_events)` fold (following DSH's `repair.ts`):
-   - Assistant proposed a Tool Call with no `tool/call` event → `Skipped("Interrupted before dispatch")`.
-   - `tool/call` committed with no `tool/result` event → `UncertainHanging` / `UncertainSettled` according to Runtime resource check (`TOOL_OUTCOME_UNKNOWN`).
-   - Appends missing `step/end` and `turn/end(reason="interrupted")`.
+2. Runs the pure `repair_events(events)` fold:
+   - Assistant proposed a Tool Call with no `tool/call` Event → `Skipped("Interrupted before Runtime dispatch")`.
+   - `tool/call` committed with no `tool/result` Event → `UncertainHanging` with the declared resource locks.
+   - Appends missing `step/end` and `turn/end(status="interrupted")`.
 3. Never replays an old Step or re-executes an interrupted Tool.
-4. If `final/message` was committed without `delivery/committed`, retries external delivery only via `DeliveryOwner` using `final_message_id`.
+4. If `final/message` was committed without `delivery/committed`, retries external Delivery only via `DeliveryOwner` using `final_message_id`.
 
-## 10. Context physics, WorkingContext damping, and Compaction
+## 10. Context physics, WorkingContext, and Compaction
 
-- **Prefix cache immutability:** Within an epoch, `surface_op = 'append'` events are strictly append-only. System Prompt and initial `AGENTS.md` bytes never mutate mid-Turn.
-- **WorkingContext damping:** `set_working_context(content, scope="turn" | "session")` appends a user-level reminder. To prevent models from spamming reminders on every Step and polluting context, Runtime enforces **hash deduplication** (identical content is a no-op) and **step damping** (prompts and soft guidance restrict updates to genuine phase transitions). On `compaction`, only the latest active `WorkingContext` is re-emitted right after the `compaction` epoch event; historical reminders stay behind the watermark.
-- **Compaction trigger:** Evaluates at Step preflight when input `I >= 75%` of context window, `I + O > capacity`, or user `/compact`. Compaction is an internal `nextloop` mechanism (not a separate Adapter): it invokes the same `ModelProvider` with `config.compaction_prompt` and Tools disabled, committing a single `surface_op = 'epoch'` event.
-- **No `WaitingRequest` suspension state:** Interactive questions (`ask_user`) return `Completed(..., concludes_turn=True)`, which delivers the prompt as the Turn's final message and cleanly closes the Turn. The user's reply naturally starts the next Turn with full history preserved.
+- **Prefix cache immutability:** Within an epoch, `surface_op = 'append'` Events are strictly append-only. System Prompt and bootstrap message bytes do not mutate mid-Turn.
+- **WorkingContext folding:** Tools can append user-level reminders through `Completed.additional_messages` with a `working_context` marker. Projection retains the latest active marker, Turn-scoped reminders expire during finalization, and Compaction re-emits the latest active reminder immediately after the epoch Event. No separate `set_working_context` Adapter is exposed.
+- **Compaction trigger:** Evaluates at Step preflight when estimated input reaches 75% of the configured context window or input plus output reserve exceeds capacity. Compaction invokes the same `ModelProvider` with `config.compaction_prompt` and Tools disabled, then commits an `epoch` Event only after a non-empty, shrinking summary.
+- **No `WaitingRequest` suspension state:** Interactive questions (`ask_user`) return `Completed(..., concludes_turn=True)`, which delivers the prompt as the Turn's final message and closes the Turn. The user's reply starts the next Turn with full history preserved.
 
 ## 11. Ownership and verification
 
-The Loop owns coordinates, Turn/Step transitions, in-memory Inbox serialization, context projection/compaction, retry admission, Tool barrier scheduling, `ToolOutcome` enforcement, crash closers, and finalization. The 4 Adapters (`EventStore`, `ModelProvider`, `ToolRuntime`, `DeliveryOwner`) own SQLite storage, Provider wire mapping, concrete Tool execution, and channel delivery.
+The Loop owns coordinates, Turn/Step transitions, input signaling, context projection/Compaction, retry admission, Tool barrier scheduling, `ToolOutcome` enforcement, crash closers, and finalization. The core Adapters (`EventStore`, `ModelProvider`, `ToolRuntime`, `DeliveryOwner`) own storage, Provider wire mapping, concrete Tool execution, and channel Delivery.
 
 The [verification matrix](verification-matrix.md) is the release gate.

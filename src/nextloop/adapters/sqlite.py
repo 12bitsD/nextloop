@@ -93,6 +93,15 @@ class SQLiteEventStore:
                 self._connection.execute("ROLLBACK")
                 raise
 
+    async def check_writer(self, session_id: str, writer_epoch: int) -> None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT writer_epoch FROM session_writers WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None or int(row["writer_epoch"]) != writer_epoch:
+                raise InvariantViolation("Stale writer_epoch")
+
     async def append(
         self,
         session_id: str,

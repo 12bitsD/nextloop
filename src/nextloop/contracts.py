@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.5.0rc2"
+API_VERSION = "0.5.0"
 EVENT_SCHEMA_VERSION = "1.0"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
@@ -557,6 +557,7 @@ class RecoveryOutcome:
 
 class EventStore(Protocol):
     async def attach_writer(self, session_id: str) -> tuple[int, int, int]: ...
+    async def check_writer(self, session_id: str, writer_epoch: int) -> None: ...
     async def append(
         self, session_id: str, writer_epoch: int, expected_seq: int, events: Sequence[NewEvent]
     ) -> Sequence[Event]: ...

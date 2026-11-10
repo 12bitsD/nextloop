@@ -17,11 +17,11 @@ This map records reusable execution requirements and verification ownership. No 
 | L11 | Make Tool implementations replaceable behind one contract | [ToolRuntime](../design/loop-interface.md#toolruntime) | **Generic design closed.** Consumer Schemas, resources, cancellation, unknown and assets conformance |
 | L12 | Keep one append-only event authority and derive Conversation | [Event model](../design/agent-loop.md#8-event-model-and-transaction-groups) | **Design closed.** Field schema, seq, idempotency, lease/fence, transactions and malformed history |
 | L13 | Recover from every commit window without replaying side effects | [Recovery](../design/agent-loop.md#9-recovery-and-delivery) | **Design closed.** Process-exit matrix, stale leases and persistent resource tests |
-| L14 | Preserve large outputs and their references | [Content access](../design/context-builder.md#content-access-and-task-performance) | **Open implementation.** Asset identity, preview, retrieval, retention, backup and GC |
+| L14 | Preserve large outputs and their references | [Content access](../design/context-builder.md#content-access-and-task-performance) | **Partially implemented.** Durable full Tool Results, bounded preview/page projections, and read-back are verified; backup, GC, and external-asset lifecycle remain open |
 | L15 | Retry delivery without rerunning model or Tools | [DeliveryOwner](../design/loop-interface.md#deliveryowner) | **Design closed.** `final_message_id`, delivery_unknown, durable handoff and writer-release tests |
-| L16 | Prove consumer independence through public Adapters | [Loop interface](../design/loop-interface.md) | **Open.** Fake and nika Adapters pass the same suite with no Feishu/Wiki dependency |
-| L18 | Load third-party instruction Skills from directories on demand | [SkillRegistry](../design/skills.md) | **Implemented for 0.2.0rc1.** Metadata discovery, current-body loading, duplicate/dependency/version errors, and `skill_view` tests |
-| L17 | Package and release only after protocol verification | [Development plan](development-plan.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) | **0.2.0rc1 implemented.** Tests, static checks, wheel/sdist and clean-install verification pass; CI publication and consumer smoke remain separate |
+| L16 | Prove consumer independence through public Adapters | [Loop interface](../design/loop-interface.md) | **Open.** Fake Adapters and public Store conformance are implemented; nika consumer acceptance remains separate |
+| L18 | Load third-party instruction Skills from directories on demand | [SkillRegistry](../design/skills.md) | **Implemented.** Metadata discovery, current-body loading, duplicate/dependency/version errors, and `skill_view` tests |
+| L17 | Package and release only after protocol verification | [Development plan](development-plan.md), [ADR-0003](../adr/0003-python-and-centralized-contracts.md) | **0.5.0 implemented and verified.** The complete fault matrix, benchmark, Python 3.14, import contract, and clean package gates pass; publication and later milestones remain separate |
 
 ## Independence rule
 

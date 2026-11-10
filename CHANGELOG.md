@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.0 - 2026-11-11
+
+### Added
+
+- Deterministic `FaultInjectingEventStore`, `FaultInjectingToolRuntime`, and `FaultInjectingDeliveryOwner` in `nextloop.testing`, with before/after side-effect failure windows and process-crash simulation.
+- A full append fault matrix on Memory and SQLite, plus parallel partial completion, late Tool results, Compaction, and writer-takeover scenarios.
+- Deliberately broken Store implementations and public negative conformance checks for writer fencing, duplicate event IDs, and incorrect Surface reads.
+- A 10,505-event benchmark covering Memory/SQLite Conversation Projection parity, Model/Tool Trace payload parity, incremental/whole-history parity, and required-content canaries.
+- Frozen root and module re-export contracts, Python 3.14 CI, architecture and glossary documentation, CONTRIBUTING, and SECURITY.
+
+### Changed
+
+- EventStore implementations must provide `check_writer(session_id, writer_epoch)` and reject stale epochs. See the migration rule in `docs/design/loop-interface.md`; no default no-op is allowed.
+- Initial and explicit steer IDs must be non-empty. Identical retries are idempotent; reusing an ID with different content raises `InvariantViolation` before acceptance.
+- Recovered Pending Input is committed as USER_MESSAGE at the next Step boundary, and accepted-input identity is retained independently of Surface Compaction.
+
+### Fixed
+
+- A writer that is paused after TOOL_CALL commitment can no longer dispatch its Tool after another writer takes over.
+- Recovered steer no longer remains Pending forever after being shown to a Provider.
+- Same-ID content conflicts and empty IDs can no longer silently discard accepted input; Compaction no longer bypasses conflict checks.
+
+### Verified
+
+- 299 offline tests, ruff, format check, strict mypy, wheel/sdist builds, Twine, and a clean wheel-installed Turn.
+- Python 3.11 and 3.14 clean-environment verification plus the 10,505-event parity benchmark.
+- Live DeepSeek Tool Call, Preview, usage, and Delivery smoke.
+- Independent Standards / Spec / Risk review and incremental closure of all reported counterexamples.
+
 ## 0.5.0rc2 - 2026-11-11
 
 ### Fixed

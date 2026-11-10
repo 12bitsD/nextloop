@@ -85,6 +85,9 @@ class ObservingEventStore:
             self._report_error(exc, None)
         return result
 
+    async def check_writer(self, session_id: str, writer_epoch: int) -> None:
+        await self._store.check_writer(session_id, writer_epoch)
+
     async def load_surface(self, session_id: str) -> Sequence[Event]:
         return await self._store.load_surface(session_id)
 

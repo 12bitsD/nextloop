@@ -28,6 +28,11 @@ class InMemoryEventStore:
             last_turn = max((event.turn for event in events), default=0)
             return self._epochs[session_id], len(events), last_turn
 
+    async def check_writer(self, session_id: str, writer_epoch: int) -> None:
+        async with self._lock:
+            if self._epochs[session_id] != writer_epoch:
+                raise InvariantViolation("Stale writer_epoch")
+
     async def append(
         self,
         session_id: str,

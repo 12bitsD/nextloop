@@ -8,7 +8,7 @@
 
 ### Language and dependencies
 
-- Python 3.11+ with native `asyncio`; CI covers 3.11, 3.12, and 3.13.
+- Python 3.11+ with native `asyncio`; CI covers 3.11, 3.12, 3.13, and 3.14.
 - Standard-library `dataclasses`, `typing`, and `sqlite3`.
 - `httpx` for Provider HTTP/SSE and `jsonschema` for Tool argument validation.
 - `pytest` and `pytest-asyncio` for tests; `ruff` and `mypy` for static checks.

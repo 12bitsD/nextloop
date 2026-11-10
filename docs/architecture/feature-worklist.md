@@ -1,30 +1,34 @@
 # nextloop feature worklist
 
-Purpose: distinguish implemented release-candidate capabilities from remaining product work. Verification evidence is in [verification-matrix.md](../design/verification-matrix.md).
+Purpose: distinguish implemented capabilities from remaining work. Executable evidence is owned by the [verification matrix](../design/verification-matrix.md).
 
-## Implemented for 0.2.0rc1
+## Implemented in the current 0.5 line
 
 | Feature | Implementation | Evidence |
 |---|---|---|
-| Turn/Step driver | 4D coordinates, SessionActor/Inbox, thin orchestration | Text, Tool, multi-Step, mixed-response, and final-order tests |
-| Response protocol | Bounded correction, terminal failures, exact-byte retry | Empty/truncated/malformed/exhaustion/retry/partial tests |
-| Tool registration | `ToolRegistry`, whole-batch JSON Schema validation | Invalid name, JSON, arguments, identity, and required-field zero-side-effect tests |
-| Batch scheduling | Bounded parallel pool and exclusive barriers | Gate-based concurrency limit, failure truncation, and model-order result tests |
-| Tool outcomes | Five closed variants and `concludes_turn` | Ordinary error, unknown, cancellation, skipped, and question-final tests |
-| WorkingContext | Additional user-level messages, expiry, and Compaction folding | Append, projection, and expiry tests |
-| Compaction | Built-in Provider summary at 75%/capacity | Tool-less summary and epoch projection tests |
-| EventStore | Memory and SQLite, atomic append, idempotency, writer fencing | Transaction, stale-writer, close/reopen, and projection tests |
-| Recovery | Crash closers, resource restrictions, delivery-only retry | Real subprocess exits during Tool and final delivery |
-| Providers | OpenAI-compatible and Anthropic SSE | Recorded text, Tool delta, usage, HTTP error, and partial-stream tests |
-| Directory Skills | `SkillRegistry`, `skill_view`, frontmatter and dependency validation | Recursive discovery, current-body reload, duplicate/missing-field/dependency/version tests |
-| Packaging | Python 3.11+, wheel/sdist, CI and tag workflows | `ruff`, `mypy`, `pytest`, `twine check`, clean wheel installation |
+| Turn/Step driver | 4D coordinates, append-only Events, thin orchestration | Text, Tool, multi-Step, cancellation, final-order, and budget tests |
+| Response protocol | Bounded correction, terminal failures, exact-byte retry | Empty, truncated, malformed, exhaustion, retry, and partial-output tests |
+| Tool scheduling | Whole-batch Schema validation, bounded parallel calls, exclusive barriers | Zero-side-effect rejection, concurrency gates, ordering, and truncation tests |
+| Recovery | Crash closers, explicit uncertainty, resource locks, delivery-only retry | Every-append fault matrix, real process exits, takeover, late-result, and repeated-recovery tests |
+| Pending Input | Log projection by `input_id`, query API, Step-boundary consumption | Accepted/not-consumed windows, duplicate recovery, retry, cancellation, and next-Turn tests |
+| Context | Append-only projection, WorkingContext, Compaction, result preview/page/full | Projection parity, compaction, UTF-8 paging, read-back, and capacity tests |
+| EventStore | Memory and SQLite, atomic conditional append, idempotency, writer checks | Public conformance plus deliberately broken Store rejection |
+| Providers | OpenAI-compatible and Anthropic streaming adapters | Recorded protocol streams plus separately identified live-provider smoke |
+| Observability | Model/Tool/Turn Trace DTOs, async Exporters, history | Live/history parity, failure isolation, bounded close, and 10k incremental parity |
+| Integrations | Harness, directory Skills, stdio workers, MCP stdio | Offline diagnostics, subprocess conformance, lifecycle, and clean-wheel examples |
+| Release contract | Frozen root/module re-exports, Python 3.11–3.14 CI | Import snapshot, complete gates, wheel/sdist, and clean-install checks |
 
 ## Remaining work
 
-| Feature | Status |
+| Feature | Target and boundary |
 |---|---|
-| Hosted-model smoke | Separate acceptance, not claimed by recorded SSE tests |
-| nika Adapter integration | Required before final `0.1.0`; not part of the core RC |
-| Large-asset lifecycle, backup, and GC | Not included in this RC |
-| Multi-process writer coordination | Out of scope; stale writers fail closed |
-| PyPI Trusted Publisher external setup | Required by the release workflow |
+| Event upcasting | 0.6; read-only migration with real historical fixtures |
+| operation_id and ToolEffect | 0.6; explicit reconciliation, not automatic replay |
+| Approval and resume | 0.6; original ID/arguments, new-Turn execution |
+| Time-based writer leases | 0.7; opt-in owner identity, heartbeat, expiry, and takeover |
+| Durable Outbox | 0.8; caller-driven export, persistent acknowledgement, auditable gaps |
+| Whole-Session deletion | 0.9; tombstones and local derived-state cleanup |
+| Official OpenAI/Anthropic acceptance | 1.0 hard gate; recorded streams and DeepSeek do not substitute |
+| nika product integration | Separate consumer acceptance; no Feishu/Wiki dependency enters nextloop |
+| Large external-asset lifecycle | Not claimed; current large Tool Results remain in the EventStore |
+| Remote MCP/OAuth and more Providers | Explicitly outside the 1.0 plan |

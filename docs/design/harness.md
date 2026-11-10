@@ -84,13 +84,13 @@ Exporters may optionally implement `flush()` and `close()`, synchronously or asy
 
 ## Pending Input
 
-The event log is the sole source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs that have not been consumed by a USER_MESSAGE, ordered by their original seq. Recovery projects these inputs at the start of the next Turn instead of rebuilding an in-memory inbox. Callers must provide a stable `input_id` to deduplicate retries or query Pending before retrying.
+The event log is the sole source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs that have not been consumed by a USER_MESSAGE, ordered by their original seq. The next Turn loads these inputs from the log and commits their USER_MESSAGE consumption at its first Step boundary; `recover()` itself does not rebuild an in-memory inbox. Callers must provide a stable `input_id` to deduplicate retries or query Pending before retrying.
 
 ```python
 pending = await loop.pending_inputs("session-id", store)
 ```
 
-Pending historical inputs appear before the new Turn's initial input. Inputs from cancelled or budget-terminated Turns carry forward by default. Repeated recovery and a crash between recover and run do not duplicate them.
+Pending historical inputs appear before the new Turn's initial input. Inputs from cancelled or budget-terminated Turns carry forward by default. Repeated recovery and a crash between recover and run do not duplicate them. Explicit IDs must be non-empty. The same ID with identical content is an idempotent retry; different content is rejected without consuming or replacing the original Pending input.
 
 ## Budgets and Tool Results
 

@@ -22,6 +22,7 @@ jobs:
       - run: .venv/bin/ruff format --check src tests examples
       - run: .venv/bin/mypy --strict src/nextloop
       - run: .venv/bin/pytest -q
+      - run: .venv/bin/python tests/projection_benchmark.py
       - run: .venv/bin/python -m build
       - run: .venv/bin/twine check dist/*
       - run: uv venv --python 3.11 .release-venv

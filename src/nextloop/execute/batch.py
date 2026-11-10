@@ -54,6 +54,7 @@ class BatchExecutor:
         cancel: asyncio.Event,
         active_resources: frozenset[str],
         commit: Callable[[Sequence[NewEvent]], Awaitable[None]],
+        check_writer: Callable[[], Awaitable[None]],
     ) -> BatchResult:
         validated, issues = self.registry.validate(calls)
         if issues:
@@ -94,7 +95,7 @@ class BatchExecutor:
             current = validated[index]
             if current.spec.mode.value == "exclusive":
                 outcome, timing = await self._run_one(
-                    current, session_id, turn, step, cancel, commit
+                    current, session_id, turn, step, cancel, commit, check_writer
                 )
                 outcomes.append((current.call, current.spec, outcome))
                 timings[current.call.call_id] = timing
@@ -118,7 +119,10 @@ class BatchExecutor:
                     )
                     continue
                 chunk_results = await asyncio.gather(
-                    *(self._run_one(item, session_id, turn, step, cancel, commit) for item in chunk)
+                    *(
+                        self._run_one(item, session_id, turn, step, cancel, commit, check_writer)
+                        for item in chunk
+                    )
                 )
                 chunk_outcomes = []
                 for item, (outcome, timing) in zip(chunk, chunk_results, strict=True):
@@ -144,6 +148,7 @@ class BatchExecutor:
         step: int,
         cancel: asyncio.Event,
         commit: Callable[[Sequence[NewEvent]], Awaitable[None]],
+        check_writer: Callable[[], Awaitable[None]],
     ) -> tuple[ToolOutcome, ToolExecutionTiming]:
         await commit(
             [
@@ -160,6 +165,7 @@ class BatchExecutor:
                 )
             ]
         )
+        await check_writer()
         started_at = utc_now()
         started = time.monotonic()
         outcome = await self.registry.execute(

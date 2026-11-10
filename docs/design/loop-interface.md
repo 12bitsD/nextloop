@@ -1,10 +1,10 @@
 # Loop interface and ownership
 
-Status: **v1-draft implemented for 0.2.0rc1**, with public contracts in `src/nextloop/contracts.py`.
+Status: **v1 implemented for 0.5.0**, with public contracts in `src/nextloop/contracts.py`.
 
 ## Independence and version dependency
 
-This document and `src/nextloop/contracts.py` are the only integration dependency between nextloop and its consumers. Public API compatibility (`API_VERSION`) and event-schema compatibility (`EVENT_SCHEMA_VERSION`) are versioned independently.
+This document and `src/nextloop/contracts.py` are the integration dependency between nextloop and its consumers. Public API compatibility (`API_VERSION`) and event-schema compatibility (`EVENT_SCHEMA_VERSION`) are versioned independently. See [Architecture and import contract](architecture.md) for frozen module paths and root re-exports.
 
 ## Public shape
 
@@ -13,9 +13,10 @@ AgentLoop.run(TurnContext) -> TurnOutcome
 AgentLoop.steer(session_id, content, *, input_id=None) -> bool
 AgentLoop.cancel(session_id, cause="user_stop") -> bool
 AgentLoop.recover(session_id, store, delivery) -> RecoveryOutcome
+AgentLoop.pending_inputs(session_id, store) -> tuple[PendingInput, ...]
 ```
 
-`steer` and `cancel` return `False` when there is no active Turn or final commitment has already happened. Input after final commitment belongs to a later Turn.
+`steer` and `cancel` return `False` when there is no active Turn or final commitment has already happened. Input after final commitment belongs to a later Turn. Pending Input is derived from the log by `input_id`; a new Turn commits recovered Pending as USER_MESSAGE at its first Step boundary without duplicating active inbox input.
 
 ### Coordinate system
 
@@ -28,16 +29,23 @@ Every execution fact is indexed by 4D integer coordinates plus a writer fence:
 - `attempt: int` (1-based per Step; Provider retry counter)
 - `writer_epoch: int` (monotonic fencing token per Session writer attachment)
 
-## The Only 4 Adapter Seams
+## Core Adapter Seams
 
-Context assembly and Compaction are built-in mechanisms configured through `LoopConfig`.
+Context assembly and Compaction are built-in mechanisms configured through `LoopConfig`. Additional extension points include PreviewSink, Exporters, Skills, and stdio/MCP workers.
 
 ### 1. EventStore
 
 - `attach_writer(session_id) -> (writer_epoch, last_seq, last_turn)`
-- `append(session_id, writer_epoch, expected_seq, events) -> Sequence[Event]`
-- `load_surface(session_id) -> Sequence[Event]` — O(Δ) query from the latest `SurfaceOp.EPOCH` watermark where `surface_op != NONE`
-- `load_recovery(session_id) -> Sequence[Event]` — full ordered history for deterministic crash repair
+- `check_writer(session_id, writer_epoch) -> None` — rejects a stale writer immediately before Tool dispatch.
+- `append(session_id, writer_epoch, expected_seq, events) -> Sequence[Event]` — validates epoch/seq and inserts atomically; identical retries are idempotent.
+- `load_surface(session_id) -> Sequence[Event]` — returns model-visible Events from the latest `SurfaceOp.EPOCH` watermark plus INPUT_ACCEPTED and protocol correction facts.
+- `load_recovery(session_id) -> Sequence[Event]` — full ordered history for deterministic crash repair and Pending projection.
+
+Third-party implementations must pass `nextloop.testing.check_event_store()`. Current writer epochs are not time-based leases and do not coordinate active multi-process writers.
+
+**Migration from 0.5.0rc2 and earlier:** every EventStore implementation must add `check_writer(session_id, writer_epoch)`. It must read the currently committed epoch and raise `InvariantViolation("Stale writer_epoch")` when the supplied epoch is not current. Decorators must delegate this check to their wrapped Store. No default no-op is provided because it would reopen the post-TOOL_CALL stale-dispatch window.
+
+Initial input and explicit steer IDs must be non-empty. Reusing an ID with identical content is an idempotent retry; reusing it with different content raises `InvariantViolation` before a new INPUT_ACCEPTED is committed, preserving the original Pending input.
 
 ### 2. ModelProvider
 

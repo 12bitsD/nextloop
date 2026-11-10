@@ -1,6 +1,6 @@
 # nextloop vision
 
-Status: DSH-aligned library implemented for 0.2.0rc1; release-candidate verification is passing, hosted-model and consumer acceptance remain separate.
+Status: DSH-aligned library implemented for the 0.5 line. Verification evidence and remaining milestones are tracked in the development plan; official OpenAI/Anthropic and nika consumer acceptance remain separate.
 
 ## Goal
 
@@ -23,8 +23,8 @@ Do not fork DSH or adopt Cordis. Keep explicit deltas for whole-batch Tool valid
 ## What the library should provide
 
 - 4D integer coordinates (`session_id`, `turn`, `step`, `attempt`) + `writer_epoch` fencing (no UUID maze).
-- In-memory single-actor `Inbox` serialization with SQLite constraints reserved for crash invariants.
-- O(Δ) `surface_op` watermark projection, WorkingContext damping, usage preflight, and compaction.
+- Log-authoritative Pending Input with in-memory inbox signaling and transactional writer checks.
+- Surface-bounded `surface_op` watermark projection, WorkingContext folding, usage preflight, and Compaction.
 - Whole-batch Tool validation and CPU-style parallel/exclusive barrier scheduling.
 - Closed 5-variant `ToolOutcome` ADT (`Completed`, `Skipped`, `Cancelled`, `UncertainSettled`, `UncertainHanging`) that makes illegal states unrepresentable.
 - One finalization path, pure crash closers, and delivery-only retry.
@@ -58,7 +58,7 @@ Cross-repository reuse is through `EventStore`, `ModelProvider`, `ToolRuntime` a
 
 ## Current state and release definition
 
-Architecture topics T1–T4 are closed as design. Python 3.11+ and the consolidated package direction are selected in [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md): public contracts live in one `contracts.py`, execution uses one Turn/Step driver, and there is no generic handler layer. Adapter implementations, CI and runtime evidence remain open.
+Architecture topics T1–T4 are closed as design. Python 3.11+ and the consolidated package direction are selected in [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md): public contracts live in one `contracts.py`, execution uses one Turn/Step driver, and there is no generic handler layer. The 0.5.0 fault matrix, Store conformance, benchmark, import contract, Python 3.14, and package gates are implemented; later milestones remain in the development plan.
 
 An initial release requires versioned public API and event schema, migration notes, the complete [verification matrix](docs/design/verification-matrix.md), fake-adapter examples and one consumer Adapter. Consumer product acceptance remains independent.
 

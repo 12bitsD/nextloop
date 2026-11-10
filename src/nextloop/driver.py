@@ -61,6 +61,8 @@ class SessionExecution:
     terminal_reason: str | None = None
     deadline_task: asyncio.Task[None] | None = None
     surface: tuple[Event, ...] = ()
+    recovered_inputs: list[tuple[str, str]] = field(default_factory=list)
+    accepted_inputs: dict[str, str] = field(default_factory=dict)
     preview: PreviewChannel | None = None
 
     @property
@@ -164,6 +166,10 @@ class SessionExecution:
         if self.seq <= previous_seq:
             return
         for event in committed:
+            if event.event_type == EventType.INPUT_ACCEPTED:
+                self.accepted_inputs[str(event.payload["input_id"])] = str(
+                    event.payload.get("content", "")
+                )
             if event.surface_op == SurfaceOp.EPOCH:
                 self.surface = (event,)
             elif event.surface_op == SurfaceOp.APPEND or event.event_type in (
@@ -324,6 +330,9 @@ class TurnDriver:
                     cancel=execution.cancel,
                     active_resources=frozenset(execution.resource_locks),
                     commit=execution.append,
+                    check_writer=lambda: execution.context.store.check_writer(
+                        execution.session_id, execution.writer_epoch
+                    ),
                 )
                 if batch.budget_reason is not None:
                     return await self._budget_failure(batch.budget_reason)
@@ -400,10 +409,17 @@ class TurnDriver:
             ]
             inputs = []
             if execution.step == 1:
+                inputs.extend(execution.recovered_inputs)
                 inputs.append((execution.context.input_id, execution.context.initial_input))
+                execution.recovered_inputs.clear()
             inputs.extend(execution.actor.inbox)
             execution.actor.inbox.clear()
+            unique_inputs: dict[str, tuple[str, str]] = {}
             for input_id, content in inputs:
+                if input_id in unique_inputs and unique_inputs[input_id][1] != content:
+                    raise InvariantViolation("input_id reused with different content")
+                unique_inputs.setdefault(input_id, (input_id, content))
+            for input_id, content in unique_inputs.values():
                 events.append(
                     NewEvent(
                         event_type=EventType.USER_MESSAGE,

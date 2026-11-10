@@ -6,12 +6,12 @@ nextloop is an embeddable Python AgentLoop for developers who want to build thei
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.5.0rc2**.
+Current version: **0.5.0**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.5.0rc2
+python -m pip install nextloop==0.5.0
 ```
 
 For local development:
@@ -68,7 +68,7 @@ Core adapter seams are `EventStore`, `ModelProvider`, `ToolRuntime`, and `Delive
 
 | Area | Guarantee | Not a guarantee |
 |---|---|---|
-| Accepted input | Accepted inputs are projected from the log by `input_id` and can be queried with `AgentLoop.pending_inputs`. | Automatic deduplication when callers retry with a different or missing ID. |
+| Accepted input | Accepted inputs are projected from the log by `input_id` and can be queried with `AgentLoop.pending_inputs`. Explicit IDs are non-empty; identical retries deduplicate, conflicting content is rejected without consuming the original. | Automatic deduplication when callers retry with a different or missing ID. |
 | Delivery | Delivery is at least once; DeliveryOwner must deduplicate by stable `final_message_id`. | Exactly-once delivery or delivery without an idempotent owner. |
 | Tool execution | The library never automatically replays an already dispatched Tool. | No duplicate external effect when a model reissues a call or a Tool is not idempotent. |
 | Resource locks | Unresolved uncertain results block later calls sharing declared resources. | Global idempotency across different resources or Tools without resource declarations. |
@@ -174,33 +174,41 @@ src/nextloop/
   events/            # pure projection, response/outcome folds, crash repair
   execute/           # model retries, Tool registration, batch scheduling
   adapters/          # SQLite, memory, OpenAI, Anthropic
+  testing.py         # Store conformance and deterministic fault injection
 ```
 
 `events/` performs no I/O. `execute/` owns side effects and classified failures. `driver.py` only composes them.
 
 ## Verification
 
-The release-candidate checks cover:
+The release checks cover:
 
 - text, Tool, multi-Step, mixed, empty, truncated, and malformed responses;
 - whole-batch rejection and parallel/exclusive scheduling with deterministic gates;
 - steer/final ordering, cancellation, WorkingContext, and Compaction;
 - protocol exhaustion, exact-byte retry, and partial-output failure;
+- every append point on Memory and SQLite, before and after commit, with recovery and no-replay assertions;
+- Tool/Delivery side-effect failures, writer takeover, late results, parallel partial completion, and repeated recovery;
+- public Store conformance plus deliberately broken Store rejection;
 - resource-lock recovery, conflict prevention, and explicit release;
 - real subprocess exits during Tool execution and final delivery, followed by SQLite recovery;
 - recorded OpenAI and Anthropic SSE streams;
 - 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
 - live DeepSeek text + Preview + usage and real Tool Call + Delivery smoke;
-- 215 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
+- a 10,505-event benchmark with cross-Store, incremental, and required-content parity;
+- 299 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 
 - nika integration is separate acceptance work.
-- Concurrent writers across multiple processes fail closed; they are not coordinated.
-- Large-asset lifecycle, backup, and GC are not part of this release candidate.
+- Concurrent writers across multiple processes fail closed; they are not coordinated by time-based leases.
+- Large-asset lifecycle, backup, and GC are not part of this release.
+- Official OpenAI and Anthropic API acceptance remains a 1.0 hard gate; recorded streams and DeepSeek do not substitute for it.
 
 ## Documents
 
+- [Architecture and import contract](docs/design/architecture.md)
+- [Domain glossary](CONTEXT.md)
 - [AgentLoop design](docs/design/agent-loop.md)
 - [Public interface](docs/design/loop-interface.md)
 - [Harness and extension interface](docs/design/harness.md)
@@ -208,11 +216,12 @@ Current limits:
 - [Directory-based SkillRegistry](docs/design/skills.md)
 - [Verification matrix](docs/design/verification-matrix.md)
 - [Development plan](docs/architecture/development-plan.md)
+- [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 - [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), and [ADR-0005 Pending Input](docs/adr/0005-pending-input.md)
 
 ## Release
 
-CI covers Python 3.11, 3.12, and 3.13. A `v*` tag runs the release workflow, which verifies the package, publishes wheel and sdist to PyPI through Trusted Publishing, and creates a GitHub Release.
+CI covers Python 3.11, 3.12, 3.13, and 3.14. A `v*` tag runs the release workflow, which verifies the package and benchmark, publishes wheel and sdist to PyPI through Trusted Publishing, and creates a GitHub Release.
 
 This is a public repository. Do not commit credentials, private trajectories, internal endpoints, or personal data.
