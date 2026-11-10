@@ -8,7 +8,6 @@ from typing import Any
 from ..contracts import (
     DEFAULT_TOOL_RESULT_BYTES,
     DEFAULT_TOOL_RESULT_FULL_MAX_BYTES,
-    READ_TOOL_RESULT_NAME,
     TOOL_RESULT_METADATA_BYTES,
     TOOL_RESULT_MIN_BYTES,
     Cancelled,
@@ -247,11 +246,9 @@ def settle_outcomes(
             )
         )
         if isinstance(outcome, Completed):
-            if (
-                call.name != READ_TOOL_RESULT_NAME
-                and (spec.result_mode == ToolResultMode.FULL or outcome.concludes_turn)
-                and len(outcome.content.encode("utf-8")) > full_max_bytes
-            ):
+            if (spec.result_mode == ToolResultMode.FULL or outcome.concludes_turn) and len(
+                outcome.content.encode("utf-8")
+            ) > full_max_bytes:
                 overflow = True
             released.update(outcome.release_resources)
             for message in outcome.additional_messages:

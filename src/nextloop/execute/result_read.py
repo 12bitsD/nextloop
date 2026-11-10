@@ -44,7 +44,11 @@ def _read_spec(page_bytes: int) -> ToolSpec:
             "properties": {
                 "event_id": {"type": "string"},
                 "offset": {"type": "integer", "minimum": 0},
-                "limit": {"type": "integer", "minimum": 1, "maximum": page_bytes},
+                "limit": {
+                    "type": "integer",
+                    "minimum": TOOL_RESULT_MIN_BYTES,
+                    "maximum": page_bytes,
+                },
             },
             "required": ["event_id", "limit"],
             "additionalProperties": False,
@@ -61,6 +65,8 @@ def _read_handler(
         event_id = str(arguments["event_id"])
         offset = int(arguments.get("offset", 0))
         limit = int(arguments["limit"])
+        if limit < TOOL_RESULT_MIN_BYTES:
+            return _error("invalid_limit", event_id)
         events = await store.load_recovery(context.session_id)
         for event in events:
             if event.event_id != event_id or event.event_type != EventType.TOOL_RESULT:

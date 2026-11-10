@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,6 +19,7 @@ from ..contracts import (
     ValidatedCall,
     ValidationIssue,
 )
+from .cancellation import await_with_cancel
 
 
 @dataclass(frozen=True)
@@ -111,7 +112,7 @@ class ToolRegistry:
         try:
             operation = handler(arguments, ToolContext(session_id, turn, step, cancel))
             if inspect.isawaitable(operation):
-                cancellable = _await_with_cancel(operation, cancel)
+                cancellable = await_with_cancel(operation, cancel, asyncio.CancelledError)
                 if spec.timeout_seconds is not None:
                     cancellable = asyncio.wait_for(cancellable, timeout=spec.timeout_seconds)
                 value = await cancellable
@@ -139,21 +140,3 @@ class ToolRegistry:
             )
         except Exception as exc:
             return Completed(f"{type(exc).__name__}: {exc}", is_error=True)
-
-
-async def _await_with_cancel(awaitable: Awaitable[Any], cancel: asyncio.Event) -> Any:
-    operation = asyncio.ensure_future(awaitable)
-    cancellation = asyncio.create_task(cancel.wait())
-    try:
-        done, _ = await asyncio.wait({operation, cancellation}, return_when=asyncio.FIRST_COMPLETED)
-        if cancellation in done and not operation.done():
-            operation.cancel()
-            await asyncio.gather(operation, return_exceptions=True)
-            raise asyncio.CancelledError()
-        cancellation.cancel()
-        return await operation
-    finally:
-        cancellation.cancel()
-        if not operation.done():
-            operation.cancel()
-        await asyncio.gather(operation, cancellation, return_exceptions=True)
