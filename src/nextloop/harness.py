@@ -19,6 +19,7 @@ from .adapters.sqlite import SQLiteEventStore
 from .contracts import (
     API_VERSION,
     HARNESS_SCHEMA,
+    TOOL_RESULT_MIN_BYTES,
     DeliveryOwner,
     EventStore,
     FinalMessage,
@@ -552,6 +553,8 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
         not isinstance(deadline, (int, float)) or isinstance(deadline, bool) or deadline <= 0
     ):
         _fail(source, "loop.turn_deadline_seconds", "must be null or a positive number")
+    if config.tool_result_bytes < TOOL_RESULT_MIN_BYTES:
+        _fail(source, "loop.tool_result_bytes", "must be >= 256 for preview metadata")
     if config.tool_result_full_max_bytes < config.tool_result_bytes:
         _fail(source, "loop.tool_result_full_max_bytes", "must be >= loop.tool_result_bytes")
     backoff = config.retry_backoff_seconds

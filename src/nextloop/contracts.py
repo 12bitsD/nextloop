@@ -15,6 +15,11 @@ EVENT_SCHEMA_VERSION = "1.0"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
 TRACE_SCHEMA = "nextloop.trace/v1"
+TOOL_RESULT_MIN_BYTES = 256
+TOOL_RESULT_METADATA_BYTES = 128
+READ_TOOL_RESULT_NAME = "read_tool_result"
+DEFAULT_TOOL_RESULT_BYTES = 50_000
+DEFAULT_TOOL_RESULT_FULL_MAX_BYTES = 1_048_576
 
 
 def parse_version(value: str) -> tuple[int, int, int, int, int]:
@@ -458,8 +463,8 @@ class LoopConfig:
     max_output_tokens: int | None = None
     max_total_tokens: int | None = None
     turn_deadline_seconds: float | None = None
-    tool_result_bytes: int = 50_000
-    tool_result_full_max_bytes: int = 1_048_576
+    tool_result_bytes: int = DEFAULT_TOOL_RESULT_BYTES
+    tool_result_full_max_bytes: int = DEFAULT_TOOL_RESULT_FULL_MAX_BYTES
 
 
 @dataclass(frozen=True)

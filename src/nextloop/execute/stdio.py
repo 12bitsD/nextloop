@@ -15,8 +15,6 @@ from ..contracts import (
     ToolExecutionMode,
     ToolOutcome,
     ToolSpec,
-    ValidatedCall,
-    ValidationIssue,
     is_positive_number,
 )
 from .cleanup import wait_for_cleanup
@@ -26,7 +24,6 @@ from .stdio_transport import (
     StdioTransport,
     read_frame,
 )
-from .tools import validate_calls
 
 MAX_INLINE_CONTENT_BYTES = 1024 * 1024
 _read_frame = read_frame
@@ -38,16 +35,6 @@ class StdioDriver(StdioTransport):
         if config.driver != "stdio" or not config.command:
             raise ValueError("StdioDriver requires a stdio ToolConfig with a command")
         super().__init__(config, sensitive_env=sensitive_env)
-        self._specs: tuple[ToolSpec, ...] = ()
-        self._remote_names: dict[str, str] = {}
-
-    @property
-    def started(self) -> bool:
-        return self._process is not None
-
-    @property
-    def pid(self) -> int | None:
-        return self._process.pid if self._process is not None else None
 
     async def start(self) -> None:
         async with self._start_lock:
@@ -76,14 +63,6 @@ class StdioDriver(StdioTransport):
             except BaseException:
                 await wait_for_cleanup(asyncio.create_task(self._terminate()))
                 raise
-
-    def catalog(self) -> Sequence[ToolSpec]:
-        return self._specs
-
-    def validate(
-        self, calls: Sequence[ToolCall]
-    ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
-        return validate_calls(calls, {spec.name: spec for spec in self._specs})
 
     async def execute(
         self,

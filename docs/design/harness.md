@@ -6,7 +6,7 @@
 
 ```toml
 schema = "nextloop.harness/v1"
-min_nextloop = "0.4.0rc1"
+min_nextloop = "0.5.0rc1"
 
 [provider]
 protocol = "openai" # or anthropic
@@ -87,6 +87,8 @@ Exporters may optionally implement `flush()` and `close()`, synchronously or asy
 All budget fields default to `None`. Step, model-attempt, and validated Tool-batch limits stop the next side effect. Model attempts include retries and compaction. Token limits use Provider-reported usage and fail closed when required usage is missing or invalid. `turn_deadline_seconds` reuses cancellation and uncertain Tool semantics. Budgets are Turn-local; recovery closes an interrupted Turn and a later Turn gets a new budget.
 
 `ToolSpec.result_mode` supports `PREVIEW`, `PAGED`, and `FULL`, with `PREVIEW` as the default. Small results are unchanged. Large previews retain UTF-8-safe head/tail content and an `event_id`; pages are continuous. The durable outcome retains full content while the model Message contains the projection. `read_tool_result` reads committed content from the recovery log by `event_id`, UTF-8 byte offset, and bounded limit. FULL and terminal results are not generically truncated; exceeding the hard limit commits the full result and ends the Turn as failed without final delivery.
+
+The minimum preview/page budget is 256 bytes, with 128 bytes reserved for protocol metadata. The budget applies to the complete model-visible projection, including metadata. `read_tool_result` returns a `[Tool result page: ...]` header followed by the continuous page body and `next_offset`; it does not return a JSON envelope.
 
 ## Transient Preview
 

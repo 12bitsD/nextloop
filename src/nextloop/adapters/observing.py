@@ -161,7 +161,9 @@ class ObservingEventStore:
             return False
         for exporter in self._exporters:
             try:
-                await _exporter_lifecycle(exporter, "flush")
+                await asyncio.wait_for(
+                    _exporter_lifecycle(exporter, "flush"), timeout=timeout_seconds
+                )
             except Exception as exc:
                 self._report_error(exc, None)
                 return False
@@ -172,8 +174,17 @@ class ObservingEventStore:
             if self._closed:
                 return
             self._closed = True
-            cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
+            try:
+                cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
+            except TimeoutError as exc:
+                self._closed = False
+                self._report_error(exc, None)
+                return
+            except BaseException:
+                self._closed = False
+                raise
             if cancelled:
+                self._closed = False
                 raise asyncio.CancelledError()
 
     async def _close(self) -> None:
@@ -201,7 +212,12 @@ class ObservingEventStore:
                         raise
             for exporter in self._close_exporters:
                 try:
-                    await _exporter_lifecycle(exporter, "close")
+                    remaining = max(0.0, deadline - asyncio.get_running_loop().time())
+                    await asyncio.wait_for(
+                        _exporter_lifecycle(exporter, "close"), timeout=remaining
+                    )
+                except TimeoutError:
+                    raise
                 except Exception as exc:
                     self._report_error(exc, None)
         finally:

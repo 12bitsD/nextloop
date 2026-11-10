@@ -20,7 +20,21 @@ def store(request, tmp_path):
 
 @pytest.mark.asyncio
 async def test_public_store_contract(store):
-    await check_event_store(store)
+    corrupt_schema = None
+    if isinstance(store, SQLiteEventStore):
+        session_ids = []
+
+        def corrupt_schema(session_id):
+            session_ids.append(session_id)
+            store._connection.execute(
+                "UPDATE session_events SET schema_version = 'future' WHERE session_id = ?",
+                (session_id,),
+            )
+
+        await check_event_store(store, corrupt_schema=corrupt_schema)
+        assert session_ids
+    else:
+        await check_event_store(store)
 
 
 class Unserializable:

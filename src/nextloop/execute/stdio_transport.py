@@ -17,8 +17,11 @@ from ..contracts import (
     ToolOutcome,
     ToolSpec,
     UncertainHanging,
+    ValidatedCall,
+    ValidationIssue,
 )
 from .cleanup import wait_for_cleanup
+from .tools import validate_calls
 
 MAX_FRAME_BYTES = 16 * 1024 * 1024
 
@@ -91,6 +94,14 @@ class StdioTransport:
 
     async def start(self) -> None:
         raise NotImplementedError
+
+    def catalog(self) -> Sequence[ToolSpec]:
+        return self._specs
+
+    def validate(
+        self, calls: Sequence[ToolCall]
+    ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
+        return validate_calls(calls, {spec.name: spec for spec in self._specs})
 
     def _call_params(
         self,

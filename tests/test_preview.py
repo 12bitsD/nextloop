@@ -110,6 +110,7 @@ async def test_anthropic_preview_deltas_match_final_response():
             {"index": 1, "delta": {"type": "input_json_delta", "partial_json": '{"path":"x"}'}},
         ),
         ("message_delta", {"delta": {"stop_reason": "tool_use"}, "usage": {}}),
+        ("message_stop", {}),
     ]
     body = "".join(f"event: {name}\ndata: {json.dumps(payload)}\n\n" for name, payload in events)
     client = httpx.AsyncClient(

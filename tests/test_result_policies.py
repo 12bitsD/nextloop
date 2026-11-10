@@ -23,6 +23,15 @@ from nextloop import (
 from nextloop.events.outcome import outcome_event, project_result_content
 
 
+def page_parts(content):
+    header, body = content.split("\n", 1)
+    fields = dict(
+        part.split("=", 1)
+        for part in header.removeprefix("[Tool result page: ").removesuffix("]").split()
+    )
+    return fields, body
+
+
 def test_result_projection_is_bounded_and_utf8_safe():
     content = "牢大" * 200
     projected = project_result_content(content, ToolResultMode.PREVIEW, "evt_test", 256)
@@ -83,11 +92,11 @@ async def test_large_result_can_be_read_back_in_pages():
             step=2,
             cancel=asyncio.Event(),
         )
-        data = json.loads(page.content)
-        chunks.append(data["content"])
-        if data["next_offset"] is None:
+        metadata, body = page_parts(page.content)
+        chunks.append(body)
+        if metadata["next_offset"] == "None":
             break
-        offset = data["next_offset"]
+        offset = int(metadata["next_offset"])
     assert "".join(chunks) == full
 
 
@@ -143,8 +152,8 @@ async def test_read_result_survives_sqlite_reopen(tmp_path):
     store.close()
 
     reopened = SQLiteEventStore(path)
-    tools = with_result_reads(registry(), reopened, page_bytes=64)
-    arguments = {"event_id": result.event_id, "offset": 0, "limit": 64}
+    tools = with_result_reads(registry(), reopened, page_bytes=256)
+    arguments = {"event_id": result.event_id, "offset": 0, "limit": 256}
     page = await tools.execute(
         ToolCall("read", "read_tool_result", json.dumps(arguments)),
         arguments,
@@ -153,7 +162,7 @@ async def test_read_result_survives_sqlite_reopen(tmp_path):
         step=1,
         cancel=asyncio.Event(),
     )
-    data = json.loads(page.content)
-    assert data["content"] == full[:64]
-    assert data["next_offset"] == 64
+    metadata, body = page_parts(page.content)
+    assert body == full[:128]
+    assert metadata["next_offset"] == "128"
     reopened.close()

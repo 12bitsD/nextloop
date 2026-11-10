@@ -18,6 +18,7 @@ from ..contracts import (
     utc_now,
 )
 from ..events.project import usage_to_data
+from .cancellation import await_with_cancel
 from .preview import PreviewChannel
 
 
@@ -76,7 +77,7 @@ class ModelCaller:
             )
             try:
                 if preview is not None and callable(streaming_complete):
-                    response = await _await_with_cancel(
+                    response = await await_with_cancel(
                         streaming_complete(
                             request,
                             attempt=attempt,
@@ -84,11 +85,13 @@ class ModelCaller:
                             emit=partial(preview.delta, request, attempt),
                         ),
                         cancel,
+                        _CancelledByUser,
                     )
                 else:
-                    response = await _await_with_cancel(
+                    response = await await_with_cancel(
                         self.provider.complete(request, attempt=attempt, cancel=cancel),
                         cancel,
+                        _CancelledByUser,
                     )
                     if preview is not None:
                         preview.snapshot(request, attempt, response)
@@ -224,28 +227,6 @@ class ModelCaller:
 
 class _CancelledByUser(Exception):
     pass
-
-
-async def _await_with_cancel(
-    awaitable: Awaitable[ModelResponse], cancel: asyncio.Event
-) -> ModelResponse:
-    if cancel.is_set():
-        raise _CancelledByUser()
-    operation = asyncio.ensure_future(awaitable)
-    cancellation = asyncio.create_task(cancel.wait())
-    try:
-        done, _ = await asyncio.wait({operation, cancellation}, return_when=asyncio.FIRST_COMPLETED)
-        if cancellation in done and not operation.done():
-            operation.cancel()
-            await asyncio.gather(operation, return_exceptions=True)
-            raise _CancelledByUser()
-        cancellation.cancel()
-        return await operation
-    finally:
-        cancellation.cancel()
-        if not operation.done():
-            operation.cancel()
-        await asyncio.gather(operation, cancellation, return_exceptions=True)
 
 
 async def _sleep_or_cancel(delay: float, cancel: asyncio.Event) -> bool:

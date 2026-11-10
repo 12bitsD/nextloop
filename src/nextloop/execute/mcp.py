@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -15,14 +17,15 @@ from ..contracts import (
     ToolExecutionMode,
     ToolOutcome,
     ToolSpec,
-    ValidatedCall,
-    ValidationIssue,
 )
 from .cleanup import wait_for_cleanup
 from .stdio_transport import StdioProtocolError, StdioTransport
-from .tools import validate_calls
 
 MCP_PROTOCOL_VERSION = "2025-06-18"
+MCP_MAX_CATALOG_PAGES = 100
+MCP_MAX_CATALOG_TOOLS = 1000
+MCP_MAX_CATALOG_BYTES = 4 * 1024 * 1024
+MCP_CATALOG_TIMEOUT_SECONDS = 30.0
 
 
 class McpStdioRuntime(StdioTransport):
@@ -30,8 +33,6 @@ class McpStdioRuntime(StdioTransport):
         if config.driver != "mcp" or not config.command:
             raise ValueError("McpStdioRuntime requires an mcp ToolConfig with a command")
         super().__init__(config, sensitive_env=sensitive_env)
-        self._specs: tuple[ToolSpec, ...] = ()
-        self._remote_names: dict[str, str] = {}
         self._initialized = False
 
     async def start(self) -> None:
@@ -64,15 +65,25 @@ class McpStdioRuntime(StdioTransport):
                 raise
 
     async def _load_catalog(self) -> tuple[ToolSpec, ...]:
+        deadline = time.monotonic() + MCP_CATALOG_TIMEOUT_SECONDS
         tools = []
         cursor: dict[str, Any] = {}
         seen_cursors: set[str] = set()
-        while True:
-            listed = await self._request("tools/list", cursor, request_timeout=10.0)
+        catalog_bytes = 0
+        for _ in range(MCP_MAX_CATALOG_PAGES):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise StdioProtocolError("MCP catalog initialization deadline exceeded")
+            listed = await self._request("tools/list", cursor, request_timeout=min(10.0, remaining))
             raw_tools = listed.get("tools")
             if not isinstance(raw_tools, list):
                 raise StdioProtocolError("MCP tools/list result.tools must be an array")
+            catalog_bytes += len(json.dumps(raw_tools, ensure_ascii=False).encode("utf-8"))
+            if catalog_bytes > MCP_MAX_CATALOG_BYTES:
+                raise StdioProtocolError("MCP catalog byte limit exceeded")
             tools.extend(raw_tools)
+            if len(tools) > MCP_MAX_CATALOG_TOOLS:
+                raise StdioProtocolError("MCP catalog Tool count limit exceeded")
             next_cursor = listed.get("nextCursor")
             if next_cursor is None:
                 break
@@ -80,7 +91,10 @@ class McpStdioRuntime(StdioTransport):
                 raise StdioProtocolError("MCP tools/list returned a repeated cursor")
             seen_cursors.add(next_cursor)
             cursor = {"cursor": next_cursor}
+        else:
+            raise StdioProtocolError("MCP catalog page limit exceeded")
         specs = []
+        remote_names: dict[str, str] = {}
         for item in tools:
             if not isinstance(item, dict) or not isinstance(item.get("name"), str):
                 raise StdioProtocolError("MCP Tool specification must have a name")
@@ -97,6 +111,8 @@ class McpStdioRuntime(StdioTransport):
             name = (
                 f"{self.config.namespace}__{remote_name}" if self.config.namespace else remote_name
             )
+            if name in remote_names:
+                raise StdioProtocolError(f"Duplicate MCP Tool name: {name}")
             specs.append(
                 ToolSpec(
                     name=name,
@@ -107,16 +123,9 @@ class McpStdioRuntime(StdioTransport):
                     timeout_seconds=self.config.timeout_seconds,
                 )
             )
-            self._remote_names[name] = remote_name
+            remote_names[name] = remote_name
+        self._remote_names = remote_names
         return tuple(specs)
-
-    def catalog(self) -> Sequence[ToolSpec]:
-        return self._specs
-
-    def validate(
-        self, calls: Sequence[ToolCall]
-    ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
-        return validate_calls(calls, {spec.name: spec for spec in self._specs})
 
     async def execute(
         self,
@@ -188,7 +197,9 @@ class McpStdioRuntime(StdioTransport):
         for block in content:
             if not isinstance(block, dict) or block.get("type") != "text":
                 return Completed("Unsupported MCP Tool content block", is_error=True)
-            text.append(str(block.get("text", "")))
+            if not isinstance(block.get("text"), str):
+                return Completed("Invalid MCP text content block", is_error=True)
+            text.append(block["text"])
         return Completed(
             "".join(text),
             is_error=bool(response.get("isError", False)),

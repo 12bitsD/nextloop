@@ -6,6 +6,11 @@ from enum import StrEnum
 from typing import Any
 
 from ..contracts import (
+    DEFAULT_TOOL_RESULT_BYTES,
+    DEFAULT_TOOL_RESULT_FULL_MAX_BYTES,
+    READ_TOOL_RESULT_NAME,
+    TOOL_RESULT_METADATA_BYTES,
+    TOOL_RESULT_MIN_BYTES,
     Cancelled,
     Completed,
     EventType,
@@ -127,28 +132,19 @@ def project_result_content(content: str, mode: ToolResultMode, event_id: str, li
     total = len(data)
     if total <= limit or mode == ToolResultMode.FULL:
         return content
+    if limit < TOOL_RESULT_MIN_BYTES:
+        raise ValueError("Tool Result budget is too small for preview metadata")
+    body_budget = limit - TOOL_RESULT_METADATA_BYTES
     if mode == ToolResultMode.PAGED:
-        page = result_page(content, 0, limit)
+        page = result_page(content, 0, body_budget)
         return (
             f"[Tool result page: event_id={event_id} total_bytes={total} "
             f"next_offset={page.next_offset}]\n"
         ) + page.content
-    omitted = 0
-    head = b""
-    tail = b""
-    for _ in range(4):
-        header = (
-            f"[Tool result preview: event_id={event_id} total_bytes={total} "
-            f"omitted_bytes={omitted}; use read_tool_result for missing content]\n"
-        )
-        budget = max(0, limit - len(header.encode("utf-8")))
-        head_budget = int(budget * 0.4)
-        head = _utf8_prefix(data, head_budget)
-        tail = _utf8_suffix(data, budget - head_budget)
-        updated = total - len(head) - len(tail)
-        if updated == omitted:
-            break
-        omitted = updated
+    head_budget = int(body_budget * 0.4)
+    head = _utf8_prefix(data, head_budget)
+    tail = _utf8_suffix(data, body_budget - head_budget)
+    omitted = total - len(head) - len(tail)
     header = (
         f"[Tool result preview: event_id={event_id} total_bytes={total} "
         f"omitted_bytes={omitted}; use read_tool_result for missing content]\n"
@@ -166,7 +162,7 @@ def outcome_event(
     timing: ToolExecutionTiming | None = None,
     recovered: bool = False,
     spec: ToolSpec | None = None,
-    result_bytes: int = 50_000,
+    result_bytes: int = DEFAULT_TOOL_RESULT_BYTES,
 ) -> NewEvent:
     event_id = new_id("evt")
     if (
@@ -218,8 +214,8 @@ def settle_outcomes(
     pacing_step_interval: int,
     blocked_resources: frozenset[str] = frozenset(),
     timings: Mapping[str, ToolExecutionTiming] | None = None,
-    result_bytes: int = 50_000,
-    full_max_bytes: int = 1_048_576,
+    result_bytes: int = DEFAULT_TOOL_RESULT_BYTES,
+    full_max_bytes: int = DEFAULT_TOOL_RESULT_FULL_MAX_BYTES,
 ) -> BatchDecision:
     events: list[NewEvent] = []
     acquired: set[str] = set()
@@ -251,9 +247,11 @@ def settle_outcomes(
             )
         )
         if isinstance(outcome, Completed):
-            if (spec.result_mode == ToolResultMode.FULL or outcome.concludes_turn) and len(
-                outcome.content.encode("utf-8")
-            ) > full_max_bytes:
+            if (
+                call.name != READ_TOOL_RESULT_NAME
+                and (spec.result_mode == ToolResultMode.FULL or outcome.concludes_turn)
+                and len(outcome.content.encode("utf-8")) > full_max_bytes
+            ):
                 overflow = True
             released.update(outcome.release_resources)
             for message in outcome.additional_messages:

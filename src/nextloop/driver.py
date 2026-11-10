@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from .contracts import (
@@ -29,6 +29,7 @@ from .events.project import (
 )
 from .events.response import ResponseAction, decide_response, reject_batch
 from .execute.batch import BatchExecutor
+from .execute.cancellation import await_with_cancel
 from .execute.model import ModelCaller
 from .execute.preview import PreviewChannel
 
@@ -521,7 +522,9 @@ class TurnDriver:
             await execution._append_locked(events)
             execution.final_committed = True
         try:
-            await _deliver_with_cancel(execution.context.delivery.deliver(final), execution.cancel)
+            await await_with_cancel(
+                execution.context.delivery.deliver(final), execution.cancel, _DeliveryCancelled
+            )
             await execution.append(
                 [
                     NewEvent(
@@ -611,21 +614,3 @@ class TurnDriver:
             step=execution.step,
             error=error,
         )
-
-
-async def _deliver_with_cancel(awaitable: Awaitable[None], cancel: asyncio.Event) -> None:
-    operation = asyncio.ensure_future(awaitable)
-    cancellation = asyncio.create_task(cancel.wait())
-    try:
-        done, _ = await asyncio.wait({operation, cancellation}, return_when=asyncio.FIRST_COMPLETED)
-        if cancellation in done and not operation.done():
-            operation.cancel()
-            await asyncio.gather(operation, return_exceptions=True)
-            raise _DeliveryCancelled()
-        cancellation.cancel()
-        await operation
-    finally:
-        cancellation.cancel()
-        if not operation.done():
-            operation.cancel()
-        await asyncio.gather(operation, cancellation, return_exceptions=True)

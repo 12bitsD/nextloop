@@ -92,9 +92,10 @@ class AnthropicProvider:
         client = self.http_client or httpx.AsyncClient(timeout=self.timeout_seconds)
         text_blocks: dict[int, list[str]] = {}
         tool_blocks: dict[int, dict[str, Any]] = {}
-        finish_reason = FinishReason.STOP
+        finish_reason: FinishReason | None = None
         input_tokens = None
         output_tokens = None
+        message_stopped = False
         try:
             async with client.stream(
                 "POST", self._endpoint(), json=body, headers=headers
@@ -166,8 +167,17 @@ class AnthropicProvider:
                                 )
                     elif event == "message_delta":
                         stop_reason = payload.get("delta", {}).get("stop_reason")
-                        finish_reason = self._finish_reason(stop_reason) or finish_reason
+                        if stop_reason is not None:
+                            mapped = self._finish_reason(stop_reason)
+                            if mapped is None:
+                                raise ProviderError(
+                                    f"Anthropic stream returned unknown stop reason: {stop_reason}",
+                                    partial_output=bool(text_blocks or tool_blocks),
+                                )
+                            finish_reason = mapped
                         output_tokens = payload.get("usage", {}).get("output_tokens", output_tokens)
+                    elif event == "message_stop":
+                        message_stopped = True
                     elif event == "error":
                         error = payload.get("error", {})
                         raise ProviderError(
@@ -176,6 +186,17 @@ class AnthropicProvider:
                             partial_output=bool(text_blocks or tool_blocks),
                             code=error.get("type"),
                         )
+            if not message_stopped:
+                raise ProviderError(
+                    "Anthropic stream ended before message_stop",
+                    retryable=True,
+                    partial_output=bool(text_blocks or tool_blocks),
+                )
+            if finish_reason is None:
+                raise ProviderError(
+                    "Anthropic stream completed without a stop reason",
+                    partial_output=bool(text_blocks or tool_blocks),
+                )
             return ModelResponse(
                 content=self._text(text_blocks),
                 tool_calls=tuple(

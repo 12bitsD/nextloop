@@ -87,8 +87,9 @@ class OpenAIProvider:
         content_parts: list[str] = []
         refusal_parts: list[str] = []
         calls: dict[int, dict[str, str]] = {}
-        finish_reason = FinishReason.STOP
+        finish_reason: FinishReason | None = None
         usage: ModelUsage | None = None
+        done = False
         try:
             async with client.stream(
                 "POST",
@@ -105,13 +106,19 @@ class OpenAIProvider:
                         or response.status_code >= 500,
                         code=str(response.status_code),
                     )
-                async for _event, data in data_events(response):
+                async for event, data in data_events(response):
                     if cancel.is_set():
                         return ModelResponse(
                             content="".join(content_parts),
                             finish_reason=FinishReason.CANCELLED,
                         )
+                    if event == "error":
+                        raise ProviderError(
+                            f"OpenAI stream error: {data}",
+                            partial_output=bool(content_parts or refusal_parts or calls),
+                        )
                     if data == "[DONE]":
+                        done = True
                         break
                     chunk = json.loads(data)
                     usage = self._usage(chunk.get("usage")) or usage
@@ -148,9 +155,27 @@ class OpenAIProvider:
                             preview["arguments_delta"] = str(function["arguments"])
                         if emit is not None:
                             emit(preview)
-                    finish_reason = (
-                        self._finish_reason(choice.get("finish_reason")) or finish_reason
-                    )
+                    raw_finish_reason = choice.get("finish_reason")
+                    if raw_finish_reason is not None:
+                        mapped = self._finish_reason(raw_finish_reason)
+                        if mapped is None:
+                            raise ProviderError(
+                                "OpenAI stream returned unknown finish reason: "
+                                f"{raw_finish_reason}",
+                                partial_output=bool(content_parts or refusal_parts or calls),
+                            )
+                        finish_reason = mapped
+            if not done:
+                raise ProviderError(
+                    "OpenAI stream ended before [DONE]",
+                    retryable=True,
+                    partial_output=bool(content_parts or refusal_parts or calls),
+                )
+            if finish_reason is None:
+                raise ProviderError(
+                    "OpenAI stream completed without a finish reason",
+                    partial_output=bool(content_parts or refusal_parts or calls),
+                )
             return ModelResponse(
                 content="".join(content_parts),
                 refusal="".join(refusal_parts) or None,

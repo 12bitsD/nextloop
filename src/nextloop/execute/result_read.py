@@ -5,6 +5,10 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from ..contracts import (
+    DEFAULT_TOOL_RESULT_BYTES,
+    READ_TOOL_RESULT_NAME,
+    TOOL_RESULT_METADATA_BYTES,
+    TOOL_RESULT_MIN_BYTES,
     Completed,
     EventStore,
     EventType,
@@ -19,8 +23,10 @@ from .tools import ToolContext, ToolRegistry
 
 
 def with_result_reads(
-    runtime: ToolRuntime, store: EventStore, page_bytes: int = 50_000
+    runtime: ToolRuntime, store: EventStore, page_bytes: int = DEFAULT_TOOL_RESULT_BYTES
 ) -> ToolRuntime:
+    if page_bytes < TOOL_RESULT_MIN_BYTES:
+        raise ValueError("Tool Result page budget is too small for preview metadata")
     catalog = runtime.catalog()
     if catalog and all(spec.result_mode == ToolResultMode.FULL for spec in catalog):
         return runtime
@@ -31,7 +37,7 @@ def with_result_reads(
 
 def _read_spec(page_bytes: int) -> ToolSpec:
     return ToolSpec(
-        "read_tool_result",
+        READ_TOOL_RESULT_NAME,
         "Read a UTF-8 byte range from a committed Tool Result",
         {
             "type": "object",
@@ -69,20 +75,12 @@ def _read_handler(
                 data[:offset].decode("utf-8")
             except UnicodeDecodeError:
                 return _error("invalid_offset", event_id)
-            page = result_page(content, offset, limit)
-            return Completed(
-                json.dumps(
-                    {
-                        "event_id": event_id,
-                        "offset": offset,
-                        "total_bytes": page.total_bytes,
-                        "next_offset": page.next_offset,
-                        "content": page.content,
-                    },
-                    ensure_ascii=False,
-                    sort_keys=True,
-                )
+            page = result_page(content, offset, max(1, limit - TOOL_RESULT_METADATA_BYTES))
+            header = (
+                f"[Tool result page: event_id={event_id} offset={offset} "
+                f"total_bytes={page.total_bytes} next_offset={page.next_offset}]\n"
             )
+            return Completed(header + page.content)
         return _error("not_found", event_id)
 
     return read
