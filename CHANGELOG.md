@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0 - 2026-11-11
+
+### Added
+
+- Idempotent `EventStore.delete_session()` and `SessionDeletedError`, with persistent deleting/deleted tombstones that fence reads, writers, leases, and Session recreation.
+- Reentrant cleanup of Events, Compaction, writer/lease state, TraceProjector state, live Exporter queues, and Outbox cursor/attempts/gaps/locks while preserving unrelated Sessions.
+- SQLite `secure_delete`, WAL truncation, VACUUM, and raw DB/WAL/SHM/rollback-journal canary verification in WAL and DELETE journal modes.
+- Public Store conformance for deletion and decorator delegation; root API now exports 101 frozen names.
+
+### Changed
+
+- EventStore implementations and decorators must implement or delegate `delete_session()`. Tombstone tables are created lazily so historical 1.0/1.1 SQLite fixtures remain byte-identical after read-only upcasting.
+- Outbox attempts, cursor advances, and gaps now validate the current owner token in the same write transaction, preventing an in-flight export from resurrecting deleted state.
+- SQLite surface/recovery reads use a consistent snapshot for tombstone validation and Event selection.
+
+### Verified
+
+- 384 offline tests, ruff, format check, strict mypy, wheel/sdist builds, Twine, and clean wheel installation.
+- Python 3.11 and 3.14 clean-environment verification plus the 10,505-event parity benchmark.
+- Live DeepSeek Tool/Preview/Delivery smoke and independent Standards / Spec / Risk review with regression closure.
+
 ## 0.8.0 - 2026-11-11
 
 ### Added

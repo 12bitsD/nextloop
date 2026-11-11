@@ -80,6 +80,9 @@ class TraceProjector:
         if session_id not in self._sessions:
             self._sessions[session_id] = _SessionState(last_seq=last_seq)
 
+    def delete_session(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+
     def feed(self, events: Sequence[Event]) -> tuple[TraceRecord, ...]:
         records: list[TraceRecord] = []
         for event in events:

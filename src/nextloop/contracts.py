@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.8.0"
+API_VERSION = "0.9.0"
 EVENT_SCHEMA_VERSION = "1.1"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
@@ -66,6 +66,10 @@ class InvariantViolation(NextloopError):
 
 class WriterLeaseError(InvariantViolation):
     """Raised when another owner holds an unexpired Session lease."""
+
+
+class SessionDeletedError(InvariantViolation):
+    """Raised when a Session tombstone rejects reads or writes."""
 
 
 class PayloadErasedError(NextloopError):
@@ -656,6 +660,7 @@ class RecoveryOutcome:
 
 class EventStore(Protocol):
     async def session_ids(self) -> Sequence[str]: ...
+    async def delete_session(self, session_id: str) -> None: ...
     async def attach_writer(
         self, session_id: str, *, force: bool = False
     ) -> tuple[int, int, int]: ...

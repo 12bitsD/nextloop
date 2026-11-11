@@ -2,7 +2,7 @@
 
 Purpose: preserve the accepted direction and remaining decision boundaries without duplicating nika's product roadmap.
 
-Current entry: **0.8.0 durable Outbox and release closure**. The executable implementation plan is [development-plan.md](development-plan.md).
+Current entry: **0.9.0 reentrant Session deletion and release closure**. The executable implementation plan is [development-plan.md](development-plan.md).
 
 ## Fixed guardrails
 
@@ -28,7 +28,7 @@ Current entry: **0.8.0 durable Outbox and release closure**. The executable impl
 | Observability | Committed-event Trace projection with failure isolation | Implemented with caller-driven durable Outbox, acknowledgement cursors, and export gaps |
 | Schema evolution | Read-only upcasting and versioned real fixtures | Implemented for Event schema 1.0→1.1 |
 | Operation identity and approval | Persistent `operation_id`, effect declarations, approved new-Turn resume | Implemented with explicit reconciliation and approval recovery evidence |
-| Retention | Reentrant whole-Session deletion with tombstones | 0.9, not currently claimed |
+| Retention | Reentrant whole-Session deletion with tombstones | Implemented for local Event/Trace/Outbox state; third-party copies and external assets excluded |
 | Consumer integration | Public versioned Adapters; nika is a consumer, not a dependency | Separate acceptance |
 | Release | Python 3.11–3.14, frozen imports, fault matrix, benchmark, official API gates | 0.5 verifies engineering; official OpenAI/Anthropic acceptance blocks 1.0 |
 

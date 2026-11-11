@@ -13,6 +13,7 @@ from ..contracts import (
     InvariantViolation,
     NewEvent,
     PayloadErasedError,
+    SessionDeletedError,
     SurfaceOp,
     WriterLeaseError,
     utc_now,
@@ -42,6 +43,7 @@ class InMemoryEventStore:
         self._events: dict[str, list[Event]] = defaultdict(list)
         self._epochs: dict[str, int] = defaultdict(int)
         self._leases: dict[str, _Lease] = {}
+        self._deleted: set[str] = set()
         self._lock = asyncio.Lock()
         self._owner_id = owner_id
         self.lease_seconds = lease_seconds if owner_id is not None else None
@@ -49,10 +51,22 @@ class InMemoryEventStore:
 
     async def session_ids(self) -> Sequence[str]:
         async with self._lock:
-            return tuple(sorted(self._events))
+            return tuple(sorted(set(self._events) - self._deleted))
+
+    async def delete_session(self, session_id: str) -> None:
+        async with self._lock:
+            self._deleted.add(session_id)
+            self._events.pop(session_id, None)
+            self._epochs.pop(session_id, None)
+            self._leases.pop(session_id, None)
+
+    def _ensure_active(self, session_id: str) -> None:
+        if session_id in self._deleted:
+            raise SessionDeletedError(f"Session is deleted: {session_id}")
 
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         async with self._lock:
+            self._ensure_active(session_id)
             if self.lease_seconds is not None:
                 lease = self._leases.get(session_id)
                 if (
@@ -73,6 +87,7 @@ class InMemoryEventStore:
             return self._epochs[session_id], len(events), last_turn
 
     def _check_writer_locked(self, session_id: str, writer_epoch: int) -> None:
+        self._ensure_active(session_id)
         if self.lease_seconds is None:
             if self._epochs[session_id] != writer_epoch:
                 raise InvariantViolation("Stale writer_epoch")
@@ -93,12 +108,14 @@ class InMemoryEventStore:
     async def renew_writer(self, session_id: str, writer_epoch: int) -> None:
         async with self._lock:
             if self.lease_seconds is None:
+                self._ensure_active(session_id)
                 raise InvariantViolation("Writer leases are not configured")
             self._check_writer_locked(session_id, writer_epoch)
             self._leases[session_id].expires_at = self._clock() + self.lease_seconds
 
     async def has_writer(self, session_id: str) -> bool:
         async with self._lock:
+            self._ensure_active(session_id)
             if self.lease_seconds is None:
                 return False
             try:
@@ -145,6 +162,7 @@ class InMemoryEventStore:
 
     async def load_surface(self, session_id: str) -> Sequence[Event]:
         async with self._lock:
+            self._ensure_active(session_id)
             events = self._events[session_id]
             epoch_seq = max(
                 (event.seq for event in events if event.surface_op == SurfaceOp.EPOCH),
@@ -162,6 +180,7 @@ class InMemoryEventStore:
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:
         async with self._lock:
+            self._ensure_active(session_id)
             return tuple(upcast_event(copy.deepcopy(event)) for event in self._events[session_id])
 
     @staticmethod

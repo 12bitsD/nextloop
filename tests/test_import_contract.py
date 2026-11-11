@@ -57,6 +57,7 @@ EXPECTED_ROOT_EXPORTS = frozenset(
         "RecoveryOutcome",
         "SQLiteEventStore",
         "SQLiteOutbox",
+        "SessionDeletedError",
         "STDIO_PROTOCOL_VERSION",
         "SkillConfig",
         "SkillDocument",

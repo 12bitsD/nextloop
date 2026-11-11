@@ -1,6 +1,6 @@
 # AgentLoop verification matrix
 
-Status: 0.8.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
+Status: 0.9.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
 
 ## Evidence rules
 
@@ -132,10 +132,24 @@ The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch,
 | Session cleanup is bounded to Outbox state | Cursor, attempts, gaps, and locks are removed without deleting Events or changing writer epochs |
 | Approval waiting is not Tool execution | Tool duration excludes approval delay; Turn duration remains separate |
 
+## 0.9 whole-Session deletion evidence
+
+| Claim | Closing evidence |
+|---|---|
+| Deletion is reentrant and cannot recreate a Session | Memory/SQLite repeated deletion, persistent deleting/deleted tombstones, attach/append/writer rejection |
+| Tombstoned reads fail closed | Surface/recovery/renew/has_writer rejection and reopen; consistent read snapshots never turn deleted history into a valid empty Session |
+| Unrelated Sessions survive | A retained Session remains readable and enumerable after another Session is deleted |
+| Local derived data is removed | TraceProjector state, queued live records, Outbox cursor/attempts/gaps/locks, Events, Compaction, and writer/lease state |
+| Old exports cannot resurrect Outbox state | Success, retry, and max-attempt exporters paused across deletion; transactional owner checks leave all four tables empty |
+| SQLite content bytes are purged | Synthetic Event/Compaction/Outbox canaries absent from DB, WAL, SHM, and rollback-journal scans in WAL and DELETE modes |
+| Cleanup crashes remain resumable | Post-logical-delete crash persists deleted tombstone and a later call completes byte cleanup |
+| Historical fixtures remain read-only | Real 1.0/1.1 SQLite fixture bytes remain unchanged; tombstone schema is created lazily on deletion |
+| Live export does not block the Loop | Existing slow-Exporter and bounded-close regressions plus deletion-specific activity/export lock coverage |
+
 ## Review and external evidence
 
 Standards, Spec, and Risk reviews run independently. Original counterexamples must become regressions, and fixes receive incremental review. The 0.5.0 review closed stale dispatch, Pending consumption, ID conflicts, Compaction identity, export-contract gaps, wrapper duplication, and erased-content test oracles.
 
 Recorded OpenAI and Anthropic SSE scenarios are Adapter evidence, not official API acceptance. Twelve live Kimi scenarios and live DeepSeek text/Preview/usage and Tool/Delivery smoke are separately identified. Official OpenAI and Anthropic API acceptance remains a **1.0 hard gate**.
 
-Current non-guarantees: distributed writer coordination, exactly-once export, Session deletion, remote MCP/OAuth, event-level erasure, and external large-asset lifecycle.
+Current non-guarantees: distributed writer coordination, exactly-once export, deletion of third-party copies or backups, remote MCP/OAuth, event-level erasure, and external large-asset lifecycle.

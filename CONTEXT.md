@@ -39,6 +39,8 @@ This is the public domain glossary. Names describe execution semantics, not a re
 | Trace | ModelCallTrace, ToolCallTrace, or TurnTrace projected from committed Events. Trace export does not control execution. |
 | Exporter | Caller-provided sync or async consumer of Trace records. The live in-memory queue is best-effort; SQLiteOutbox provides separate durable replay. |
 | SQLiteOutbox | Caller-driven durable Trace export with independent cursors, attempts, gaps, and owner-token locks. It is not an Event authority or writer-lease owner. |
+| Session tombstone | A Session-ID-only deleting/deleted record that fences writers, rejects reads, prevents recreation, and makes deletion reentrant. |
+| SessionDeletedError | Explicit rejection raised when any EventStore read or writer operation targets a tombstoned Session. |
 | SkillRegistry | Directory-backed instruction index. `list()` returns Skill metadata and `load(name)` reads the current body without executing it. |
 | SkillSpec | Public Skill metadata: name, description, path, optional required Tools, and minimum nextloop version. |
 | InjectedCrash | `BaseException` test signal that bypasses ordinary application error handlers to simulate process termination without exiting the test process. |

@@ -14,12 +14,13 @@ from ..contracts import (
     InvariantViolation,
     NewEvent,
     PayloadErasedError,
+    SessionDeletedError,
     SurfaceOp,
     WriterLeaseError,
     utc_now,
 )
 from ..events.upcast import upcast_event, validate_event_schema
-from ._sqlite import execute_with_busy_retry
+from ._sqlite import execute_with_busy_retry, purge_deleted_bytes
 
 
 class SQLiteEventStore:
@@ -104,15 +105,85 @@ class SQLiteEventStore:
 
     async def session_ids(self) -> Sequence[str]:
         with self._lock:
-            rows = self._connection.execute(
-                "SELECT DISTINCT session_id FROM session_events ORDER BY session_id"
-            ).fetchall()
+            query = "SELECT DISTINCT session_id FROM session_events"
+            if self._has_tombstone_table_locked():
+                query += " WHERE session_id NOT IN (SELECT session_id FROM session_tombstones)"
+            rows = self._connection.execute(query + " ORDER BY session_id").fetchall()
             return tuple(str(row["session_id"]) for row in rows)
+
+    def _has_tombstone_table_locked(self) -> bool:
+        return (
+            self._connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_tombstones'"
+            ).fetchone()
+            is not None
+        )
+
+    def _ensure_active_locked(self, session_id: str) -> None:
+        if not self._has_tombstone_table_locked():
+            return
+        row = self._connection.execute(
+            "SELECT state FROM session_tombstones WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        if row is not None:
+            raise SessionDeletedError(f"Session is {row['state']}: {session_id}")
+
+    def _delete_lease_locked(self, session_id: str) -> None:
+        exists = self._connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_leases'"
+        ).fetchone()
+        if exists is not None:
+            self._connection.execute(
+                "DELETE FROM session_leases WHERE session_id = ?", (session_id,)
+            )
+
+    async def delete_session(self, session_id: str) -> None:
+        with self._lock:
+            self._connection.execute("PRAGMA secure_delete=ON")
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS session_tombstones (
+                        session_id TEXT PRIMARY KEY,
+                        state TEXT NOT NULL CHECK(state IN ('deleting', 'deleted'))
+                    )
+                    """
+                )
+                self._connection.execute(
+                    "INSERT INTO session_tombstones(session_id, state) VALUES (?, 'deleting') "
+                    "ON CONFLICT(session_id) DO NOTHING",
+                    (session_id,),
+                )
+                self._connection.execute(
+                    "UPDATE session_writers SET writer_epoch = writer_epoch + 1 "
+                    "WHERE session_id = ?",
+                    (session_id,),
+                )
+                self._delete_lease_locked(session_id)
+                self._connection.execute("COMMIT")
+                self._connection.execute("BEGIN IMMEDIATE")
+                self._connection.execute(
+                    "DELETE FROM session_events WHERE session_id = ?", (session_id,)
+                )
+                self._connection.execute(
+                    "DELETE FROM session_writers WHERE session_id = ?", (session_id,)
+                )
+                self._connection.execute(
+                    "UPDATE session_tombstones SET state = 'deleted' WHERE session_id = ?",
+                    (session_id,),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                self._connection.execute("ROLLBACK")
+                raise
+            purge_deleted_bytes(self._connection)
 
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
+                self._ensure_active_locked(session_id)
                 if self.lease_seconds is not None:
                     lease = self._connection.execute(
                         "SELECT owner_id, expires_at FROM session_leases WHERE session_id = ?",
@@ -157,6 +228,7 @@ class SQLiteEventStore:
                 raise
 
     def _check_writer_locked(self, session_id: str, writer_epoch: int) -> None:
+        self._ensure_active_locked(session_id)
         row = self._connection.execute(
             "SELECT writer_epoch FROM session_writers WHERE session_id = ?",
             (session_id,),
@@ -184,6 +256,7 @@ class SQLiteEventStore:
     async def renew_writer(self, session_id: str, writer_epoch: int) -> None:
         with self._lock:
             if self.lease_seconds is None:
+                self._ensure_active_locked(session_id)
                 raise InvariantViolation("Writer leases are not configured")
             self._connection.execute("BEGIN IMMEDIATE")
             try:
@@ -209,6 +282,7 @@ class SQLiteEventStore:
 
     async def has_writer(self, session_id: str) -> bool:
         with self._lock:
+            self._ensure_active_locked(session_id)
             if self.lease_seconds is None:
                 return False
             row = self._connection.execute(
@@ -228,9 +302,10 @@ class SQLiteEventStore:
         expected_seq: int,
         events: Sequence[NewEvent],
     ) -> Sequence[Event]:
-        if not events:
-            return ()
         with self._lock:
+            if not events:
+                self._ensure_active_locked(session_id)
+                return ()
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 self._check_writer_locked(session_id, writer_epoch)
@@ -286,9 +361,20 @@ class SQLiteEventStore:
                 self._connection.execute("ROLLBACK")
                 raise
 
+    def _read_rows_locked(self, statement: str, parameters: Sequence[str]) -> list[sqlite3.Row]:
+        self._connection.execute("BEGIN")
+        try:
+            self._ensure_active_locked(session_id=parameters[0])
+            rows = self._connection.execute(statement, parameters).fetchall()
+            self._connection.execute("COMMIT")
+            return rows
+        except Exception:
+            self._connection.execute("ROLLBACK")
+            raise
+
     async def load_surface(self, session_id: str) -> Sequence[Event]:
         with self._lock:
-            rows = self._connection.execute(
+            rows = self._read_rows_locked(
                 """
                 SELECT * FROM session_events
                 WHERE session_id = ?
@@ -303,15 +389,15 @@ class SQLiteEventStore:
                 ORDER BY seq
                 """,
                 (session_id, session_id),
-            ).fetchall()
+            )
             return tuple(self._event_from_row(row) for row in rows)
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:
         with self._lock:
-            rows = self._connection.execute(
+            rows = self._read_rows_locked(
                 "SELECT * FROM session_events WHERE session_id = ? ORDER BY seq",
                 (session_id,),
-            ).fetchall()
+            )
             return tuple(self._event_from_row(row) for row in rows)
 
     def _idempotent(self, session_id: str, drafts: Sequence[NewEvent]) -> Sequence[Event]:

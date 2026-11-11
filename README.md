@@ -6,12 +6,12 @@ nextloop is an embeddable Python AgentLoop for developers who want to build thei
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.8.0**.
+Current version: **0.9.0**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.8.0
+python -m pip install nextloop==0.9.0
 ```
 
 For local development:
@@ -83,6 +83,7 @@ Core adapter seams are `EventStore`, `ModelProvider`, `ToolRuntime`, and `Delive
 | Recovery | Recovery writes crash closers; the caller starts a new Turn with projected prior messages and Pending Input. | In-place replay of the interrupted Turn or automatic execution of uncertain calls. |
 | Preview | Preview is transient and cannot execute partial Tool arguments. | Preview as a durable EventStore fact or a substitute for committed Delivery. |
 | Observability | Committed Events are authoritative. The live queue is best-effort; `SQLiteOutbox` durably replays closed Turns with cursors, bounded attempts, gaps, and owner-token locks. | Exactly-once export, exporting active Turns, or cleanup of third-party exported copies. |
+| Session deletion | Idempotent deleting/deleted tombstones fence writers and reads; local Events, Trace state, and Outbox rows are removed, with SQLite secure-delete/checkpoint/VACUUM byte cleanup. | Event-level erasure, external Tool rollback, or deletion of caller copies, third-party exports, backups, and external assets. |
 | MCP | stdio lifecycle, paginated static catalogs, operation metadata, and uncertain crash handling. | Remote MCP, OAuth, dynamic `listChanged`, or non-text content mapping. |
 
 `Harness.load("harness.toml")` assembles those adapters without changing the Loop. Use `await harness.check()` for offline validation and `await harness.run("input")` for a model-backed Turn. See [Harness and extension interface](docs/design/harness.md) for the strict TOML schema, stdio protocol, lifecycle rules, and CLI.
@@ -215,14 +216,15 @@ The release checks cover:
 - 12 live Kimi scenarios across both protocols, real Tool usage, parallel execution, recovery, steer, cancellation, Compaction, and WorkingContext;
 - live DeepSeek text + Preview + usage and real Tool Call + Delivery smoke;
 - durable Outbox ack/crash windows, replay identity, bounded retries/gaps, lock heartbeat/takeover, and concurrent schema migration;
+- reentrant Session deletion, stale-writer/read fencing, queue isolation, Outbox anti-resurrection, and raw SQLite content-canary scans;
 - a 10,505-event benchmark with cross-Store, incremental, and required-content parity;
-- 373 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
+- 384 offline tests, `ruff`, `mypy`, wheel/sdist builds, `twine check`, and clean wheel installation.
 
 Current limits:
 
 - nika integration is separate acceptance work.
 - Writer leases coordinate same-host processes only; distributed locks and exactly-once export are not provided.
-- Large-asset lifecycle, backup, Session deletion, and GC are not part of this release.
+- Event-level erasure, external-asset lifecycle, backup/GC, and deletion of third-party copies are not part of this release.
 - Official OpenAI and Anthropic API acceptance remains a 1.0 hard gate; recorded streams and DeepSeek do not substitute for it.
 
 ## Documents
@@ -238,7 +240,7 @@ Current limits:
 - [Development plan](docs/architecture/development-plan.md)
 - [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), [ADR-0007 Approval](docs/adr/0007-approval.md), [ADR-0008 Owner leases](docs/adr/0008-lease.md), and [ADR-0009 Durable Outbox](docs/adr/0009-outbox.md)
+- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), [ADR-0007 Approval](docs/adr/0007-approval.md), [ADR-0008 Owner leases](docs/adr/0008-lease.md), [ADR-0009 Durable Outbox](docs/adr/0009-outbox.md), and [ADR-0010 Session deletion](docs/adr/0010-session-deletion.md)
 
 ## Release
 

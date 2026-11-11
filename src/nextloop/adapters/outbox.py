@@ -18,7 +18,7 @@ from ..contracts import (
     utc_now,
 )
 from ..events.trace import project_traces
-from ._sqlite import execute_with_busy_retry
+from ._sqlite import execute_with_busy_retry, purge_deleted_bytes
 from .observing import _export
 
 
@@ -178,9 +178,14 @@ class SQLiteOutbox:
             self._touch(session_id)
 
     def delete_session(self, session_id: str) -> None:
-        with self._lock, self._connection:
-            for table in ("outbox_cursor", "outbox_attempts", "outbox_gaps", "outbox_locks"):
-                self._connection.execute(f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
+        with self._lock:
+            self._connection.execute("PRAGMA secure_delete=ON")
+            with self._connection:
+                for table in ("outbox_cursor", "outbox_attempts", "outbox_gaps", "outbox_locks"):
+                    self._connection.execute(
+                        f"DELETE FROM {table} WHERE session_id = ?", (session_id,)
+                    )
+            purge_deleted_bytes(self._connection)
 
     async def _call_exporters(self, record: TraceRecord) -> None:
         for exporter in self._exporters:
@@ -265,7 +270,9 @@ class SQLiteOutbox:
             return int(row["attempts"]) if row else 0
 
     def _set_attempts(self, session_id: str, seq: int, attempts: int) -> None:
-        with self._lock:
+        with self._lock, self._connection:
+            self._begin_immediate(self._connection)
+            self._check_lock_owner_locked(session_id)
             self._connection.execute(
                 "INSERT INTO outbox_attempts(session_id, seq, attempts) VALUES (?, ?, ?) "
                 "ON CONFLICT(session_id, seq) DO UPDATE SET attempts = excluded.attempts",
@@ -273,28 +280,40 @@ class SQLiteOutbox:
             )
 
     def _advance(self, session_id: str, seq: int) -> None:
-        self._commit_cursor(session_id, seq)
+        with self._lock, self._connection:
+            self._begin_immediate(self._connection)
+            self._check_lock_owner_locked(session_id)
+            self._commit_cursor_locked(session_id, seq)
 
-    def _commit_cursor(self, session_id: str, seq: int) -> None:
-        with self._lock:
-            self._connection.execute(
-                "INSERT INTO outbox_cursor(session_id, last_seq) VALUES (?, ?) "
-                "ON CONFLICT(session_id) DO UPDATE SET "
-                "last_seq = MAX(last_seq, excluded.last_seq)",
-                (session_id, seq),
-            )
-            self._connection.execute(
-                "DELETE FROM outbox_attempts WHERE session_id = ? AND seq = ?",
-                (session_id, seq),
-            )
+    def _check_lock_owner_locked(self, session_id: str) -> None:
+        row = self._connection.execute(
+            "SELECT 1 FROM outbox_locks WHERE session_id = ? AND owner_token = ?",
+            (session_id, self._lock_owner),
+        ).fetchone()
+        if row is None:
+            raise WriterLeaseError(f"Export lock is not owned by this Outbox: {session_id}")
+
+    def _commit_cursor_locked(self, session_id: str, seq: int) -> None:
+        self._connection.execute(
+            "INSERT INTO outbox_cursor(session_id, last_seq) VALUES (?, ?) "
+            "ON CONFLICT(session_id) DO UPDATE SET "
+            "last_seq = MAX(last_seq, excluded.last_seq)",
+            (session_id, seq),
+        )
+        self._connection.execute(
+            "DELETE FROM outbox_attempts WHERE session_id = ? AND seq = ?",
+            (session_id, seq),
+        )
 
     def _record_gap(self, session_id: str, from_seq: int, to_seq: int, reason: str) -> ExportGap:
         created_at = utc_now()
         with self._lock, self._connection:
+            self._begin_immediate(self._connection)
+            self._check_lock_owner_locked(session_id)
             self._connection.execute(
                 "INSERT INTO outbox_gaps(session_id, from_seq, to_seq, reason, created_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (session_id, from_seq, to_seq, reason, created_at),
             )
-            self._commit_cursor(session_id, to_seq)
+            self._commit_cursor_locked(session_id, to_seq)
         return ExportGap(session_id, from_seq, to_seq, reason, created_at)

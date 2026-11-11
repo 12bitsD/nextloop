@@ -1,6 +1,6 @@
 # nextloop development and verification plan
 
-Current stage: **0.8.0 release verification**. `0.7.0` is published; later milestones are not claimed as implemented.
+Current stage: **0.9.0 release verification**. `0.8.0` is published; later milestones are not claimed as implemented.
 
 ## Delivery order
 

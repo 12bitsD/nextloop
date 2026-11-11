@@ -1,6 +1,6 @@
 # Loop interface and ownership
 
-Status: **v1.1 implemented for 0.8.0**, with public contracts in `src/nextloop/contracts.py`.
+Status: **v1.1 implemented for 0.9.0**, with public contracts in `src/nextloop/contracts.py`.
 
 ## Independence and version dependency
 
@@ -40,16 +40,19 @@ Context assembly and Compaction are built-in mechanisms configured through `Loop
 
 ### 1. EventStore
 
-- `session_ids() -> Sequence[str]` — stable enumeration of Sessions with committed Events for caller-driven Outbox export.
+- `session_ids() -> Sequence[str]` — stable enumeration of non-tombstoned Sessions with committed Events for caller-driven Outbox export.
+- `delete_session(session_id) -> None` — idempotently fences the Session and removes its local Event state; tombstoned reads and writes raise `SessionDeletedError`.
 - `attach_writer(session_id) -> (writer_epoch, last_seq, last_turn)`
 - `check_writer(session_id, writer_epoch) -> None` — rejects a stale writer immediately before Tool dispatch.
 - `append(session_id, writer_epoch, expected_seq, events) -> Sequence[Event]` — validates epoch/seq and inserts atomically; identical retries are idempotent.
 - `load_surface(session_id) -> Sequence[Event]` — returns model-visible Events from the latest `SurfaceOp.EPOCH` watermark plus INPUT_ACCEPTED and protocol correction facts.
 - `load_recovery(session_id) -> Sequence[Event]` — full ordered history for deterministic crash repair and Pending projection.
 
-Third-party implementations must pass `nextloop.testing.check_event_store()`. Writer epochs alone are not time-based leases. Optional `owner_id` and `lease_seconds` add same-host owner/expiry checks, heartbeat renewal, and takeover; they do not provide distributed coordination. Decorators must delegate `session_ids()` so caller-driven Outbox export can enumerate committed Sessions.
+Third-party implementations must pass `nextloop.testing.check_event_store()`. Writer epochs alone are not time-based leases. Optional `owner_id` and `lease_seconds` add same-host owner/expiry checks, heartbeat renewal, and takeover; they do not provide distributed coordination. Decorators must delegate `session_ids()` so caller-driven Outbox export can enumerate committed Sessions and `delete_session()` so retention cannot bypass tombstones or derived-state cleanup.
 
 **Migration from 0.5.0rc2 and earlier:** every EventStore implementation must add `check_writer(session_id, writer_epoch)`. It must read the currently committed epoch and raise `InvariantViolation("Stale writer_epoch")` when the supplied epoch is not current. Decorators must delegate this check to their wrapped Store. No default no-op is provided because it would reopen the post-TOOL_CALL stale-dispatch window.
+
+**Migration from 0.8:** every EventStore implementation must add idempotent `delete_session(session_id)`, with fail-closed tombstones for reads and writer operations. Decorators must delegate deletion and clear their own derived Session state. Built-in SQLite Stores create tombstone schema lazily on first deletion, so opening historical fixtures for read-only upcasting does not rewrite their bytes. Whole-Session retention must also call `SQLiteOutbox.delete_session()`; no cross-database transaction is implied.
 
 Initial input and explicit steer IDs must be non-empty. Reusing an ID with identical content is an idempotent retry; reusing it with different content raises `InvariantViolation` before a new INPUT_ACCEPTED is committed, preserving the original Pending input.
 

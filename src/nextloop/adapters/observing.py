@@ -14,6 +14,7 @@ from ..contracts import (
     EventStore,
     ModelCallTrace,
     NewEvent,
+    SessionDeletedError,
     ToolCallTrace,
     TraceExporterInput,
     TraceRecord,
@@ -70,6 +71,9 @@ class ObservingEventStore:
         self._projector = TraceProjector()
         self._projector_lock = asyncio.Lock()
         self._seeded_sessions: set[str] = set()
+        self._deleted_sessions: set[str] = set()
+        self._activity_lock = asyncio.Lock()
+        self._export_lock = asyncio.Lock()
         self._queue: asyncio.Queue[TraceRecord] = asyncio.Queue(maxsize=max_queue_size)
         self._worker_task: asyncio.Task[None] | None = None
         self._in_flight: TraceRecord | None = None
@@ -82,14 +86,47 @@ class ObservingEventStore:
     async def session_ids(self) -> Sequence[str]:
         return await self._store.session_ids()
 
-    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
-        result = await self._store.attach_writer(session_id, force=force)
-        try:
+    async def delete_session(self, session_id: str) -> None:
+        async with self._activity_lock:
+            try:
+                await self._store.delete_session(session_id)
+            except BaseException:
+                try:
+                    await self._store.load_recovery(session_id)
+                except SessionDeletedError:
+                    await self._purge_deleted_session(session_id)
+                raise
+            await self._purge_deleted_session(session_id)
+
+    async def _purge_deleted_session(self, session_id: str) -> None:
+        self._deleted_sessions.add(session_id)
+        async with self._export_lock:
             async with self._projector_lock:
-                self._projector.advance_seq(session_id, result[1])
-        except Exception as exc:
-            self._report_error(exc, None)
-        return result
+                self._projector.delete_session(session_id)
+                self._seeded_sessions.discard(session_id)
+            retained = []
+            while True:
+                try:
+                    record = self._queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                self._queue.task_done()
+                if record.session_id == session_id:
+                    self.dropped_count += 1
+                else:
+                    retained.append(record)
+            for record in retained:
+                self._queue.put_nowait(record)
+
+    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
+        async with self._activity_lock:
+            result = await self._store.attach_writer(session_id, force=force)
+            try:
+                async with self._projector_lock:
+                    self._projector.advance_seq(session_id, result[1])
+            except Exception as exc:
+                self._report_error(exc, None)
+            return result
 
     @property
     def lease_seconds(self) -> float | None:
@@ -108,15 +145,16 @@ class ObservingEventStore:
         return await self._store.load_surface(session_id)
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:
-        events = await self._store.load_recovery(session_id)
-        if session_id not in self._seeded_sessions:
-            try:
-                async with self._projector_lock:
-                    self._projector.seed(events)
-                    self._seeded_sessions.add(session_id)
-            except Exception as exc:
-                self._report_error(exc, None)
-        return events
+        async with self._activity_lock:
+            events = await self._store.load_recovery(session_id)
+            if session_id not in self._seeded_sessions:
+                try:
+                    async with self._projector_lock:
+                        self._projector.seed(events)
+                        self._seeded_sessions.add(session_id)
+                except Exception as exc:
+                    self._report_error(exc, None)
+            return events
 
     async def append(
         self,
@@ -125,16 +163,17 @@ class ObservingEventStore:
         expected_seq: int,
         events: Sequence[NewEvent],
     ) -> Sequence[Event]:
-        committed = await self._store.append(session_id, writer_epoch, expected_seq, events)
-        try:
-            async with self._projector_lock:
-                records = self._projector.feed(committed)
-                self._seeded_sessions.add(session_id)
-            for record in records:
-                self._enqueue(record)
-        except Exception as exc:
-            self._report_error(exc, None)
-        return committed
+        async with self._activity_lock:
+            committed = await self._store.append(session_id, writer_epoch, expected_seq, events)
+            try:
+                async with self._projector_lock:
+                    records = self._projector.feed(committed)
+                    self._seeded_sessions.add(session_id)
+                for record in records:
+                    self._enqueue(record)
+            except Exception as exc:
+                self._report_error(exc, None)
+            return committed
 
     def _enqueue(self, record: TraceRecord) -> None:
         if self._closed:
@@ -152,16 +191,20 @@ class ObservingEventStore:
     async def _worker(self) -> None:
         while True:
             record = await self._queue.get()
-            self._in_flight = record
-            try:
-                for exporter in self._exporters:
-                    try:
-                        await _export(exporter, record)
-                    except Exception as exc:
-                        self._report_error(exc, record)
-            finally:
-                self._in_flight = None
-                self._queue.task_done()
+            async with self._export_lock:
+                self._in_flight = record
+                try:
+                    if record.session_id in self._deleted_sessions:
+                        self.dropped_count += 1
+                        continue
+                    for exporter in self._exporters:
+                        try:
+                            await _export(exporter, record)
+                        except Exception as exc:
+                            self._report_error(exc, record)
+                finally:
+                    self._in_flight = None
+                    self._queue.task_done()
 
     def _report_error(self, error: Exception, record: TraceRecord | None) -> None:
         try:

@@ -14,6 +14,7 @@ from .contracts import (
     FinalMessage,
     InvariantViolation,
     NewEvent,
+    SessionDeletedError,
     SurfaceOp,
     ToolCall,
     ToolOutcome,
@@ -81,6 +82,9 @@ class FaultInjectingEventStore(_FaultInjector):
 
     async def session_ids(self) -> Sequence[str]:
         return await self._store.session_ids()
+
+    async def delete_session(self, session_id: str) -> None:
+        await self._store.delete_session(session_id)
 
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         return await self._store.attach_writer(session_id, force=force)
@@ -311,6 +315,23 @@ async def check_event_store(
     if corrupt_schema is not None:
         corrupt_schema(session_id)
         await _expect_invariant(store.load_recovery(session_id))
+
+    await store.delete_session(session_id)
+    await store.delete_session(session_id)
+    assert session_id not in await store.session_ids()
+    rejected = (
+        store.load_surface(session_id),
+        store.load_recovery(session_id),
+        store.attach_writer(session_id),
+        store.check_writer(session_id, next_epoch),
+        store.append(session_id, next_epoch, 5, []),
+    )
+    for operation in rejected:
+        try:
+            await operation
+        except SessionDeletedError:
+            continue
+        raise AssertionError("Expected SessionDeletedError")
 
 
 async def _expect_invariant(operation: Awaitable[object]) -> None:

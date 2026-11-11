@@ -153,6 +153,12 @@ Each successful Exporter return advances an independent durable cursor. A crash 
 
 Concurrent exporters use per-Session owner-token locks. A heartbeat renews only during `export_pending()` at one-third of `lock_timeout_seconds`; stale locks can be reclaimed after a crash. `export_timeout_seconds` bounds cooperative calls, but a timed-out synchronous Exporter thread can still produce late side effects. An asynchronous Exporter that suppresses cancellation can delay cleanup and must be made cancellation-aware by the caller. Neither case is a successful acknowledgement or hard isolation of user code. Delivery is therefore at least once, not exactly once, and exporters should deduplicate using the stable OTel `trace_id` and `span_id` emitted by `StdoutExporter`.
 
+### Whole-Session deletion
+
+Call `await store.delete_session(session_id)` for Event state and `outbox.delete_session(session_id)` for its separately owned export state. Both are idempotent; repeat both after interruption. EventStore deletion leaves only a deleting/deleted Session-ID tombstone and rejects subsequent reads, writes, and writer ownership operations with `SessionDeletedError`.
+
+ObservingEventStore also clears projected and queued Trace records without blocking normal Turns on slow Exporters. Outbox write transactions verify their owner token so an in-flight export cannot recreate deleted state. SQLite uses `secure_delete`, WAL checkpoints, and VACUUM for local byte cleanup. Physical cleanup errors are explicit and safe to retry; already dispatched external effects, caller-owned copies, third-party exports, backups, and external assets are outside the deletion guarantee.
+
 ## MCP stdio
 
 `driver = "mcp"` starts a standard MCP `2025-06-18` stdio server. The adapter performs initialize, the initialized notification, and paginated `tools/list` until the cursor is exhausted, then keeps a static catalog for the process lifetime. Remote annotations do not grant parallel execution, resources, or approval privileges.
