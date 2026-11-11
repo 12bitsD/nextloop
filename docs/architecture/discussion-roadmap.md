@@ -2,7 +2,7 @@
 
 Purpose: preserve the accepted direction and remaining decision boundaries without duplicating nika's product roadmap.
 
-Current entry: **0.9.0 reentrant Session deletion and release closure**. The executable implementation plan is [development-plan.md](development-plan.md).
+Current entry: **1.0.0 verified contracts and release closure**. The executable implementation plan is [development-plan.md](development-plan.md).
 
 ## Fixed guardrails
 
@@ -30,7 +30,7 @@ Current entry: **0.9.0 reentrant Session deletion and release closure**. The exe
 | Operation identity and approval | Persistent `operation_id`, effect declarations, approved new-Turn resume | Implemented with explicit reconciliation and approval recovery evidence |
 | Retention | Reentrant whole-Session deletion with tombstones | Implemented for local Event/Trace/Outbox state; third-party copies and external assets excluded |
 | Consumer integration | Public versioned Adapters; nika is a consumer, not a dependency | Separate acceptance |
-| Release | Python 3.11–3.14, frozen imports, fault matrix, benchmark, official API gates | 0.5 verifies engineering; official OpenAI/Anthropic acceptance blocks 1.0 |
+| Release | Python 3.11–3.14, frozen imports, fault matrix, benchmark, live Provider gate | DeepSeek live acceptance selected by ADR-0011; official OpenAI/Anthropic APIs are not claimed |
 
 ## Decision order
 
@@ -39,7 +39,7 @@ Current entry: **0.9.0 reentrant Session deletion and release closure**. The exe
 3. Add leases before promising coordinated multi-process behavior.
 4. Add persistent export acknowledgement before calling Traces durable.
 5. Add tombstones before promising deletion.
-6. Require official Provider evidence before 1.0.
+6. Use the maintainer-selected DeepSeek live evidence for 1.0; keep official Provider evidence as a separate future check.
 
 The [verification matrix](../design/verification-matrix.md) is the executable checklist. Documentation alone never marks a requirement implemented.
 

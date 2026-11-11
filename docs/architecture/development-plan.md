@@ -1,6 +1,6 @@
 # nextloop development and verification plan
 
-Current stage: **0.9.0 release verification**. `0.8.0` is published; later milestones are not claimed as implemented.
+Current stage: **1.0.0 release verification**. `0.9.0` is published; the maintainer-selected DeepSeek live gate is defined by ADR-0011.
 
 ## Delivery order
 
@@ -11,7 +11,7 @@ Current stage: **0.9.0 release verification**. `0.8.0` is published; later miles
   → 0.7: opt-in owner leases and persistent Pending behavior
   → 0.8: caller-driven durable Outbox and OTel ID mapping
   → 0.9: reentrant whole-Session deletion and tombstones
-  → 1.0: all hard gates and official OpenAI/Anthropic acceptance
+  → 1.0: all hard gates and maintainer-selected DeepSeek live acceptance
 ```
 
 Each stage requires an independent Standards / Spec / Risk review, complete regression gates, and a separate release. A design or ADR is not accepted evidence until its fault scenarios pass.
@@ -64,7 +64,7 @@ See [Architecture and import contract](../design/architecture.md), [Verification
 - All Store, ToolRuntime, DeliveryOwner, negative-conformance, takeover, and recovery scenarios pass.
 - The 10k benchmark and parity checks pass.
 - Python 3.14 CI passes.
-- Official OpenAI and Anthropic API acceptance passes. Missing official credentials blocks 1.0; DeepSeek is not a substitute.
+- DeepSeek live text, Tool Calling, Preview, usage, Delivery, Outbox, and deletion scenarios pass under ADR-0011. Official OpenAI and Anthropic hosted API acceptance is not claimed and is no longer a 1.0 blocker.
 - Documentation, ADRs, migration notes, guarantee tables, and actual behavior agree.
 
 ## Explicit non-goals through 1.0

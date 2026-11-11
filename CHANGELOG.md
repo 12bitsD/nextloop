@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.0 - 2026-11-11
+
+### Release contract
+
+- Freezes the verified public runtime contracts, 101 root exports, and core/extras import paths across Python 3.11–3.14.
+- ADR-0011 records the maintainer-selected DeepSeek live Provider gate: text, Tool Calling, Preview, usage, Delivery, Outbox export, and Session deletion all pass.
+- Official OpenAI and Anthropic hosted API acceptance is not claimed. Their recorded SSE scenarios remain Adapter evidence and are not generalized to official service acceptance.
+
+### Verified
+
+- 384 offline tests plus the complete Store, ToolRuntime, DeliveryOwner, recovery, takeover, negative-conformance, and deletion fault matrices.
+- Python 3.11–3.14 CI, the 10,505-event parity benchmark, ruff, format check, strict mypy, wheel/sdist builds, Twine, and clean wheel installation.
+- Independent Standards / Spec / Risk review and clean archive packaging. A subsequent public PyPI installation with a real SQLite Turn, Outbox export, and reentrant deletion is a required post-publication closure step.
+
 ## 0.9.0 - 2026-11-11
 
 ### Added

@@ -6,12 +6,12 @@ nextloop is an embeddable Python AgentLoop for developers who want to build thei
 
 **Your agent, your rules. No magic, no black box.**
 
-Current version: **0.9.0**.
+Current version: **1.0.0**.
 
 ## Install
 
 ```bash
-python -m pip install nextloop==0.9.0
+python -m pip install nextloop==1.0.0
 ```
 
 For local development:
@@ -225,7 +225,7 @@ Current limits:
 - nika integration is separate acceptance work.
 - Writer leases coordinate same-host processes only; distributed locks and exactly-once export are not provided.
 - Event-level erasure, external-asset lifecycle, backup/GC, and deletion of third-party copies are not part of this release.
-- Official OpenAI and Anthropic API acceptance remains a 1.0 hard gate; recorded streams and DeepSeek do not substitute for it.
+- DeepSeek is the accepted live Provider gate under ADR-0011. Official OpenAI and Anthropic API acceptance is not claimed; their recorded Adapter streams are separate evidence.
 
 ## Documents
 
@@ -240,7 +240,7 @@ Current limits:
 - [Development plan](docs/architecture/development-plan.md)
 - [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), [ADR-0007 Approval](docs/adr/0007-approval.md), [ADR-0008 Owner leases](docs/adr/0008-lease.md), [ADR-0009 Durable Outbox](docs/adr/0009-outbox.md), and [ADR-0010 Session deletion](docs/adr/0010-session-deletion.md)
+- [ADR-0002](docs/adr/0002-dsh-aligned-agent-loop.md), [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md), [ADR-0004 Event compatibility](docs/adr/0004-event-compatibility.md), [ADR-0005 Pending Input](docs/adr/0005-pending-input.md), [ADR-0006 Operation identity](docs/adr/0006-operation-id.md), [ADR-0007 Approval](docs/adr/0007-approval.md), [ADR-0008 Owner leases](docs/adr/0008-lease.md), [ADR-0009 Durable Outbox](docs/adr/0009-outbox.md), [ADR-0010 Session deletion](docs/adr/0010-session-deletion.md), and [ADR-0011 Live Provider acceptance](docs/adr/0011-live-provider-acceptance.md)
 
 ## Release
 

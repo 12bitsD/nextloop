@@ -1,6 +1,6 @@
 # nextloop vision
 
-Status: DSH-aligned library implemented for the 0.9 line. Verification evidence and remaining milestones are tracked in the development plan; official OpenAI/Anthropic and nika consumer acceptance remain separate.
+Status: DSH-aligned library implemented for the 1.0 line. Verification evidence is tracked in the development plan; DeepSeek is the accepted live Provider gate, official OpenAI/Anthropic acceptance is not claimed, and nika consumer acceptance remains separate.
 
 ## Goal
 
@@ -58,7 +58,7 @@ Cross-repository reuse is through `EventStore`, `ModelProvider`, `ToolRuntime` a
 
 ## Current state and release definition
 
-Architecture topics T1–T4 are closed as design. Python 3.11+ and the consolidated package direction are selected in [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md): public contracts live in one `contracts.py`, execution uses one Turn/Step driver, and there is no generic handler layer. The 0.5.0 fault matrix, Store conformance, benchmark, import contract, Python 3.14, and package gates are implemented. The 0.6.0 read-only upcasting, operation identity, explicit Reconciliation, approval/resume, and Compaction lineage gates are implemented. The 0.7.0 optional owner lease, heartbeat, takeover, steer_result, and same-host multiprocess gates are implemented. The 0.8.0 durable Outbox, acknowledgement cursor, export gaps, owner-token locks, and stable OTel ID gates are implemented. The 0.9.0 reentrant whole-Session deletion, tombstone, local derived-state cleanup, and SQLite byte-purge gates are implemented; official Provider acceptance remains a 1.0 hard gate.
+Architecture topics T1–T4 are closed as design. Python 3.11+ and the consolidated package direction are selected in [ADR-0003](docs/adr/0003-python-and-centralized-contracts.md): public contracts live in one `contracts.py`, execution uses one Turn/Step driver, and there is no generic handler layer. The 0.5.0 fault matrix, Store conformance, benchmark, import contract, Python 3.14, and package gates are implemented. The 0.6.0 read-only upcasting, operation identity, explicit Reconciliation, approval/resume, and Compaction lineage gates are implemented. The 0.7.0 optional owner lease, heartbeat, takeover, steer_result, and same-host multiprocess gates are implemented. The 0.8.0 durable Outbox, acknowledgement cursor, export gaps, owner-token locks, and stable OTel ID gates are implemented. The 0.9.0 reentrant whole-Session deletion, tombstone, local derived-state cleanup, and SQLite byte-purge gates are implemented. The 1.0.0 DeepSeek live text, Tool, Preview, usage, Delivery, Outbox, and deletion scenarios pass under ADR-0011; official OpenAI/Anthropic acceptance is not claimed.
 
 An initial release requires versioned public API and event schema, migration notes, the complete [verification matrix](docs/design/verification-matrix.md), fake-adapter examples and one consumer Adapter. Consumer product acceptance remains independent.
 

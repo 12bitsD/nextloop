@@ -1,6 +1,6 @@
 # AgentLoop verification matrix
 
-Status: 0.9.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
+Status: 1.0.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
 
 ## Evidence rules
 
@@ -77,7 +77,7 @@ Conversation Projection is bounded by the returned Surface and serialized messag
 
 ## Public contracts and packaging
 
-- `tests/test_import_contract.py` freezes all 97 root re-exports and the complete `__all__` of `events`, `adapters`, `execute`, and `testing`, plus explicit supported names on other integration modules.
+- `tests/test_import_contract.py` freezes all 101 root re-exports and the complete `__all__` of `events`, `adapters`, `execute`, and `testing`, plus explicit supported names on other integration modules.
 - `tests/test_store_contract.py` is the third-party Store conformance entrypoint.
 - Python 3.11, 3.12, 3.13, and 3.14 run CI. Local clean Python 3.11 and 3.14 environments also run the full suite and benchmark before 0.6.0 publication.
 - `ruff`, format check, strict mypy, wheel/sdist build, Twine, clean wheel installation, examples, and CLI diagnostics are required gates.
@@ -146,10 +146,20 @@ The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch,
 | Historical fixtures remain read-only | Real 1.0/1.1 SQLite fixture bytes remain unchanged; tombstone schema is created lazily on deletion |
 | Live export does not block the Loop | Existing slow-Exporter and bounded-close regressions plus deletion-specific activity/export lock coverage |
 
+## 1.0 live Provider and release evidence
+
+| Claim | Closing evidence |
+|---|---|
+| DeepSeek text Turn works end to end | One-step committed Turn, 16 Preview events, input/output usage, and committed Delivery |
+| DeepSeek Tool Turn works end to end | Two Steps, one actual read Tool Call, 22 Preview events, usage, and final Delivery |
+| Live traces remain durable and deletable | Four Outbox exports followed by EventStore/Outbox deletion, SessionDeletedError, and zero watermark |
+| Runtime contracts remain frozen | 101 root exports and core/extras import snapshots pass without runtime-code changes from 0.9 |
+| Release evidence is not overclaimed | ADR-0011 selects DeepSeek; official OpenAI/Anthropic hosted API acceptance is explicitly not claimed |
+
 ## Review and external evidence
 
 Standards, Spec, and Risk reviews run independently. Original counterexamples must become regressions, and fixes receive incremental review. The 0.5.0 review closed stale dispatch, Pending consumption, ID conflicts, Compaction identity, export-contract gaps, wrapper duplication, and erased-content test oracles.
 
-Recorded OpenAI and Anthropic SSE scenarios are Adapter evidence, not official API acceptance. Twelve live Kimi scenarios and live DeepSeek text/Preview/usage and Tool/Delivery smoke are separately identified. Official OpenAI and Anthropic API acceptance remains a **1.0 hard gate**.
+Recorded OpenAI and Anthropic SSE scenarios are Adapter evidence, not official API acceptance. Twelve live Kimi scenarios and live DeepSeek text/Preview/usage and Tool/Delivery smoke are separately identified. Under ADR-0011, the maintainer-selected DeepSeek text, Tool, Preview, usage, Delivery, Outbox, and deletion scenarios close the 1.0 live Provider gate. Official OpenAI and Anthropic API acceptance is not claimed.
 
 Current non-guarantees: distributed writer coordination, exactly-once export, deletion of third-party copies or backups, remote MCP/OAuth, event-level erasure, and external large-asset lifecycle.

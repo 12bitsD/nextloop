@@ -113,10 +113,10 @@ def test_missing_path_fails(tmp_path):
         SkillRegistry([tmp_path / "missing"])
 
 
-def test_skill_final_version_exceeds_release_candidate(tmp_path):
+def test_skill_minimum_version_exceeds_current_version(tmp_path):
     path = write_skill(tmp_path / "versioned")
     path.write_text(
-        "---\nname: versioned\ndescription: Version test\nmin_nextloop: 0.9.1\n---\nBody\n",
+        "---\nname: versioned\ndescription: Version test\nmin_nextloop: 1.0.1\n---\nBody\n",
         encoding="utf-8",
     )
     with pytest.raises(SkillError, match="requires nextloop"):

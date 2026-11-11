@@ -2,7 +2,7 @@
 
 Purpose: distinguish implemented capabilities from remaining work. Executable evidence is owned by the [verification matrix](../design/verification-matrix.md).
 
-## Implemented in the current 0.9 line
+## Implemented in the current 1.0 line
 
 | Feature | Implementation | Evidence |
 |---|---|---|
@@ -28,7 +28,7 @@ Purpose: distinguish implemented capabilities from remaining work. Executable ev
 
 | Feature | Target and boundary |
 |---|---|
-| Official OpenAI/Anthropic acceptance | 1.0 hard gate; recorded streams and DeepSeek do not substitute |
+| Official OpenAI/Anthropic acceptance | Not claimed; recorded Adapter streams only. DeepSeek is the accepted 1.0 live gate under ADR-0011 |
 | nika product integration | Separate consumer acceptance; no Feishu/Wiki dependency enters nextloop |
 | Large external-asset lifecycle | Not claimed; current large Tool Results remain in the EventStore |
 | Remote MCP/OAuth and more Providers | Explicitly outside the 1.0 plan |

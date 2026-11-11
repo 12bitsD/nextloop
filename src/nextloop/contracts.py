@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "0.9.0"
+API_VERSION = "1.0.0"
 EVENT_SCHEMA_VERSION = "1.1"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
