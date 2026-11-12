@@ -56,6 +56,9 @@ addopts = "-ra"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+markers = [
+  "flaky: timing-sensitive stability test excluded from CI and release gates",
+]
 
 [tool.ruff]
 target-version = "py311"

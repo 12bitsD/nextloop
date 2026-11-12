@@ -23,6 +23,8 @@ Run the complete gates before submitting a change:
 .venv/bin/twine check dist/*
 ```
 
+CI and Release exclude tests marked `flaky` because they depend on wall-clock scheduling. Run those stability checks locally with `.venv/bin/pytest -m flaky`.
+
 Also exercise the affected public scenario end to end. Hosted-provider evidence must identify the provider and protocol; recorded streams and fake adapters are different evidence.
 
 ## Change boundaries

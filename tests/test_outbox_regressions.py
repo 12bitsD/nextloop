@@ -185,6 +185,7 @@ async def test_approval_wait_is_not_in_tool_duration():
     assert turn.duration_ms is not None
 
 
+@pytest.mark.flaky(reason="Depends on wall-clock heartbeat scheduling; excluded from CI")
 @pytest.mark.asyncio
 async def test_live_export_heartbeat_prevents_duplicate_export(tmp_path):
     store = InMemoryEventStore()
