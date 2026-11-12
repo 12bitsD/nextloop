@@ -47,7 +47,7 @@ class SQLiteOutbox:
         self._lock_owner = new_id("outbox")
         with self._lock, self._connection:
             self._connection.execute("PRAGMA busy_timeout=5000")
-            self._connection.execute("PRAGMA journal_mode=WAL")
+            execute_with_busy_retry(self._connection, "PRAGMA journal_mode=WAL")
             self._connection.execute("PRAGMA synchronous=FULL")
             self._connection.execute(
                 """

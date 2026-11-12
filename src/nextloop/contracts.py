@@ -197,6 +197,10 @@ class ApprovalPolicy:
     predicate: Callable[[Mapping[str, Any]], bool] | None = None
     expires_after_seconds: float | None = None
 
+    def __post_init__(self) -> None:
+        if not self.version.strip():
+            raise ValueError("approval policy version must be non-empty")
+
 
 @dataclass(frozen=True)
 class ApprovalItem:

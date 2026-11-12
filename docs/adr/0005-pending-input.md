@@ -20,7 +20,7 @@ The event log is the sole source of truth. The actor inbox is only a wake-up sig
 - Pending is queryable with `input_id`, original seq, original Turn, and content. No cleanup event is introduced in this version.
 - `recover()` may be called repeatedly without duplicating Pending. A crash between recover and run has the same projection.
 
-`input_id` is the idempotency boundary. A caller retrying initial input or steer must supply the same `input_id`, or query Pending before retrying. An absent or automatically generated ID does not provide cross-crash deduplication. Explicit IDs must be non-empty. The same ID with identical content is a no-op retry; the same ID with different content is rejected before a new INPUT_ACCEPTED is committed, so the original Pending content is preserved.
+`input_id` is the idempotency boundary. A caller retrying initial input or steer must supply the same `input_id`, or query Pending before retrying. An absent or automatically generated ID does not provide cross-crash deduplication. Explicit IDs must be non-empty. For initial input, an already successfully completed retry with identical content is a no-op that returns the original TurnOutcome; failed, cancelled, blocked, interrupted, or still-Pending work may start a new Turn. Identical steer retries do not duplicate accepted input. The same ID with different content is rejected before a new INPUT_ACCEPTED is committed, so the original Pending content is preserved.
 
 No cleanup event is introduced. Pending remains visible until the caller consumes it or the protocol later defines an explicit discard fact.
 

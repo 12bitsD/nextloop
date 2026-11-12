@@ -143,7 +143,7 @@ class BatchExecutor:
                     outcomes.append((item.call, item.spec, outcome))
                     timings[item.call.call_id] = timing
                     chunk_outcomes.append(outcome)
-                if any(self._is_uncertain_or_cancelled(outcome) for outcome in chunk_outcomes):
+                if any(self._requires_batch_stop(outcome) for outcome in chunk_outcomes):
                     truncated = True
                     outcomes.extend(
                         self._skip(
@@ -204,11 +204,13 @@ class BatchExecutor:
         return [(item.call, item.spec, Skipped(reason)) for item in items]
 
     @staticmethod
-    def _is_uncertain_or_cancelled(outcome: ToolOutcome) -> bool:
-        return isinstance(outcome, (Cancelled, UncertainSettled, UncertainHanging))
+    def _requires_batch_stop(outcome: ToolOutcome) -> bool:
+        return isinstance(outcome, (Cancelled, UncertainSettled, UncertainHanging)) or (
+            isinstance(outcome, Completed) and outcome.concludes_turn
+        )
 
     @classmethod
     def _closes_batch(cls, spec: ToolSpec, outcome: ToolOutcome) -> bool:
-        if cls._is_uncertain_or_cancelled(outcome):
-            return True
-        return isinstance(outcome, Completed) and (outcome.is_error or outcome.concludes_turn)
+        return cls._requires_batch_stop(outcome) or (
+            isinstance(outcome, Completed) and outcome.is_error
+        )

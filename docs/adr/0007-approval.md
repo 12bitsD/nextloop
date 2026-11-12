@@ -8,7 +8,7 @@ TOOL_CALL is a dispatch-boundary fact, not a Tool Intent. Approval must be decid
 
 ## Decision
 
-- `ApprovalPolicy(version, predicate=None, expires_after_seconds=None)` is a ToolSpec declaration. A missing policy needs no approval; a missing predicate always requires it; a predicate is a pure argument callback.
+- `ApprovalPolicy(version, predicate=None, expires_after_seconds=None)` is a ToolSpec declaration. Versions must be non-empty so ordinary items and policy-bound items remain distinguishable; empty versions are rejected at declaration. A missing policy needs no approval; a missing predicate always requires it; a predicate is a pure argument callback.
 - If any call in a validated batch requires approval, Tool Intent and APPROVAL_REQUESTED commit atomically and the entire batch waits before its first TOOL_CALL. The request binds operation IDs, canonical arguments, policy versions, Event schema, and optional expiry.
 - The waiting Turn ends with `approval_pending`. A crash closer must not turn undispatched approval intents into Skipped Results. New `run()` input and `steer()` are rejected while suspended; `cancel()` writes cancellation and invalidates the approval.
 - `resume()` uses a new Turn and tail-conditional append. Decisions bind operation IDs. Any rejection or expiry rejects the whole batch; all approvals preserve the original parallel/exclusive order.

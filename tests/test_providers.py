@@ -39,12 +39,21 @@ def openai_chunk(delta, finish_reason=None):
     return {"choices": [{"delta": delta, "finish_reason": finish_reason}]}
 
 
+class BrokenStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield b'{"error":'
+        raise httpx.ReadError("connection lost mid-error-body")
+
+
 @pytest.mark.asyncio
 async def test_openai_sse_text_tool_calls_and_usage():
     chunks = [
         openai_chunk(
             {
                 "content": "Hel",
+                "reasoning_content": "analysis",
+                "reasoning_signature": "signed-reasoning",
+                "continuation_token": "continue-openai",
                 "tool_calls": [
                     {"index": 0, "id": "c1", "function": {"name": "read", "arguments": '{"pa'}}
                 ],
@@ -85,15 +94,25 @@ async def test_openai_sse_text_tool_calls_and_usage():
     assert response.tool_calls == (ToolCall("c1", "read", '{"path":"x"}'),)
     assert response.usage.input_tokens == 10
     assert response.usage.cached_input_tokens == 8
+    assert response.provider_data["reasoning_content"] == "analysis"
+    assert response.provider_data["reasoning_signature"] == "signed-reasoning"
+    projected = provider._message(
+        Message(
+            role="assistant",
+            content="checking",
+            tool_calls=response.tool_calls,
+            provider_data={**response.provider_data, "working_context": {"action": "internal"}},
+        )
+    )
+    assert projected["reasoning_content"] == "analysis"
+    assert projected["reasoning_signature"] == "signed-reasoning"
+    assert projected["continuation_token"] == "continue-openai"
+    assert "working_context" not in projected
     await client.aclose()
 
-
-@pytest.mark.asyncio
-async def test_openai_http_error_is_classified_without_partial_output():
+    reasoning_body = 'data: {"choices":[{"delta":{"reasoning_content":"private-analysis"}}]}\n\n'
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda request: httpx.Response(429, json={"error": "rate limited"})
-        )
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=reasoning_body))
     )
     provider = OpenAIProvider(
         model_id="test-model",
@@ -103,9 +122,7 @@ async def test_openai_http_error_is_classified_without_partial_output():
     )
     with pytest.raises(ProviderError) as caught:
         await provider.complete(request(), attempt=1, cancel=asyncio.Event())
-    assert caught.value.retryable is True
-    assert caught.value.partial_output is False
-    assert caught.value.code == "429"
+    assert caught.value.partial_output is True
     await client.aclose()
 
 
@@ -164,6 +181,93 @@ async def test_anthropic_sse_tool_use_and_wire_projection():
     assert response.tool_calls == (ToolCall("c1", "read", '{"path":"x"}'),)
     assert response.usage.input_tokens == 12
     assert response.usage.output_tokens == 4
+    thinking_events = [
+        (
+            "message_start",
+            {
+                "message": {
+                    "usage": {"input_tokens": 3},
+                    "continuation_token": "continue-anthropic",
+                    "internal_secret": "do-not-send",
+                    "logprobs": [0.1],
+                }
+            },
+        ),
+        (
+            "content_block_start",
+            {
+                "index": 0,
+                "content_block": {
+                    "type": "thinking",
+                    "thinking": "analysis",
+                    "internal_block_field": "do-not-send",
+                },
+            },
+        ),
+        (
+            "content_block_delta",
+            {"index": 0, "delta": {"type": "signature_delta", "signature": "signed-thinking"}},
+        ),
+        ("message_delta", {"delta": {"stop_reason": "end_turn"}}),
+        ("message_stop", {}),
+    ]
+    thinking_body = "".join(
+        f"event: {name}\ndata: {json.dumps(payload)}\n\n" for name, payload in thinking_events
+    )
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=thinking_body))
+    )
+    provider = AnthropicProvider(
+        model_id="test-model",
+        base_url="https://provider.test",
+        api_key="secret",
+        http_client=client,
+    )
+    thinking = await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+    block = thinking.provider_data["thinking_blocks"][0]
+    assert block["type"] == "thinking"
+    assert block["thinking"] == "analysis"
+    assert block["signature"] == "signed-thinking"
+    projected = provider._messages(
+        (
+            Message(
+                role="assistant",
+                content="next",
+                provider_data={
+                    **thinking.provider_data,
+                    "working_context": {"action": "internal"},
+                },
+            ),
+        )
+    )
+    assert projected[0]["content"][0] == block
+    assert projected[0]["content"][1] == {"type": "text", "text": "next"}
+    assert projected[0]["continuation_token"] == "continue-anthropic"
+    assert "working_context" not in projected[0]
+    assert "internal_secret" not in thinking.provider_data
+    assert "logprobs" not in thinking.provider_data
+    assert "internal_block_field" not in block
+    await client.aclose()
+
+    missing_signature_events = [
+        event for event in thinking_events if event[0] != "content_block_delta"
+    ]
+    missing_body = "".join(
+        f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+        for name, payload in missing_signature_events
+    )
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=missing_body))
+    )
+    provider = AnthropicProvider(
+        model_id="test-model",
+        base_url="https://provider.test",
+        api_key="secret",
+        http_client=client,
+    )
+    with pytest.raises(ProviderError) as caught:
+        await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+    assert caught.value.partial_output is True
     await client.aclose()
 
 
@@ -189,3 +293,67 @@ async def test_anthropic_stream_error_preserves_partial_evidence():
     assert caught.value.partial_output is True
     assert caught.value.code == "overloaded_error"
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_provider_http_error_body_is_bounded_and_classified():
+    for provider_class in (OpenAIProvider, AnthropicProvider):
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(500, text="x" * (64 * 1024 + 100))
+            )
+        )
+        provider = provider_class(
+            model_id="test-model",
+            base_url="https://provider.test/v1",
+            api_key="secret",
+            http_client=client,
+        )
+
+        with pytest.raises(ProviderError) as caught:
+            await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+
+        assert caught.value.retryable is True
+        assert caught.value.code == "500"
+        assert len(str(caught.value)) <= 64 * 1024 + 128
+        assert "[truncated]" in str(caught.value)
+        await client.aclose()
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(429, json={"error": "rate limited"})
+        )
+    )
+    provider = OpenAIProvider(
+        model_id="test-model",
+        base_url="https://provider.test/v1",
+        api_key="secret",
+        http_client=client,
+    )
+    with pytest.raises(ProviderError) as caught:
+        await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+    assert caught.value.retryable is True
+    assert caught.value.partial_output is False
+    assert caught.value.code == "429"
+    assert "[truncated]" not in str(caught.value)
+    await client.aclose()
+
+    for provider_class in (OpenAIProvider, AnthropicProvider):
+        for status, retryable in ((400, False), (429, True), (500, True)):
+            client = httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda request, status=status: httpx.Response(status, stream=BrokenStream())
+                )
+            )
+            provider = provider_class(
+                model_id="test-model",
+                base_url="https://provider.test/v1",
+                api_key="secret",
+                http_client=client,
+            )
+            with pytest.raises(ProviderError) as caught:
+                await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+            assert caught.value.retryable is retryable
+            assert caught.value.code == str(status)
+            assert "connection lost mid-error-body" in str(caught.value)
+            await client.aclose()

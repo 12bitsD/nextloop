@@ -102,7 +102,7 @@ The event log is the sole source of truth for accepted input. `AgentLoop.pending
 pending = await loop.pending_inputs("session-id", store)
 ```
 
-Pending historical inputs appear before the new Turn's initial input. Inputs from cancelled or budget-terminated Turns carry forward by default. Repeated recovery and a crash between recover and run do not duplicate them. Explicit IDs must be non-empty. The same ID with identical content is an idempotent retry; different content is rejected without consuming or replacing the original Pending input.
+Pending historical inputs appear before the new Turn's initial input. Inputs from cancelled or budget-terminated Turns carry forward by default. Repeated recovery and a crash between recover and run do not duplicate them. Explicit IDs must be non-empty. For an already successful initial input, the same ID with identical content returns the original TurnOutcome without new execution; unfinished or unsuccessful work may start a new Turn. Different content is rejected without consuming or replacing the original Pending input.
 
 ## Budgets and Tool Results
 

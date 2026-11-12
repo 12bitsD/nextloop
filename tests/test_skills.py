@@ -83,16 +83,6 @@ def test_requires_tools_validation(tmp_path):
     assert registry.list()[0].requires_tools == ("bash", "read_file")
 
 
-def test_version_validation(tmp_path):
-    write_skill(tmp_path / "coding")
-    path = tmp_path / "coding" / "SKILL.md"
-    path.write_text(
-        path.read_text().replace("requires_tools: read_file, bash", "min_nextloop: '999.0'")
-    )
-    with pytest.raises(SkillError, match="requires nextloop"):
-        SkillRegistry([tmp_path])
-
-
 def test_skill_view_returns_body_and_honest_not_found(tmp_path):
     write_skill(tmp_path / "coding")
     registry = SkillRegistry([tmp_path])

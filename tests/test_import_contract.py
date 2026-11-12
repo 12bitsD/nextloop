@@ -117,11 +117,7 @@ def test_root_reexports_match_the_frozen_contract():
     assert frozenset(nextloop.__all__) == EXPECTED_ROOT_EXPORTS
     assert len(nextloop.__all__) == len(EXPECTED_ROOT_EXPORTS)
     assert all(hasattr(nextloop, name) for name in EXPECTED_ROOT_EXPORTS)
-
-
-@pytest.mark.parametrize(
-    ("module_name", "names"),
-    [
+    for module_name, names in (
         ("nextloop.contracts", ("EventStore", "ModelProvider", "TurnContext")),
         ("nextloop.loop", ("AgentLoop",)),
         ("nextloop.events", ("project_events", "project_traces")),
@@ -138,14 +134,12 @@ def test_root_reexports_match_the_frozen_contract():
                 "check_event_store",
             ),
         ),
-    ],
-)
-def test_core_and_extra_module_reexports(module_name, names):
-    module = import_module(module_name)
-    for name in names:
-        assert hasattr(module, name)
-        if hasattr(nextloop, name):
-            assert getattr(module, name) is getattr(nextloop, name)
+    ):
+        module = import_module(module_name)
+        for name in names:
+            assert hasattr(module, name)
+            if hasattr(nextloop, name):
+                assert getattr(module, name) is getattr(nextloop, name)
 
 
 @pytest.mark.parametrize(

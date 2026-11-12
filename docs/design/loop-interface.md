@@ -54,7 +54,7 @@ Third-party implementations must pass `nextloop.testing.check_event_store()`. Wr
 
 **Migration from 0.8:** every EventStore implementation must add idempotent `delete_session(session_id)`, with fail-closed tombstones for reads and writer operations. Decorators must delegate deletion and clear their own derived Session state. Built-in SQLite Stores create tombstone schema lazily on first deletion, so opening historical fixtures for read-only upcasting does not rewrite their bytes. Whole-Session retention must also call `SQLiteOutbox.delete_session()`; no cross-database transaction is implied.
 
-Initial input and explicit steer IDs must be non-empty. Reusing an ID with identical content is an idempotent retry; reusing it with different content raises `InvariantViolation` before a new INPUT_ACCEPTED is committed, preserving the original Pending input.
+Initial input and explicit steer IDs must be non-empty. For an already successful initial input, reusing the ID with identical content returns the original TurnOutcome without new execution; unfinished or unsuccessful work may start a new Turn. Identical steer retries do not duplicate accepted input. Reusing any ID with different content raises `InvariantViolation` before a new INPUT_ACCEPTED is committed, preserving the original Pending input.
 
 ### 2. ModelProvider
 

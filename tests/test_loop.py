@@ -317,3 +317,42 @@ async def test_compaction_runs_without_tools_then_proceeds():
     assert provider.requests[0].tools == ()
     events = await store.load_recovery("s")
     assert any(event.event_type == EventType.COMPACTION for event in events)
+
+
+@pytest.mark.asyncio
+async def test_parallel_concludes_turn_skips_unstarted_calls():
+    invoked = []
+    tools = ToolRegistry()
+    tools.register(
+        ToolSpec("first", "Finish the Turn", {"type": "object"}, mode=ToolExecutionMode.PARALLEL),
+        lambda arguments, ctx: (
+            invoked.append("first") or Completed("question", concludes_turn=True)
+        ),
+    )
+    tools.register(
+        ToolSpec("second", "Must not start", {"type": "object"}, mode=ToolExecutionMode.PARALLEL),
+        lambda arguments, ctx: invoked.append("second") or Completed("second"),
+    )
+    provider = FakeProvider(
+        [
+            ModelResponse(
+                tool_calls=(ToolCall("c1", "first", "{}"), ToolCall("c2", "second", "{}")),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
+    )
+    delivery = FakeDelivery()
+
+    outcome = await AgentLoop().run(
+        context(
+            InMemoryEventStore(),
+            provider,
+            tools,
+            delivery,
+            config=config(max_parallel_tools=1),
+        )
+    )
+
+    assert outcome.status == TurnStatus.SUCCEEDED
+    assert delivery.messages[0].content == "question"
+    assert invoked == ["first"]

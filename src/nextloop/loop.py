@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
 from .contracts import (
+    EVENT_SCHEMA_VERSION,
     Cancelled,
     Completed,
     DeliveryOwner,
@@ -26,6 +27,7 @@ from .contracts import (
     TurnOutcome,
     TurnStatus,
     UncertainHanging,
+    new_id,
 )
 from .driver import SessionActor, SessionExecution, TurnDriver
 from .events.approval import (
@@ -35,7 +37,7 @@ from .events.approval import (
 )
 from .events.input import user_input_events
 from .events.outcome import BatchAction, reconciliation_event, settle_outcomes
-from .events.pending import pending_inputs
+from .events.pending import completed_input_outcome, pending_inputs
 from .events.project import message_to_data
 from .events.repair import active_resource_locks, pending_final_messages, repair_events
 from .execute.batch import BatchExecutor
@@ -130,6 +132,11 @@ class AgentLoop:
                 context.session_id
             )
             history = await context.store.load_recovery(context.session_id)
+            replayed = completed_input_outcome(
+                history, context.session_id, context.input_id, context.initial_input
+            )
+            if replayed is not None:
+                return replayed
             if pending_approval(history) is not None:
                 raise InvariantViolation("Approval pending; use resume")
             execution = await self._prepare_execution(
@@ -210,10 +217,7 @@ class AgentLoop:
                     return SteerResult(SteerStatus.ACCEPTED, input_id)
                 if len(execution.actor.inbox) >= execution.context.config.max_pending_inputs:
                     return SteerResult(SteerStatus.QUEUE_FULL, input_id)
-                accepted_id = (
-                    input_id
-                    or f"in_{len(execution.actor.inbox) + 1}_{execution.turn}_{execution.step}"
-                )
+                accepted_id = input_id or new_id("in")
                 await execution._append_locked(
                     [
                         NewEvent(
@@ -388,6 +392,24 @@ class AgentLoop:
             decision_cause = "approval_expired" if approval_expired(request) else None
             if decision_cause is not None:
                 resolved = {operation_id: False for operation_id in expected}
+            if all(resolved.values()):
+                specs = {spec.name: spec for spec in context.tools.catalog()}
+                for item in request.items:
+                    spec = specs.get(item.name)
+                    approval = spec.approval if spec is not None else None
+                    policy_matches = (
+                        approval is not None and approval.version == item.policy_version
+                        if item.policy_version
+                        else approval is None
+                    )
+                    if (
+                        spec is None
+                        or item.schema_version != EVENT_SCHEMA_VERSION
+                        or not policy_matches
+                    ):
+                        raise InvariantViolation(
+                            "Approval policy or Event schema changed; reload decisions"
+                        )
             writer_epoch, last_seq, last_turn = await context.store.attach_writer(
                 context.session_id
             )

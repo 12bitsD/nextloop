@@ -232,6 +232,7 @@ async def check_event_store(
     session_id = new_id("store_contract")
     epoch, seq, turn = await store.attach_writer(session_id)
     assert (epoch, seq, turn) == (1, 0, 0)
+    assert await store.session_ids() == ()
     drafts = [
         NewEvent(EventType.TURN_START, turn=1, step=0),
         NewEvent(
@@ -244,6 +245,7 @@ async def check_event_store(
     ]
     committed = await store.append(session_id, epoch, 1, drafts)
     assert [event.seq for event in committed] == [1, 2]
+    assert await store.session_ids() == (session_id,)
     repeated = await store.append(session_id, epoch, 1, drafts)
     assert [event.event_id for event in repeated] == [event.event_id for event in committed]
     assert len(await store.load_recovery(session_id)) == 2

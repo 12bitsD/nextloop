@@ -16,7 +16,7 @@ from ..contracts import (
     ProviderError,
     ToolCall,
 )
-from ._sse import data_events
+from ._sse import data_events, read_error_text
 
 
 class OpenAIProvider:
@@ -90,6 +90,7 @@ class OpenAIProvider:
         finish_reason: FinishReason | None = None
         usage: ModelUsage | None = None
         done = False
+        provider_data: dict[str, Any] = {}
         try:
             async with client.stream(
                 "POST",
@@ -98,8 +99,7 @@ class OpenAIProvider:
                 headers=headers,
             ) as response:
                 if response.status_code >= 400:
-                    error_body = await response.aread()
-                    error_text = error_body.decode("utf-8", errors="replace")
+                    error_text = await read_error_text(response)
                     raise ProviderError(
                         f"OpenAI HTTP {response.status_code}: {error_text}",
                         retryable=response.status_code in (408, 409, 429)
@@ -115,7 +115,9 @@ class OpenAIProvider:
                     if event == "error":
                         raise ProviderError(
                             f"OpenAI stream error: {data}",
-                            partial_output=bool(content_parts or refusal_parts or calls),
+                            partial_output=bool(
+                                content_parts or refusal_parts or calls or provider_data
+                            ),
                         )
                     if data == "[DONE]":
                         done = True
@@ -127,6 +129,20 @@ class OpenAIProvider:
                         continue
                     choice = choices[0]
                     delta = choice.get("delta") or {}
+                    for key, value in delta.items():
+                        private_field = key.startswith("reasoning") or key in (
+                            "signature",
+                            "encrypted_content",
+                            "encrypted_reasoning",
+                            "continuation_token",
+                            "continuation_tokens",
+                        )
+                        if not private_field or value is None:
+                            continue
+                        if key in ("reasoning_content", "reasoning_summary"):
+                            provider_data[key] = provider_data.get(key, "") + str(value)
+                        else:
+                            provider_data[key] = value
                     if delta.get("content"):
                         text = str(delta["content"])
                         content_parts.append(text)
@@ -162,19 +178,21 @@ class OpenAIProvider:
                             raise ProviderError(
                                 "OpenAI stream returned unknown finish reason: "
                                 f"{raw_finish_reason}",
-                                partial_output=bool(content_parts or refusal_parts or calls),
+                                partial_output=bool(
+                                    content_parts or refusal_parts or calls or provider_data
+                                ),
                             )
                         finish_reason = mapped
             if not done:
                 raise ProviderError(
                     "OpenAI stream ended before [DONE]",
                     retryable=True,
-                    partial_output=bool(content_parts or refusal_parts or calls),
+                    partial_output=bool(content_parts or refusal_parts or calls or provider_data),
                 )
             if finish_reason is None:
                 raise ProviderError(
                     "OpenAI stream completed without a finish reason",
-                    partial_output=bool(content_parts or refusal_parts or calls),
+                    partial_output=bool(content_parts or refusal_parts or calls or provider_data),
                 )
             return ModelResponse(
                 content="".join(content_parts),
@@ -185,11 +203,12 @@ class OpenAIProvider:
                 ),
                 finish_reason=finish_reason,
                 usage=usage,
+                provider_data=provider_data,
             )
         except ProviderError:
             raise
         except (TimeoutError, httpx.HTTPError, json.JSONDecodeError) as exc:
-            partial = bool(content_parts or refusal_parts or calls)
+            partial = bool(content_parts or refusal_parts or calls or provider_data)
             raise ProviderError(
                 f"OpenAI stream failed: {exc}",
                 retryable=True,
@@ -222,6 +241,14 @@ class OpenAIProvider:
                 }
                 for call in message.tool_calls
             ]
+        if message.role == "assistant":
+            value.update(
+                {
+                    key: item
+                    for key, item in message.provider_data.items()
+                    if key != "working_context"
+                }
+            )
         return value
 
     @staticmethod

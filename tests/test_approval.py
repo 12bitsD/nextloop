@@ -399,3 +399,77 @@ async def test_reject_all_with_new_input_exits_without_side_effects():
     assert resumed.status == "succeeded"
     assert invoked == []
     assert provider.requests[1].messages[-1].content == "use a different approach"
+
+
+@pytest.mark.asyncio
+async def test_resume_rejects_changed_policy_version_without_dispatch():
+    invoked = []
+    tools = approval_tools(invoked)
+    store = InMemoryEventStore()
+    loop = AgentLoop()
+    provider = FakeProvider(
+        [
+            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(content="done"),
+        ]
+    )
+    await loop.run(context(store, provider, tools, FakeDelivery()))
+    events = await store.load_recovery("s")
+    request = approval_events(events, EventType.APPROVAL_REQUESTED)[0]
+    operation_id = request.payload["items"][0]["operation_id"]
+    tools_v2 = ToolRegistry()
+    tools_v2.register(
+        ToolSpec(
+            "write", "Write after approval", {"type": "object"}, approval=ApprovalPolicy("v2")
+        ),
+        lambda arguments, ctx: invoked.append(arguments) or Completed("written-v2"),
+    )
+
+    with pytest.raises(InvariantViolation, match="policy"):
+        await loop.resume(
+            context(store, provider, tools_v2, FakeDelivery(), input_id="resume-v2"),
+            decisions={operation_id: True},
+        )
+
+    assert invoked == []
+    assert await store.load_recovery("s") == events
+    resumed = await loop.resume(
+        context(store, provider, tools, FakeDelivery(), input_id="resume-v1"),
+        decisions={operation_id: True},
+    )
+    assert resumed.status == "succeeded"
+    assert len(invoked) == 1
+
+    mixed_invoked = []
+    mixed_tools = approval_tools(mixed_invoked)
+    ordinary = []
+    mixed_tools.register(
+        ToolSpec("read", "Ordinary Tool needing no approval", {"type": "object"}),
+        lambda arguments, ctx: ordinary.append(arguments) or "ordinary result",
+    )
+    mixed_store = InMemoryEventStore()
+    mixed_provider = FakeProvider(
+        [
+            ModelResponse(
+                tool_calls=(call("write"), call("read", "c2")),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
+            ModelResponse(content="mixed done"),
+        ]
+    )
+    await loop.run(context(mixed_store, mixed_provider, mixed_tools, FakeDelivery()))
+    mixed_events = await mixed_store.load_recovery("s")
+    mixed_request = approval_events(mixed_events, EventType.APPROVAL_REQUESTED)[0]
+    decisions = {item["operation_id"]: True for item in mixed_request.payload["items"]}
+
+    resumed = await loop.resume(
+        context(mixed_store, mixed_provider, mixed_tools, FakeDelivery(), input_id="mixed-resume"),
+        decisions=decisions,
+    )
+
+    assert resumed.status == "succeeded"
+    assert len(mixed_invoked) == 1
+    assert len(ordinary) == 1
+
+    with pytest.raises(ValueError, match="version"):
+        ApprovalPolicy("")

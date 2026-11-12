@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import threading
 import time
 
 import pytest
@@ -25,84 +26,61 @@ from nextloop.testing import InjectedCrash
 
 
 @pytest.mark.asyncio
-async def test_concurrent_exports_are_serialized_and_cursor_never_regresses(tmp_path):
-    store = InMemoryEventStore()
-    epoch, _, _ = await store.attach_writer("s")
-    await store.append("s", epoch, 1, [*closed_turn(1), *closed_turn(2)])
-    started = asyncio.Event()
-    release = asyncio.Event()
+async def test_exports_are_serialized_and_cursor_never_regresses(tmp_path):
+    for same_instance in (True, False):
+        store = InMemoryEventStore()
+        epoch, _, _ = await store.attach_writer("s")
+        await store.append("s", epoch, 1, [*closed_turn(1), *closed_turn(2)])
+        started = asyncio.Event()
+        release = asyncio.Event()
 
-    async def slow(record):
-        if record.turn == 2:
-            started.set()
-            await release.wait()
+        async def slow(record, same_instance=same_instance, started=started, release=release):
+            if same_instance or record.turn == 2:
+                started.set()
+                await release.wait()
 
-    first = SQLiteOutbox(store, str(tmp_path / "outbox.sqlite3"), [slow])
-    second = SQLiteOutbox(store, str(tmp_path / "outbox.sqlite3"), [])
-    first_task = asyncio.create_task(first.export_pending())
-    await asyncio.wait_for(started.wait(), timeout=1)
-    second_task = asyncio.create_task(second.export_pending())
-    await asyncio.sleep(0.02)
-    assert not second_task.done()
+        path = str(tmp_path / f"outbox-{same_instance}.sqlite3")
+        first = SQLiteOutbox(store, path, [slow])
+        second = first if same_instance else SQLiteOutbox(store, path, [])
+        first_task = asyncio.create_task(first.export_pending())
+        await asyncio.sleep(0)
+        if first_task.done():
+            await first_task
+        await asyncio.wait_for(started.wait(), timeout=1)
+        second_task = asyncio.create_task(second.export_pending())
+        await asyncio.sleep(0.02)
+        assert not second_task.done()
 
-    release.set()
-    first_report, second_report = await asyncio.gather(first_task, second_task)
+        release.set()
+        first_report, second_report = await asyncio.gather(first_task, second_task)
 
-    assert first_report.exported == 2
-    assert second_report.exported == 0
-    assert second.watermark("s") == 6
-    assert (await second.export_pending()).exported == 0
-    first.close()
-    second.close()
-
-
-@pytest.mark.asyncio
-async def test_same_instance_exports_use_asyncio_serialization(tmp_path):
-    store = InMemoryEventStore()
-    epoch, _, _ = await store.attach_writer("s")
-    await store.append("s", epoch, 1, [*closed_turn(1), *closed_turn(2)])
-    started = asyncio.Event()
-    release = asyncio.Event()
-
-    async def slow(record):
-        started.set()
-        await release.wait()
-
-    outbox = SQLiteOutbox(store, str(tmp_path / "outbox.sqlite3"), [slow])
-    first_task = asyncio.create_task(outbox.export_pending())
-    second_task = asyncio.create_task(outbox.export_pending())
-    await asyncio.wait_for(started.wait(), timeout=1)
-    await asyncio.sleep(0.02)
-    assert not second_task.done()
-
-    release.set()
-    first_report, second_report = await asyncio.gather(first_task, second_task)
-
-    assert first_report.exported == 2
-    assert second_report.exported == 0
-    assert outbox.watermark("s") == 6
-    outbox.close()
+        assert first_report.exported == 2
+        assert second_report.exported == 0
+        assert second.watermark("s") == 6
+        assert (await second.export_pending()).exported == 0
+        first.close()
+        if not same_instance:
+            second.close()
 
 
 @pytest.mark.asyncio
-async def test_async_exporter_timeout_records_gap_and_reaches_later_sessions(tmp_path):
+async def test_exporter_timeouts_are_bounded_and_recorded(tmp_path):
     store = InMemoryEventStore()
     for session in ("slow", "fast"):
         epoch, _, _ = await store.attach_writer(session)
         await store.append(session, epoch, 1, closed_turn())
 
-    async def blocked(record):
+    async def blocked_async(record):
         if record.session_id == "slow":
             await asyncio.Event().wait()
 
     outbox = SQLiteOutbox(
         store,
-        str(tmp_path / "outbox.sqlite3"),
-        [blocked],
+        str(tmp_path / "async.sqlite3"),
+        [blocked_async],
         max_attempts=1,
         export_timeout_seconds=0.01,
     )
-
     report = await outbox.export_pending()
 
     assert report.exported == 1
@@ -110,24 +88,20 @@ async def test_async_exporter_timeout_records_gap_and_reaches_later_sessions(tmp
     assert [(gap.session_id, gap.from_seq, gap.to_seq) for gap in report.gaps] == [("slow", 0, 3)]
     outbox.close()
 
-
-@pytest.mark.asyncio
-async def test_sync_exporter_timeout_does_not_block_export(tmp_path):
     store = InMemoryEventStore()
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, closed_turn())
 
-    def blocked(record):
+    def blocked_sync(record):
         time.sleep(10)
 
     outbox = SQLiteOutbox(
         store,
-        str(tmp_path / "outbox.sqlite3"),
-        [blocked],
+        str(tmp_path / "sync.sqlite3"),
+        [blocked_sync],
         max_attempts=1,
         export_timeout_seconds=0.01,
     )
-
     started = time.monotonic()
     report = await outbox.export_pending()
 
@@ -333,7 +307,10 @@ async def test_concurrent_old_lock_table_migration_adds_owner_once(tmp_path):
     )
     connection.close()
 
+    barrier = threading.Barrier(2)
+
     async def build():
+        await asyncio.to_thread(barrier.wait)
         return await asyncio.to_thread(SQLiteOutbox, store, path, [])
 
     first, second = await asyncio.gather(build(), build())

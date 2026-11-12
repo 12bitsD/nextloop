@@ -51,7 +51,13 @@ class InMemoryEventStore:
 
     async def session_ids(self) -> Sequence[str]:
         async with self._lock:
-            return tuple(sorted(set(self._events) - self._deleted))
+            return tuple(
+                sorted(
+                    session
+                    for session, events in self._events.items()
+                    if events and session not in self._deleted
+                )
+            )
 
     async def delete_session(self, session_id: str) -> None:
         async with self._lock:

@@ -16,7 +16,7 @@ from ..contracts import (
     ProviderError,
     ToolCall,
 )
-from ._sse import data_events
+from ._sse import data_events, read_error_text
 
 
 class AnthropicProvider:
@@ -96,13 +96,14 @@ class AnthropicProvider:
         input_tokens = None
         output_tokens = None
         message_stopped = False
+        thinking_blocks: dict[int, dict[str, Any]] = {}
+        provider_data: dict[str, Any] = {}
         try:
             async with client.stream(
                 "POST", self._endpoint(), json=body, headers=headers
             ) as response:
                 if response.status_code >= 400:
-                    error_body = await response.aread()
-                    error_text = error_body.decode("utf-8", errors="replace")
+                    error_text = await read_error_text(response)
                     raise ProviderError(
                         f"Anthropic HTTP {response.status_code}: {error_text}",
                         retryable=response.status_code in (408, 409, 429)
@@ -117,8 +118,12 @@ class AnthropicProvider:
                         )
                     payload = json.loads(data)
                     if event == "message_start":
-                        usage = payload.get("message", {}).get("usage", {})
+                        message = payload.get("message", {})
+                        usage = message.get("usage", {})
                         input_tokens = usage.get("input_tokens", input_tokens)
+                        for key in ("continuation_token", "continuation_tokens"):
+                            if key in message:
+                                provider_data[key] = message[key]
                     elif event == "content_block_start":
                         index = int(payload["index"])
                         block = payload["content_block"]
@@ -127,6 +132,18 @@ class AnthropicProvider:
                             text_blocks[index] = [text]
                             if emit is not None and text:
                                 emit({"channel": "content", "delta": text})
+                        elif block["type"] == "thinking":
+                            thinking_blocks[index] = {
+                                "type": "thinking",
+                                "thinking": str(block.get("thinking", "")),
+                            }
+                            if "signature" in block:
+                                thinking_blocks[index]["signature"] = str(block["signature"])
+                        elif block["type"] == "redacted_thinking":
+                            thinking_blocks[index] = {
+                                "type": "redacted_thinking",
+                                "data": str(block["data"]),
+                            }
                         elif block["type"] == "tool_use":
                             arguments = (
                                 json.dumps(block["input"], separators=(",", ":"))
@@ -151,7 +168,13 @@ class AnthropicProvider:
                     elif event == "content_block_delta":
                         index = int(payload["index"])
                         delta = payload["delta"]
-                        if delta["type"] == "text_delta":
+                        if delta["type"] == "thinking_delta":
+                            thinking_blocks[index]["thinking"] = thinking_blocks[index].get(
+                                "thinking", ""
+                            ) + str(delta["thinking"])
+                        elif delta["type"] == "signature_delta":
+                            thinking_blocks[index]["signature"] = str(delta["signature"])
+                        elif delta["type"] == "text_delta":
                             text_blocks.setdefault(index, []).append(delta["text"])
                             if emit is not None:
                                 emit({"channel": "content", "delta": str(delta["text"])})
@@ -166,13 +189,22 @@ class AnthropicProvider:
                                     }
                                 )
                     elif event == "message_delta":
-                        stop_reason = payload.get("delta", {}).get("stop_reason")
+                        delta_payload = payload.get("delta", {})
+                        for key in ("continuation_token", "continuation_tokens"):
+                            if key in delta_payload:
+                                provider_data[key] = delta_payload[key]
+                        stop_reason = delta_payload.get("stop_reason")
                         if stop_reason is not None:
                             mapped = self._finish_reason(stop_reason)
                             if mapped is None:
                                 raise ProviderError(
                                     f"Anthropic stream returned unknown stop reason: {stop_reason}",
-                                    partial_output=bool(text_blocks or tool_blocks),
+                                    partial_output=bool(
+                                        text_blocks
+                                        or tool_blocks
+                                        or thinking_blocks
+                                        or provider_data
+                                    ),
                                 )
                             finish_reason = mapped
                         output_tokens = payload.get("usage", {}).get("output_tokens", output_tokens)
@@ -183,19 +215,32 @@ class AnthropicProvider:
                         raise ProviderError(
                             f"Anthropic stream error: {error}",
                             retryable=error.get("type") in ("overloaded_error", "rate_limit_error"),
-                            partial_output=bool(text_blocks or tool_blocks),
+                            partial_output=bool(
+                                text_blocks or tool_blocks or thinking_blocks or provider_data
+                            ),
                             code=error.get("type"),
                         )
             if not message_stopped:
                 raise ProviderError(
                     "Anthropic stream ended before message_stop",
                     retryable=True,
-                    partial_output=bool(text_blocks or tool_blocks),
+                    partial_output=bool(
+                        text_blocks or tool_blocks or thinking_blocks or provider_data
+                    ),
                 )
             if finish_reason is None:
                 raise ProviderError(
                     "Anthropic stream completed without a stop reason",
-                    partial_output=bool(text_blocks or tool_blocks),
+                    partial_output=bool(
+                        text_blocks or tool_blocks or thinking_blocks or provider_data
+                    ),
+                )
+            if any(
+                block["type"] == "thinking" and not block.get("signature")
+                for block in thinking_blocks.values()
+            ):
+                raise ProviderError(
+                    "Anthropic thinking block is missing its signature", partial_output=True
                 )
             return ModelResponse(
                 content=self._text(text_blocks),
@@ -205,6 +250,14 @@ class AnthropicProvider:
                 ),
                 finish_reason=finish_reason,
                 usage=ModelUsage(input_tokens=input_tokens, output_tokens=output_tokens),
+                provider_data={
+                    **provider_data,
+                    "thinking_blocks": tuple(
+                        thinking_blocks[index] for index in sorted(thinking_blocks)
+                    ),
+                }
+                if thinking_blocks
+                else provider_data,
             )
         except ProviderError:
             raise
@@ -212,7 +265,7 @@ class AnthropicProvider:
             raise ProviderError(
                 f"Anthropic stream failed: {exc}",
                 retryable=True,
-                partial_output=bool(text_blocks or tool_blocks),
+                partial_output=bool(text_blocks or tool_blocks or thinking_blocks or provider_data),
             ) from exc
         finally:
             if self.http_client is None:
@@ -234,7 +287,9 @@ class AnthropicProvider:
             if message.role == "system":
                 continue
             if message.role == "assistant":
-                content: list[dict[str, Any]] = []
+                content: list[dict[str, Any]] = [
+                    dict(block) for block in message.provider_data.get("thinking_blocks", ())
+                ]
                 if message.content:
                     content.append({"type": "text", "text": message.content})
                 content.extend(
@@ -246,7 +301,11 @@ class AnthropicProvider:
                     }
                     for call in message.tool_calls
                 )
-                result.append({"role": "assistant", "content": content})
+                projected = {"role": "assistant", "content": content}
+                for key, value in message.provider_data.items():
+                    if key not in ("thinking_blocks", "working_context"):
+                        projected[key] = value
+                result.append(projected)
             elif message.role == "tool":
                 result.append(
                     {

@@ -162,20 +162,30 @@ async def test_every_append_crash_recovers_without_replay(base_store, fail_at, a
         )
     )
     assert next_outcome.status == "succeeded"
-    contents = [message.content for message in next_provider.requests[0].messages]
-    historical_inputs = [
-        event
+    completed = any(
+        event.event_type == EventType.TURN_END and event.payload.get("status") == "succeeded"
         for event in before
-        if event.event_type == EventType.USER_MESSAGE and "input_id" in event.payload
-    ]
-    historical_initial = sum(
-        event.payload["input_id"] == "initial-1" for event in historical_inputs
     )
-    historical_steer = sum(event.payload["input_id"] == "steer-1" for event in historical_inputs)
-    assert contents.count("do the task") == historical_initial + 1
-    assert contents.count("follow up") == historical_steer + int(
-        any(item.input_id == "steer-1" for item in pending_before)
-    )
+    if completed:
+        assert next_provider.requests == []
+        assert len(recovered_delivery.messages) == len(expected_delivery)
+    else:
+        contents = [message.content for message in next_provider.requests[0].messages]
+        historical_inputs = [
+            event
+            for event in before
+            if event.event_type == EventType.USER_MESSAGE and "input_id" in event.payload
+        ]
+        historical_initial = sum(
+            event.payload["input_id"] == "initial-1" for event in historical_inputs
+        )
+        historical_steer = sum(
+            event.payload["input_id"] == "steer-1" for event in historical_inputs
+        )
+        assert contents.count("do the task") == historical_initial + 1
+        assert contents.count("follow up") == historical_steer + int(
+            any(item.input_id == "steer-1" for item in pending_before)
+        )
     assert await recovery_loop.pending_inputs("s", base_store) == ()
     assert len(invoked) == invocation_count
 
