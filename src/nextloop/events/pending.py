@@ -3,26 +3,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from ..contracts import Event, EventType, InvariantViolation, PendingInput, TurnOutcome, TurnStatus
+from .codec import fold_projection_facts
 
 
 def pending_inputs(events: Sequence[Event]) -> tuple[PendingInput, ...]:
-    pending: dict[str, PendingInput] = {}
-    for event in events:
-        if event.event_type == EventType.INPUT_ACCEPTED:
-            input_id = str(event.payload.get("input_id", ""))
-            if input_id:
-                pending.pop(input_id, None)
-                pending[input_id] = PendingInput(
-                    input_id=input_id,
-                    turn=event.turn,
-                    seq=event.seq,
-                    content=str(event.payload.get("content", "")),
-                )
-        elif event.event_type == EventType.USER_MESSAGE:
-            input_id = str(event.payload.get("input_id", ""))
-            if input_id:
-                pending.pop(input_id, None)
-    return tuple(pending.values())
+    return fold_projection_facts(events).pending
 
 
 def completed_input_outcome(

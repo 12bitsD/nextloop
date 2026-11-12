@@ -141,10 +141,18 @@ class ObservingEventStore:
         check: HistoryCheck,
         *,
         force: bool = False,
+        initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
         async with self._activity_lock:
             epoch, last_seq, last_turn, history = await attach_writer_with_check(
-                self._store, session_id, check, force=force
+                self._store, session_id, check, force=force, initial_events=initial_events
+            )
+            committed = (
+                await self._store.append(
+                    session_id, epoch, last_seq - len(initial_events) + 1, initial_events
+                )
+                if initial_events
+                else ()
             )
             try:
                 async with self._projector_lock:
@@ -153,6 +161,9 @@ class ObservingEventStore:
                         self._seeded_sessions.add(session_id)
                     else:
                         self._projector.advance_seq(session_id, last_seq)
+                    records = self._projector.feed(committed)
+                for record in records:
+                    self._enqueue(record)
             except Exception as exc:
                 self._report_error(exc, None)
             return epoch, last_seq, last_turn, history
@@ -230,20 +241,23 @@ class ObservingEventStore:
     async def _worker(self) -> None:
         while True:
             record = await self._queue.get()
+            records = [record]
+            while True:
+                try:
+                    records.append(self._queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
             async with self._export_lock:
                 self._in_flight = record
                 try:
-                    if record.session_id in self._deleted_sessions:
-                        self.dropped_count += 1
-                        continue
                     for exporter in self._exporters:
-                        try:
-                            await export_trace(exporter, record)
-                        except Exception as exc:
-                            self._report_error(exc, record)
+                        self.dropped_count += await export_trace_batch(
+                            exporter, records, self._deleted_sessions, self._report_error
+                        )
                 finally:
                     self._in_flight = None
-                    self._queue.task_done()
+                    for _ in records:
+                        self._queue.task_done()
 
     def _report_error(self, error: Exception, record: TraceRecord | None) -> None:
         try:
@@ -344,6 +358,57 @@ async def export_trace(exporter: TraceExporterInput, record: TraceRecord) -> Non
         result = await asyncio.to_thread(callback, record)
     if inspect.isawaitable(result):
         await result
+
+
+async def export_trace_batch(
+    exporter: TraceExporterInput,
+    records: list[TraceRecord],
+    deleted_sessions: set[str],
+    on_error: TraceErrorHandler,
+) -> int:
+    export = getattr(exporter, "export", None)
+    callback = export if callable(export) else cast(Callable[[TraceRecord], Any], exporter)
+    deleted = 0
+    if inspect.iscoroutinefunction(callback):
+        for record in records:
+            if record.session_id in deleted_sessions:
+                deleted += 1
+                continue
+            try:
+                result = callback(record)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as exc:
+                on_error(exc, record)
+        return deleted
+    outcomes = await asyncio.to_thread(_export_sync_batch, callback, records, deleted_sessions)
+    for record, error, result, was_deleted in outcomes:
+        if was_deleted:
+            deleted += 1
+        elif error is not None:
+            on_error(error, record)
+        elif inspect.isawaitable(result):
+            await result
+    return deleted
+
+
+def _export_sync_batch(
+    callback: Callable[[TraceRecord], Any],
+    records: list[TraceRecord],
+    deleted_sessions: set[str],
+) -> list[tuple[TraceRecord, Exception | None, Any, bool]]:
+    outcomes: list[tuple[TraceRecord, Exception | None, Any, bool]] = []
+    for record in records:
+        if record.session_id in deleted_sessions:
+            outcomes.append((record, None, None, True))
+            continue
+        try:
+            result = callback(record)
+        except Exception as exc:
+            outcomes.append((record, exc, None, False))
+        else:
+            outcomes.append((record, None, result, False))
+    return outcomes
 
 
 async def exporter_lifecycle(exporter: TraceExporterInput, method: str) -> None:

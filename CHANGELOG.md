@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0rc1 - 2026-11-13
+
+### Changed
+
+- Collected rejected batches, approval-result anchors, Pending inputs, and WorkingContext in one pure ProjectionFacts pass while retaining the pure message projection path and cross-Store parity.
+- Batched SQLite event inserts with `executemany`, merged writer/tail-sequence queries, and made checked-attach plus initial Turn events atomic without changing writer fencing or Event Schema 1.1.
+- Reduced Preview and Observing queue processing overhead by batching work items while preserving event order, per-record errors, deletion filtering, and close semantics.
+- Cached immutable CandidateRequest canonical bytes, Memory event-ID indexes, and up to 128 JSON Schema validators.
+
+### Fixed
+
+- Prevented concurrent same-owner resume calls from fencing active Turns through atomic checked-attach and history-derived Turn numbering.
+- Preserved FaultInjectingEventStore append counting for initial events, recovery outcomes, and approval dispatch windows.
+- Avoided Preview close-time event loss and prevented deleted Sessions from being exported during slow exporter cleanup.
+- Preserved delivery-only Outbox tails, open-Turn Model/Tool Traces, and continuous-prefix cursor behavior.
+
+### Verified
+
+- 435 offline tests plus stage-specific Projection, SQLite, Preview, Observing, and Tool admission benchmarks.
+- SQLite 400-Step total Turn time reduced from 3.379s to approximately 1.9–2.1s; 20,000 Preview events reduced from 0.303s to approximately 0.053–0.062s with complete publication.
+- Python 3.11–3.14 CI, the 10,505-event parity benchmark, ruff, format check, strict mypy, wheel/sdist builds, Twine, and clean wheel installation.
+- Independent Standards / Spec / Risk review with regression closure. Event Schema remains 1.1 and the frozen import contract remains at 101 root exports.
+
 ## 1.1.0 - 2026-11-13
 
 ### Changed

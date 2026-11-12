@@ -9,7 +9,7 @@ You do not need an API key. A scripted Provider stands in for a hosted model so 
 nextloop requires Python 3.11 or later.
 
 ```bash
-python -m pip install nextloop==1.1.0
+python -m pip install nextloop==1.1.0rc1
 ```
 
 ## 2. Create the example
@@ -126,7 +126,7 @@ When you are ready for a hosted model, `Harness` can assemble the same Loop from
 
 ```toml
 schema = "nextloop.harness/v1"
-min_nextloop = "1.1.0"
+min_nextloop = "1.1.0rc1"
 
 [provider]
 protocol = "openai"
@@ -153,7 +153,10 @@ from nextloop import Harness
 async def main():
     harness = Harness.load("harness.toml")
     try:
-        outcome = await harness.run("Say hello in one short sentence.")
+        outcome = await harness.run(
+            "Say hello in one short sentence.",
+            input_id="hello-request-1",
+        )
         assert outcome.status == "succeeded", outcome.error
         print(harness.delivery.messages[-1].content)
     finally:
@@ -166,9 +169,14 @@ if __name__ == "__main__":
 
 The default Harness DeliveryOwner keeps messages in memory. Inject your own Delivery adapter when your application needs to send them somewhere else.
 
+A stable `input_id` makes retries idempotent. Calling `run()` again with the same ID and content after a successful Turn returns the original `TurnOutcome` without repeating Model calls, Tool execution, or Delivery. Reusing that ID with different content is rejected. `Harness` also accepts an optional `PreviewSink` through `preview=`.
+
 ## Next steps
 
 - [Harness configuration, Tools, MCP, Skills, and Observability](design/harness.md)
 - [Public API and adapter contracts](design/loop-interface.md)
 - [Execution architecture](design/architecture.md)
 - [Guarantees and non-guarantees](design/guarantees.md)
+- [Pending Input, approval resume, reconciliation, and resource locks](design/harness.md#pending-input)
+- [Durable Trace replay with SQLiteOutbox](design/harness.md#durable-outbox)
+- [Recovery and whole-Session deletion](design/harness.md#whole-session-deletion)

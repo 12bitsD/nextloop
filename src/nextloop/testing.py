@@ -102,8 +102,16 @@ class FaultInjectingEventStore(_FaultInjector):
         check: HistoryCheck,
         *,
         force: bool = False,
+        initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
-        return await attach_writer_with_check(self._store, session_id, check, force=force)
+        if initial_events:
+            self._before_effect()
+        result = await attach_writer_with_check(
+            self._store, session_id, check, force=force, initial_events=initial_events
+        )
+        if initial_events:
+            self._after_effect()
+        return result
 
     @property
     def lease_seconds(self) -> float | None:

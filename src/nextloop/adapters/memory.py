@@ -82,8 +82,11 @@ class InMemoryEventStore:
         check: HistoryCheck,
         *,
         force: bool = False,
+        initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
-        return await self._attach_writer(session_id, force=force, check=check)
+        return await self._attach_writer(
+            session_id, force=force, check=check, initial_events=initial_events
+        )
 
     async def _attach_writer(
         self,
@@ -91,6 +94,7 @@ class InMemoryEventStore:
         *,
         force: bool,
         check: HistoryCheck | None = None,
+        initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
         async with self._lock:
             self._ensure_active(session_id)
@@ -116,6 +120,28 @@ class InMemoryEventStore:
                 )
             self._epochs[session_id] += 1
             events = self._events[session_id]
+            if initial_events:
+                first_seq = len(events) + 1
+                committed = [
+                    Event(
+                        session_id=session_id,
+                        seq=first_seq + offset,
+                        turn=draft.turn,
+                        step=draft.step,
+                        attempt=draft.attempt,
+                        writer_epoch=self._epochs[session_id],
+                        event_id=draft.event_id,
+                        event_type=draft.event_type,
+                        surface_op=draft.surface_op,
+                        payload=copy.deepcopy(dict(draft.payload)),
+                        occurred_at=utc_now(),
+                    )
+                    for offset, draft in enumerate(initial_events)
+                ]
+                if any(event.event_id in self._event_ids[session_id] for event in committed):
+                    raise InvariantViolation("Event ID reused with different content")
+                events.extend(committed)
+                self._event_ids[session_id].update((event.event_id, event) for event in committed)
             last_turn = max((event.turn for event in events), default=0)
             return self._epochs[session_id], len(events), last_turn, history
 
@@ -170,10 +196,10 @@ class InMemoryEventStore:
             if expected_seq != len(existing) + 1:
                 return self._idempotent(existing, events)
             known_ids = self._event_ids[session_id]
-            batch_ids = set(known_ids)
+            batch_ids: set[str] = set()
             committed = []
             for offset, draft in enumerate(events):
-                if draft.event_id in batch_ids:
+                if draft.event_id in known_ids or draft.event_id in batch_ids:
                     raise InvariantViolation("Event ID reused with different content")
                 batch_ids.add(draft.event_id)
                 event = Event(

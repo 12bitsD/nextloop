@@ -36,9 +36,9 @@ Owner leases are optional. Same-owner restarts take over immediately; different 
 
 ## Complexity boundaries
 
-Conversation projection loads the current Surface once per Turn and uses the pure projection fold for each model request. Surface storage advances by append without repeatedly copying the event tuple, while rejected batches, approval-result anchors, Pending changes, WorkingContext changes, and Compaction boundaries retain the same pure-fold semantics. Compaction snapshots the committed Surface before awaiting a summary so concurrent steer cannot alter its source range. An incremental message-cache prototype was not retained because its 100-Step improvement did not meet the required 50% threshold on both Store backends.
+Conversation projection loads the current Surface once per Turn and uses the pure projection fold for each model request. Rejected batches, approval-result anchors, Pending inputs, and WorkingContext are collected in one facts pass before messages are built. Surface storage advances by append without repeatedly copying the event tuple, and Compaction snapshots the committed Surface before awaiting a summary so concurrent steer cannot alter its source range. An incremental message-cache prototype was not retained because its 100-Step improvement did not meet the required 50% threshold on both Store backends.
 
-Pending Input requires an ordered log scan. A new Turn performs that scan once; it is not an O(1) operation. Trace replay is linear in processed events and payload size. Incremental and whole-history Trace projection use the same fold.
+Pending Input requires an ordered log scan. A new Turn performs that scan once; it is not an O(1) operation. Canonical request bytes are cached per immutable `CandidateRequest`, and the Memory Store maintains an event-ID index without copying the historical ID set on each append. Trace replay is linear in processed events and payload size. Incremental and whole-history Trace projection use the same fold.
 
 Run the 10,505-event parity benchmark with:
 

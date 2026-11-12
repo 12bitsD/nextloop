@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -16,48 +16,10 @@ from ..contracts import (
     ModelUsage,
     NewEvent,
     SurfaceOp,
-    ToolCall,
     ToolSpec,
 )
-from .pending import pending_inputs
-
-
-def message_to_data(message: Message) -> dict[str, Any]:
-    return {
-        "role": message.role,
-        "content": message.content,
-        "tool_calls": [
-            {
-                "call_id": call.call_id,
-                "name": call.name,
-                "arguments": call.arguments,
-                "operation_id": call.operation_id,
-            }
-            for call in message.tool_calls
-        ],
-        "tool_call_id": message.tool_call_id,
-        "name": message.name,
-        "provider_data": dict(message.provider_data),
-    }
-
-
-def message_from_data(data: Mapping[str, Any]) -> Message:
-    return Message(
-        role=str(data["role"]),
-        content=str(data.get("content", "")),
-        tool_calls=tuple(
-            ToolCall(
-                call_id=str(call["call_id"]),
-                name=str(call["name"]),
-                arguments=str(call["arguments"]),
-                operation_id=call.get("operation_id"),
-            )
-            for call in data.get("tool_calls", ())
-        ),
-        tool_call_id=data.get("tool_call_id"),
-        name=data.get("name"),
-        provider_data=data.get("provider_data", {}),
-    )
+from .codec import fold_projection_facts, message_from_data
+from .codec import message_to_data as message_to_data
 
 
 def usage_to_data(usage: ModelUsage | None) -> dict[str, Any] | None:
@@ -103,19 +65,7 @@ def make_clear_working_context_message(*, scope: Literal["turn", "session"] = "t
 
 
 def latest_working_context(events: Sequence[Event]) -> Message | None:
-    active: Message | None = None
-    for event in events:
-        if event.event_type != EventType.USER_MESSAGE:
-            continue
-        marker = event.payload.get("working_context")
-        if not isinstance(marker, Mapping):
-            continue
-        action = marker.get("action")
-        if action == "set":
-            active = message_from_data(event.payload["message"])
-        elif action in ("clear", "expired"):
-            active = None
-    return active
+    return fold_projection_facts(events).working_context
 
 
 def _capacity_reason(request_bytes: int, config: LoopConfig) -> str | None:
@@ -136,21 +86,10 @@ def project_events(
     config: LoopConfig,
     tools: Sequence[ToolSpec],
 ) -> Projection:
-    rejected_steps = {
-        (event.turn, event.step)
-        for event in events
-        if event.event_type == EventType.TOOL_BATCH_REJECTED
-    }
-    pending = [Message(role="user", content=item.content) for item in pending_inputs(events)]
-    approval_result_seq = max(
-        (
-            event.seq
-            for event in events
-            if event.event_type == EventType.TOOL_RESULT
-            and event.payload.get("origin_kind") == "approval"
-        ),
-        default=0,
-    )
+    facts = fold_projection_facts(events)
+    rejected_steps = facts.rejected_steps
+    pending = [Message(role="user", content=item.content) for item in facts.pending]
+    approval_result_seq = facts.approval_result_seq
     injected = False
     messages = [Message(role="system", content=config.system_prompt)]
     messages.extend(config.bootstrap_messages)
@@ -203,7 +142,7 @@ def project_events(
     return Projection(
         request=request,
         compaction_reason=reason,
-        working_context=latest_working_context(events),
+        working_context=facts.working_context,
     )
 
 

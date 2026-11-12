@@ -237,6 +237,7 @@ class ExecutionFrame:
         self.writer_epoch = 0
         self.last_seq = 0
         self.last_turn = 0
+        self._begun = False
 
     async def __aenter__(self) -> ExecutionFrame:
         if not self.context.input_id.strip():
@@ -259,7 +260,12 @@ class ExecutionFrame:
                 self.last_seq,
                 self.last_turn,
                 self.history,
-            ) = await checked_attach(self.context.session_id, check)
+            ) = await checked_attach(
+                self.context.session_id,
+                check,
+                initial_events=self._initial_events(),
+            )
+            self._begun = True
         else:
             (
                 self.writer_epoch,
@@ -272,7 +278,7 @@ class ExecutionFrame:
             actor=self.actor,
             writer_epoch=self.writer_epoch,
             seq=self.last_seq,
-            turn=self.last_turn + 1,
+            turn=self.last_turn if self._begun else self.last_turn + 1,
             resource_locks=set(active_resource_locks(self.history)),
         )
         self.execution = execution
@@ -303,22 +309,26 @@ class ExecutionFrame:
             execution.heartbeat_task = asyncio.create_task(self._heartbeat(execution, interval / 3))
         return execution
 
-    async def begin(self) -> None:
-        execution = self._require_execution()
-        await execution.append(
-            [
-                NewEvent(
-                    event_type=EventType.INPUT_ACCEPTED,
-                    turn=execution.turn,
-                    step=0,
-                    payload={
-                        "input_id": self.context.input_id,
-                        "content": self.context.initial_input,
-                    },
-                ),
-                NewEvent(event_type=EventType.TURN_START, turn=execution.turn, step=0),
-            ]
+    def _initial_events(self) -> tuple[NewEvent, NewEvent]:
+        turn = max((event.turn for event in self.history), default=0) + 1
+        return (
+            NewEvent(
+                event_type=EventType.INPUT_ACCEPTED,
+                turn=turn,
+                step=0,
+                payload={
+                    "input_id": self.context.input_id,
+                    "content": self.context.initial_input,
+                },
+            ),
+            NewEvent(event_type=EventType.TURN_START, turn=turn, step=0),
         )
+
+    async def begin(self) -> None:
+        if self._begun:
+            return
+        execution = self._require_execution()
+        await execution.append(self._initial_events())
 
     async def begin_step(self) -> None:
         execution = self._require_execution()
@@ -903,6 +913,14 @@ async def run_approval_resume(
             or {item.operation_id for item in current.items} != expected
         ):
             raise InvariantViolation("Approval changed; reload decisions")
+        closed_turns = {event.turn for event in events if event.event_type == EventType.TURN_END}
+        if any(
+            event.event_type == EventType.TURN_START
+            and event.turn != request.origin_turn
+            and event.turn not in closed_turns
+            for event in events
+        ):
+            raise InvariantViolation("Approval dispatch already started; recover first")
         if any(
             event.event_type == EventType.TOOL_CALL
             and event.payload.get("operation_id") in expected

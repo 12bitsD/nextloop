@@ -5,6 +5,7 @@ import inspect
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 import jsonschema
@@ -34,6 +35,11 @@ class ToolContext:
 ToolHandler = Callable[[Mapping[str, Any], ToolContext], Any]
 
 
+@lru_cache(maxsize=128)
+def _validator_for_schema(schema: str) -> jsonschema.Draft202012Validator:
+    return jsonschema.Draft202012Validator(json.loads(schema))
+
+
 def validate_calls(
     calls: Sequence[ToolCall], specs: Mapping[str, ToolSpec]
 ) -> tuple[tuple[ValidatedCall, ...], tuple[ValidationIssue, ...]]:
@@ -61,7 +67,9 @@ def validate_calls(
                 ValidationIssue(call_id, call.name, "Tool arguments must be a JSON object")
             )
             continue
-        validator = jsonschema.Draft202012Validator(spec.parameters)
+        validator = _validator_for_schema(
+            json.dumps(spec.parameters, sort_keys=True, separators=(",", ":"))
+        )
         for error in sorted(validator.iter_errors(arguments), key=lambda item: list(item.path)):
             path = "$" + "".join(
                 f"[{part}]" if isinstance(part, int) else f".{part}" for part in error.path

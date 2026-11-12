@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-API_VERSION = "1.1.0"
+API_VERSION = "1.1.0rc1"
 EVENT_SCHEMA_VERSION = "1.1"
 HARNESS_SCHEMA = "nextloop.harness/v1"
 STDIO_PROTOCOL_VERSION = "nextloop.stdio/v1"
@@ -419,6 +419,20 @@ class PreviewSink(Protocol):
     def publish(self, event: PreviewEvent) -> None: ...
 
 
+def canonical_message_data(message: Message) -> dict[str, Any]:
+    return {
+        "role": message.role,
+        "content": message.content,
+        "tool_calls": [
+            {"call_id": call.call_id, "name": call.name, "arguments": call.arguments}
+            for call in message.tool_calls
+        ],
+        "tool_call_id": message.tool_call_id,
+        "name": message.name,
+        "provider_data": dict(message.provider_data),
+    }
+
+
 @dataclass(frozen=True)
 class CandidateRequest:
     session_id: str
@@ -426,31 +440,25 @@ class CandidateRequest:
     step: int
     messages: tuple[Message, ...]
     tools: tuple[ToolSpec, ...]
+    _canonical_bytes_cache: bytes | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def canonical_bytes(self) -> bytes:
+        if self._canonical_bytes_cache is not None:
+            return self._canonical_bytes_cache
         data = {
             "tools": [
                 {"name": t.name, "description": t.description, "parameters": dict(t.parameters)}
                 for t in self.tools
             ],
-            "messages": [
-                {
-                    "role": message.role,
-                    "content": message.content,
-                    "tool_calls": [
-                        {"call_id": call.call_id, "name": call.name, "arguments": call.arguments}
-                        for call in message.tool_calls
-                    ],
-                    "tool_call_id": message.tool_call_id,
-                    "name": message.name,
-                    "provider_data": dict(message.provider_data),
-                }
-                for message in self.messages
-            ],
+            "messages": [canonical_message_data(message) for message in self.messages],
         }
-        return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
+        canonical = json.dumps(
+            data, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        object.__setattr__(self, "_canonical_bytes_cache", canonical)
+        return canonical
 
 
 @dataclass(frozen=True)

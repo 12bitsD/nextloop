@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from nextloop.adapters.memory import InMemoryEventStore
 from nextloop.contracts import (
     Cancelled,
+    CandidateRequest,
     Completed,
     Event,
     EventType,
@@ -239,3 +242,13 @@ async def test_memory_store_surface_and_idempotency():
     surface = await store.load_surface("s")
     assert len(surface) == 1
     assert surface[0].payload["message"]["content"] == "hello"
+
+
+def test_canonical_bytes_are_cached_per_immutable_request():
+    request = CandidateRequest(session_id="s", turn=1, step=1, messages=(), tools=())
+
+    first = request.canonical_bytes()
+
+    assert first is request.canonical_bytes()
+    changed = replace(request, messages=(Message(role="user", content="different"),))
+    assert changed.canonical_bytes() != first

@@ -28,10 +28,12 @@ async def test_late_invalid_resume_does_not_fence_legal_active_turn(tmp_path):
             self.attach_started = asyncio.Event()
             self.allow_attach = asyncio.Event()
 
-        async def attach_writer_checked(self, session_id, check, *, force=False):
+        async def attach_writer_checked(self, session_id, check, *, force=False, initial_events=()):
             self.attach_started.set()
             await self.allow_attach.wait()
-            return await super().attach_writer_checked(session_id, check, force=force)
+            return await super().attach_writer_checked(
+                session_id, check, force=force, initial_events=initial_events
+            )
 
     invoked = []
     tools = approval_tools(invoked)

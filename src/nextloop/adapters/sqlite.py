@@ -195,9 +195,12 @@ class SQLiteEventStore:
         check: HistoryCheck,
         *,
         force: bool = False,
+        initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
         with self._lock, write_transaction(self._connection):
-            return self._attach_writer_locked(session_id, force=force, check=check)
+            return self._attach_writer_locked(
+                session_id, force=force, check=check, initial_events=initial_events
+            )
 
     def _attach_writer_locked(
         self,
@@ -205,6 +208,7 @@ class SQLiteEventStore:
         *,
         force: bool,
         check: HistoryCheck | None = None,
+        initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
         self._ensure_active_locked(session_id)
         history: Sequence[Event] = ()
@@ -250,7 +254,40 @@ class SQLiteEventStore:
             "FROM session_events WHERE session_id = ?",
             (session_id,),
         ).fetchone()
-        return epoch, int(tail["last_seq"]), int(tail["last_turn"]), history
+        last_seq = int(tail["last_seq"])
+        last_turn = int(tail["last_turn"])
+        for offset, draft in enumerate(initial_events):
+            self._connection.execute(
+                """
+                INSERT INTO session_events (
+                    session_id, seq, turn, step, attempt, writer_epoch, event_id,
+                    event_type, surface_op, payload_json, occurred_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    last_seq + offset + 1,
+                    draft.turn,
+                    draft.step,
+                    draft.attempt,
+                    epoch,
+                    draft.event_id,
+                    draft.event_type.value,
+                    draft.surface_op.value,
+                    json.dumps(
+                        draft.payload,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    utc_now(),
+                    EVENT_SCHEMA_VERSION,
+                ),
+            )
+        if initial_events:
+            last_seq += len(initial_events)
+            last_turn = initial_events[-1].turn
+        return epoch, last_seq, last_turn, history
 
     def _check_writer_locked(self, session_id: str, writer_epoch: int) -> None:
         self._ensure_active_locked(session_id)
@@ -260,6 +297,9 @@ class SQLiteEventStore:
         ).fetchone()
         if row is None or int(row["writer_epoch"]) != writer_epoch:
             raise InvariantViolation("Stale writer_epoch")
+        self._check_lease_locked(session_id, writer_epoch)
+
+    def _check_lease_locked(self, session_id: str, writer_epoch: int) -> None:
         if self.lease_seconds is None:
             return
         lease = self._connection.execute(
@@ -273,6 +313,19 @@ class SQLiteEventStore:
             or float(lease["expires_at"]) <= self._clock()
         ):
             raise InvariantViolation("Stale writer_epoch")
+
+    def _check_writer_and_tail_locked(self, session_id: str, writer_epoch: int) -> int:
+        self._ensure_active_locked(session_id)
+        row = self._connection.execute(
+            "SELECT (SELECT writer_epoch FROM session_writers WHERE session_id = ?) "
+            "AS writer_epoch, COALESCE(MAX(seq), 0) AS last_seq "
+            "FROM session_events WHERE session_id = ?",
+            (session_id, session_id),
+        ).fetchone()
+        if row["writer_epoch"] is None or int(row["writer_epoch"]) != writer_epoch:
+            raise InvariantViolation("Stale writer_epoch")
+        self._check_lease_locked(session_id, writer_epoch)
+        return int(row["last_seq"])
 
     @offload
     def check_writer(self, session_id: str, writer_epoch: int) -> None:
@@ -331,14 +384,7 @@ class SQLiteEventStore:
                 self._ensure_active_locked(session_id)
                 return ()
             with write_transaction(self._connection):
-                self._check_writer_locked(session_id, writer_epoch)
-                last_seq = int(
-                    self._connection.execute(
-                        "SELECT COALESCE(MAX(seq), 0) AS last_seq "
-                        "FROM session_events WHERE session_id = ?",
-                        (session_id,),
-                    ).fetchone()["last_seq"]
-                )
+                last_seq = self._check_writer_and_tail_locked(session_id, writer_epoch)
                 if expected_seq != last_seq + 1:
                     existing = []
                     for draft in events:
@@ -351,15 +397,10 @@ class SQLiteEventStore:
                     committed = verify_idempotent_append(existing, events)
                     return committed
                 committed = []
+                rows: list[tuple[object, ...]] = []
                 for offset, draft in enumerate(events):
                     occurred_at = utc_now()
-                    self._connection.execute(
-                        """
-                        INSERT INTO session_events (
-                            session_id, seq, turn, step, attempt, writer_epoch, event_id,
-                            event_type, surface_op, payload_json, occurred_at, schema_version
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
+                    rows.append(
                         (
                             session_id,
                             expected_seq + offset,
@@ -378,13 +419,22 @@ class SQLiteEventStore:
                             ),
                             occurred_at,
                             EVENT_SCHEMA_VERSION,
-                        ),
+                        )
                     )
                     committed.append(
                         self._event_from_draft(
                             session_id, expected_seq + offset, writer_epoch, draft, occurred_at
                         )
                     )
+                self._connection.executemany(
+                    """
+                    INSERT INTO session_events (
+                        session_id, seq, turn, step, attempt, writer_epoch, event_id,
+                        event_type, surface_op, payload_json, occurred_at, schema_version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
                 return committed
 
     def _read_rows_locked(self, statement: str, parameters: Sequence[str]) -> list[sqlite3.Row]:

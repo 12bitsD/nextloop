@@ -198,10 +198,21 @@ class PreviewChannel:
     async def _worker(self) -> None:
         while True:
             event = await self._queue.get()
+            events = [event]
+            while True:
+                try:
+                    events.append(self._queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
             try:
                 if not self._disabled:
-                    await asyncio.to_thread(self._sink.publish, event)
+                    await asyncio.to_thread(self._publish_batch, events)
             except Exception:
                 self._disabled = True
             finally:
-                self._queue.task_done()
+                for _ in events:
+                    self._queue.task_done()
+
+    def _publish_batch(self, events: list[PreviewEvent]) -> None:
+        for event in events:
+            self._sink.publish(event)
