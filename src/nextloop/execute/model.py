@@ -95,7 +95,11 @@ class ModelCaller:
                     )
                     if preview is not None:
                         preview.snapshot(request, attempt, response)
-            except _CancelledByUser:
+            except (_CancelledByUser, asyncio.CancelledError) as exc:
+                if isinstance(exc, asyncio.CancelledError):
+                    current = asyncio.current_task()
+                    if current is not None and current.cancelling():
+                        raise
                 events.append(
                     self._timed_event(request, attempt, "cancelled", purpose, started_at, started)
                 )

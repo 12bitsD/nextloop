@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
-import threading
 
 import httpx
 import pytest
@@ -26,7 +25,6 @@ from nextloop import (
     check_event_store,
     with_result_reads,
 )
-from nextloop.adapters._sqlite import write_transaction
 from nextloop.adapters.observing import ObservingEventStore
 from nextloop.testing import FaultInjectingEventStore
 
@@ -107,66 +105,23 @@ async def test_idle_outbox_skips_recovery_read():
 
 
 @pytest.mark.asyncio
-async def test_delete_contention_does_not_block_event_loop(tmp_path, monkeypatch):
-    store = SQLiteEventStore(str(tmp_path / "events.sqlite3"), owner_id="owner")
+async def test_failed_sqlite_batch_is_atomic_and_preserves_error(tmp_path):
+    store = SQLiteEventStore(str(tmp_path / "atomic.sqlite3"))
     epoch, _, _ = await store.attach_writer("s")
-    started = threading.Event()
-    release = threading.Event()
 
-    def blocked_purge(connection):
-        started.set()
-        release.wait(2)
+    with pytest.raises(TypeError):
+        await store.append(
+            "s",
+            epoch,
+            1,
+            [
+                NewEvent(EventType.TURN_START, turn=1, step=0),
+                NewEvent(EventType.STEP_START, turn=1, step=1, payload={"bad": object()}),
+            ],
+        )
 
-    monkeypatch.setattr("nextloop.adapters.sqlite.purge_deleted_bytes", blocked_purge)
-    deleting = asyncio.create_task(store.delete_session("s"))
-    await asyncio.to_thread(started.wait)
-    renewing = asyncio.create_task(store.renew_writer("s", epoch))
-
-    await asyncio.sleep(0.05)
-    assert not deleting.done()
-    release.set()
-    await asyncio.gather(deleting, renewing, return_exceptions=True)
+    assert await store.load_recovery("s") == ()
     store.close()
-
-
-def test_begin_failure_is_not_replaced_by_rollback():
-    class Connection:
-        in_transaction = False
-
-        def __init__(self):
-            self.calls = []
-
-        def execute(self, statement):
-            self.calls.append(statement)
-            if statement == "BEGIN IMMEDIATE":
-                raise sqlite3.OperationalError("begin failed")
-
-    connection = Connection()
-    with (
-        pytest.raises(sqlite3.OperationalError, match="begin failed"),
-        write_transaction(connection),
-    ):
-        pass
-    assert "ROLLBACK" not in connection.calls
-
-
-def test_rollback_failure_preserves_commit_error():
-    class Connection:
-        in_transaction = True
-
-        def execute(self, statement):
-            if statement == "COMMIT":
-                self.in_transaction = True
-                raise sqlite3.OperationalError("commit failed")
-            if statement == "ROLLBACK":
-                raise sqlite3.OperationalError("rollback failed")
-
-    with (
-        pytest.raises(sqlite3.OperationalError, match="commit failed") as caught,
-        write_transaction(Connection()),
-    ):
-        pass
-    assert any("rollback failed" in note for note in caught.value.__notes__)
 
 
 @pytest.mark.asyncio

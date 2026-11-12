@@ -9,7 +9,7 @@ You do not need an API key. A scripted Provider stands in for a hosted model so 
 nextloop requires Python 3.11 or later.
 
 ```bash
-python -m pip install nextloop==1.0.0
+python -m pip install nextloop==1.1.0
 ```
 
 ## 2. Create the example
@@ -126,7 +126,7 @@ When you are ready for a hosted model, `Harness` can assemble the same Loop from
 
 ```toml
 schema = "nextloop.harness/v1"
-min_nextloop = "1.0.0"
+min_nextloop = "1.1.0"
 
 [provider]
 protocol = "openai"

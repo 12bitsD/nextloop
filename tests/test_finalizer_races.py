@@ -130,3 +130,106 @@ async def test_preview_close_failure_still_removes_active_execution(monkeypatch)
         )
 
     assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+
+
+@pytest.mark.asyncio
+async def test_provider_initiated_cancellation_returns_cancelled_outcome():
+    store = InMemoryEventStore()
+
+    outcome = await AgentLoop().run(
+        context(
+            store,
+            FakeProvider([asyncio.CancelledError()]),
+            registry(),
+            FakeDelivery(),
+        )
+    )
+
+    assert outcome.status == TurnStatus.CANCELLED
+    events = await store.load_recovery("s")
+    assert any(
+        event.event_type == EventType.ASSISTANT_ATTEMPT
+        and event.payload.get("status") == "cancelled"
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_pre_commit_steer_continues_successful_candidate():
+    loop = AgentLoop()
+    store = InMemoryEventStore()
+
+    async def first(**kwargs):
+        assert (await loop.steer_result("s", "continue")).status == SteerStatus.ACCEPTED
+        return ModelResponse(content="first candidate")
+
+    outcome = await loop.run(
+        context(
+            store,
+            FakeProvider([first, ModelResponse(content="combined")]),
+            registry(),
+            FakeDelivery(),
+        )
+    )
+
+    assert outcome.status == TurnStatus.SUCCEEDED
+    assert outcome.step == 2
+    assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+    assert await loop.pending_inputs("s", store) == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scenario", "expected", "after_status"),
+    [
+        ("failed", TurnStatus.FAILED, SteerStatus.TURN_CLOSED),
+        ("cancelled", TurnStatus.CANCELLED, SteerStatus.TURN_CLOSED),
+        ("blocked", TurnStatus.BLOCKED, SteerStatus.TURN_CLOSED),
+        ("approval_pending", TurnStatus.APPROVAL_PENDING, SteerStatus.APPROVAL_PENDING),
+    ],
+)
+async def test_pre_commit_steer_preserves_pending_for_next_turn(scenario, expected, after_status):
+    loop = AgentLoop()
+    store = InMemoryEventStore()
+
+    async def inject():
+        assert (await loop.steer_result("s", "pre-terminal")).status == SteerStatus.ACCEPTED
+
+    tools = approval_tools([]) if scenario == "approval_pending" else registry()
+    if scenario == "blocked":
+
+        async def write(arguments, ctx):
+            await inject()
+            return UncertainHanging("unknown")
+
+        tools = registry(write_handler=write)
+        responses = [
+            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)
+        ]
+    elif scenario == "approval_pending":
+
+        async def respond(**kwargs):
+            await inject()
+            return ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)
+
+        responses = [respond]
+    elif scenario == "failed":
+
+        async def respond(**kwargs):
+            await inject()
+            raise ProviderError("terminal")
+
+        responses = [respond]
+    else:
+
+        async def respond(**kwargs):
+            await inject()
+            return ModelResponse(finish_reason=FinishReason.CANCELLED)
+
+        responses = [respond]
+
+    outcome = await loop.run(context(store, FakeProvider(responses), tools, FakeDelivery()))
+
+    assert outcome.status == expected
+    assert (await loop.steer_result("s", "after")).status == after_status
+    assert [item.content for item in await loop.pending_inputs("s", store)] == ["pre-terminal"]

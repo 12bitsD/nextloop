@@ -3,9 +3,15 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import replace
-from typing import Any, cast
+from typing import Any
 
-from .adapters.capabilities import HistoryCheck, read_event, read_last_seq
+from .adapters.capabilities import (
+    HistoryCheck,
+    attach_writer_with_check,
+    read_event,
+    read_last_seq,
+    uses_last_seq_fallback,
+)
 from .adapters.memory import InMemoryEventStore
 from .contracts import (
     DeliveryOwner,
@@ -97,16 +103,7 @@ class FaultInjectingEventStore(_FaultInjector):
         *,
         force: bool = False,
     ) -> tuple[int, int, int, Sequence[Event]]:
-        checked_attach = getattr(self._store, "attach_writer_checked", None)
-        if callable(checked_attach):
-            return cast(
-                tuple[int, int, int, Sequence[Event]],
-                await checked_attach(session_id, check, force=force),
-            )
-        history = await self._store.load_recovery(session_id)
-        check(history)
-        epoch, last_seq, last_turn = await self._store.attach_writer(session_id, force=force)
-        return epoch, last_seq, last_turn, history
+        return await attach_writer_with_check(self._store, session_id, check, force=force)
 
     @property
     def lease_seconds(self) -> float | None:
@@ -114,9 +111,7 @@ class FaultInjectingEventStore(_FaultInjector):
 
     @property
     def last_seq_fallback(self) -> bool:
-        return not callable(getattr(self._store, "last_seq", None)) or bool(
-            getattr(self._store, "last_seq_fallback", False)
-        )
+        return uses_last_seq_fallback(self._store)
 
     async def check_writer(self, session_id: str, writer_epoch: int) -> None:
         await self._store.check_writer(session_id, writer_epoch)

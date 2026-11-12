@@ -504,6 +504,11 @@ class TurnFinalizer:
             await await_with_cancel(
                 execution.context.delivery.deliver(final), execution.cancel, _DeliveryCancelled
             )
+        except _DeliveryCancelled:
+            error = "turn_deadline_exceeded"
+        except Exception as exc:
+            error = str(exc)
+        else:
             await execution.append(
                 [
                     NewEvent(
@@ -514,36 +519,25 @@ class TurnFinalizer:
                     )
                 ]
             )
-            status = TurnStatus.SUCCEEDED
-            error = None
-        except _DeliveryCancelled:
-            error = "turn_deadline_exceeded"
-            await execution.append(
-                [
-                    NewEvent(
-                        EventType.DELIVERY_UNKNOWN,
-                        turn=execution.turn,
-                        step=execution.step,
-                        payload={"final_message_id": final_message_id, "error": error},
-                    )
-                ]
+            return TurnOutcome(
+                status=TurnStatus.SUCCEEDED,
+                session_id=execution.session_id,
+                turn=execution.turn,
+                step=execution.step,
+                final_message_id=final_message_id,
             )
-            status = TurnStatus.DELIVERY_UNKNOWN
-        except Exception as exc:
-            error = str(exc)
-            await execution.append(
-                [
-                    NewEvent(
-                        EventType.DELIVERY_UNKNOWN,
-                        turn=execution.turn,
-                        step=execution.step,
-                        payload={"final_message_id": final_message_id, "error": error},
-                    )
-                ]
-            )
-            status = TurnStatus.DELIVERY_UNKNOWN
+        await execution.append(
+            [
+                NewEvent(
+                    EventType.DELIVERY_UNKNOWN,
+                    turn=execution.turn,
+                    step=execution.step,
+                    payload={"final_message_id": final_message_id, "error": error},
+                )
+            ]
+        )
         return TurnOutcome(
-            status=status,
+            status=TurnStatus.DELIVERY_UNKNOWN,
             session_id=execution.session_id,
             turn=execution.turn,
             step=execution.step,

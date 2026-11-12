@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.0 - 2026-11-13
+
+### Changed
+
+- Unified Turn startup and terminal handling through `ExecutionFrame` and `TurnFinalizer`, with commit-lock arbitration for success, failure, cancellation, blocked execution, and approval suspension.
+- Harness now delegates stable-input runs, approval resume, reconciliation, pending inputs, resource locks, recovery, and EventStore deletion while preserving caller-owned dependencies.
+- SQLite async operations run in worker threads with bounded lock backoff and consistent read snapshots. Optional point-read and tail-sequence capabilities retain third-party Store fallbacks.
+- Provider-owned HTTP clients are reused across calls, with explicit ownership and idempotent close behavior.
+- Conversation Projection remains on the pure fold after the incremental implementation failed the required 100-Step performance threshold on both built-in Stores.
+
+### Fixed
+
+- Pending input ordering and consumption-based idempotent replay no longer duplicate completed Tool side effects or lose reopened inputs.
+- Reconciliation now closes its Step on success and budget failure without executing over-budget Tools or leaking Preview workers.
+- Atomic checked-attach validates current approval/reconciliation history before advancing writer epochs, preventing late invalid calls from fencing active Turns.
+- Outbox cursors advance only through the continuously closed prefix, preserving Model and Tool Traces from open Turns while skipping delivery-only tails and avoiding duplicate fallback reads.
+- Provider-initiated cancellation returns `TurnOutcome.CANCELLED`; caller task cancellation still propagates `CancelledError` after protected cleanup.
+- SQLite deletion, point reads, and large appends preserve event-loop availability and correct tombstone/snapshot semantics.
+
+### Verified
+
+- 432 offline tests plus dedicated race, finalization, Harness delegation, Store capability, SQLite safety, and Outbox continuous-prefix regressions.
+- Python 3.11–3.14 CI, the 10,505-event parity benchmark, ruff, format check, strict mypy, wheel/sdist builds, Twine, and clean wheel installation.
+- Independent Standards / Spec / Risk review with regression closure. Event Schema remains 1.1 and the frozen import contract remains at 101 root exports.
+
 ## 1.0.0 - 2026-11-11
 
 ### Release contract

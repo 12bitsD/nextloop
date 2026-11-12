@@ -56,3 +56,28 @@ async def read_last_seq(store: EventStore, session_id: str) -> int:
         return cast(int, await last_seq(session_id))
     events = await store.load_recovery(session_id)
     return events[-1].seq if events else 0
+
+
+def uses_last_seq_fallback(store: EventStore) -> bool:
+    return not callable(getattr(store, "last_seq", None)) or bool(
+        getattr(store, "last_seq_fallback", False)
+    )
+
+
+async def attach_writer_with_check(
+    store: EventStore,
+    session_id: str,
+    check: HistoryCheck,
+    *,
+    force: bool = False,
+) -> tuple[int, int, int, Sequence[Event]]:
+    checked_attach = getattr(store, "attach_writer_checked", None)
+    if callable(checked_attach):
+        return cast(
+            tuple[int, int, int, Sequence[Event]],
+            await checked_attach(session_id, check, force=force),
+        )
+    history = await store.load_recovery(session_id)
+    check(history)
+    epoch, last_seq, last_turn = await store.attach_writer(session_id, force=force)
+    return epoch, last_seq, last_turn, history

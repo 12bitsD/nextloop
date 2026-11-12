@@ -23,7 +23,13 @@ from ..contracts import (
 from ..events.trace import TraceProjector, project_traces
 from ..events.trace_ids import span_id, trace_id
 from ..execute.cleanup import wait_for_cleanup
-from .capabilities import HistoryCheck, read_event, read_last_seq
+from .capabilities import (
+    HistoryCheck,
+    attach_writer_with_check,
+    read_event,
+    read_last_seq,
+    uses_last_seq_fallback,
+)
 
 TraceErrorHandler = Callable[[Exception, TraceRecord | None], None]
 
@@ -137,17 +143,9 @@ class ObservingEventStore:
         force: bool = False,
     ) -> tuple[int, int, int, Sequence[Event]]:
         async with self._activity_lock:
-            checked_attach = getattr(self._store, "attach_writer_checked", None)
-            if callable(checked_attach):
-                epoch, last_seq, last_turn, history = await checked_attach(
-                    session_id, check, force=force
-                )
-            else:
-                history = await self._store.load_recovery(session_id)
-                check(history)
-                epoch, last_seq, last_turn = await self._store.attach_writer(
-                    session_id, force=force
-                )
+            epoch, last_seq, last_turn, history = await attach_writer_with_check(
+                self._store, session_id, check, force=force
+            )
             try:
                 async with self._projector_lock:
                     if session_id not in self._seeded_sessions:
@@ -165,9 +163,7 @@ class ObservingEventStore:
 
     @property
     def last_seq_fallback(self) -> bool:
-        return not callable(getattr(self._store, "last_seq", None)) or bool(
-            getattr(self._store, "last_seq_fallback", False)
-        )
+        return uses_last_seq_fallback(self._store)
 
     async def check_writer(self, session_id: str, writer_epoch: int) -> None:
         await self._store.check_writer(session_id, writer_epoch)

@@ -237,6 +237,18 @@ class SQLiteOutbox:
                 continue
             tail_seq = events[-1].seq
             closed_turns = {event.turn for event in events if event.event_type.value == "turn/end"}
+            open_turns = {
+                event.turn for event in events if event.event_type.value == "turn/start"
+            } - closed_turns
+            first_open_seq = min(
+                (
+                    event.seq
+                    for event in events
+                    if event.turn in open_turns and event.event_type.value == "turn/start"
+                ),
+                default=tail_seq + 1,
+            )
+            continuous_tail = first_open_seq - 1
             records = [record for record in project_traces(events) if record.turn in closed_turns]
             await self._acquire(session)
             heartbeat = asyncio.create_task(self._keep_lock(session))
@@ -244,8 +256,8 @@ class SQLiteOutbox:
                 cursor = await asyncio.to_thread(self.watermark, session)
                 pending = [record for record in records if max(record.source_seqs) > cursor]
                 if not pending:
-                    if tail_seq > cursor:
-                        await asyncio.to_thread(self._advance, session, tail_seq)
+                    if continuous_tail > cursor:
+                        await asyncio.to_thread(self._advance, session, continuous_tail)
                     continue
                 pending_sessions.append(session)
                 completed = True
@@ -274,8 +286,8 @@ class SQLiteOutbox:
                     await asyncio.to_thread(self._advance, session, last_seq)
                     exported += 1
                     cursor = last_seq
-                if completed and tail_seq > cursor:
-                    await asyncio.to_thread(self._advance, session, tail_seq)
+                if completed and continuous_tail > cursor:
+                    await asyncio.to_thread(self._advance, session, continuous_tail)
             finally:
                 heartbeat.cancel()
                 try:

@@ -8,7 +8,7 @@ import time
 import pytest
 from helpers import CountingEventStore, FakeDelivery, FakeProvider, MinimalEventStore
 from test_approval import approval_tools
-from test_loop import call, context
+from test_loop import call, context, registry
 from test_outbox import closed_turn
 
 from nextloop import (
@@ -370,3 +370,43 @@ async def test_fallback_capability_reads_history_once_per_export(wrapper):
     outbox.close()
     if wrapper == "observing":
         await store.close()
+
+
+@pytest.mark.asyncio
+async def test_open_turn_is_not_included_in_exported_cursor_prefix():
+    store = InMemoryEventStore()
+    epoch, _, _ = await store.attach_writer("s")
+    await store.append("s", epoch, 1, closed_turn(1))
+    second_model_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def finish(**kwargs):
+        second_model_started.set()
+        await release.wait()
+        return ModelResponse(content="turn two")
+
+    provider = FakeProvider(
+        [
+            ModelResponse(tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS),
+            finish,
+        ]
+    )
+    running = asyncio.create_task(
+        AgentLoop().run(context(store, provider, registry(), FakeDelivery()))
+    )
+    await second_model_started.wait()
+    records = []
+    outbox = SQLiteOutbox(store, ":memory:", [records.append])
+    await outbox.export_pending()
+
+    assert outbox.watermark("s") == 4
+    release.set()
+    await running
+    records.clear()
+    await outbox.export_pending()
+
+    record_types = {type(record).__name__ for record in records}
+    assert "ModelCallTrace" in record_types
+    assert "ToolCallTrace" in record_types
+    assert "TurnTrace" in record_types
+    outbox.close()

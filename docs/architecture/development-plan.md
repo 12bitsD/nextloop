@@ -1,6 +1,6 @@
 # nextloop development and verification plan
 
-Current stage: **1.0.0 release verification**. `0.9.0` is published; the maintainer-selected DeepSeek live gate is defined by ADR-0011.
+Current stage: **1.1.0 release verification**. `1.0.0` is published; the maintainer-selected DeepSeek live gate is defined by ADR-0011.
 
 ## Delivery order
 

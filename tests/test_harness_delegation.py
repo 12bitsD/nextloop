@@ -19,6 +19,7 @@ from nextloop import (
     ModelResponse,
     NewEvent,
     SessionDeletedError,
+    SQLiteEventStore,
     SteerStatus,
     ToolEffect,
     ToolRegistry,
@@ -219,30 +220,31 @@ async def test_harness_run_matches_direct_agent_loop(tmp_path):
 
 @pytest.mark.asyncio
 async def test_owned_provider_close_failure_still_closes_owned_store(tmp_path, monkeypatch):
-    class TrackingStore(InMemoryEventStore):
-        def __init__(self):
-            super().__init__()
-            self.closed = False
-
-        def close(self):
-            self.closed = True
-
     class FailingCloseProvider(FakeProvider):
         async def close(self):
             raise RuntimeError("provider close failed")
 
-    store = TrackingStore()
     provider = FailingCloseProvider([ModelResponse(content="done")])
-    monkeypatch.setattr("nextloop.harness._make_store", lambda config: store)
+    closed = []
+    original_close = SQLiteEventStore.close
+
+    def tracking_close(store):
+        closed.append(store)
+        return original_close(store)
+
+    monkeypatch.setattr(SQLiteEventStore, "close", tracking_close)
     monkeypatch.setattr("nextloop.harness.OpenAIProvider", lambda **kwargs: provider)
     monkeypatch.setenv("NEXTLOOP_TEST_KEY", "secret")
-    harness = Harness.load(write_config(tmp_path), tools=ToolRegistry())
+    harness = Harness.load(
+        write_config(tmp_path, '[store]\ndriver = "sqlite"\npath = "events.sqlite3"'),
+        tools=ToolRegistry(),
+    )
     await harness.run("start")
 
     with pytest.raises(RuntimeError, match="provider close failed"):
         await harness.close()
 
-    assert store.closed
+    assert len(closed) == 1
 
 
 @pytest.mark.asyncio
