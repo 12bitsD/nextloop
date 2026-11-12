@@ -138,9 +138,11 @@ async def test_heartbeat_renews_lease_during_long_tool():
 
 @pytest.mark.asyncio
 async def test_expired_writer_cannot_dispatch_after_resume():
+    clock = Clock()
+
     class PauseStore(InMemoryEventStore):
         def __init__(self):
-            super().__init__(owner_id="owner", lease_seconds=0.02)
+            super().__init__(owner_id="owner", lease_seconds=10, clock=clock)
             self.committed = asyncio.Event()
             self.resume = asyncio.Event()
 
@@ -170,7 +172,7 @@ async def test_expired_writer_cannot_dispatch_after_resume():
         )
     )
     await asyncio.wait_for(store.committed.wait(), timeout=1)
-    await asyncio.sleep(0.04)
+    clock.value += 11
     store.resume.set()
 
     with pytest.raises(InvariantViolation):

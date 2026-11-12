@@ -1,0 +1,2091 @@
+{
+  "summary": {
+    "model": "kimi-k2.8-highspeed",
+    "case_count": 11,
+    "passed_cases": 11,
+    "model_call_count": 51,
+    "injected_provider_errors": 1,
+    "tool_call_count": 27,
+    "input_tokens": 671220,
+    "cached_input_tokens": 658176,
+    "cache_ratio": 0.9806,
+    "output_tokens": 9378,
+    "provider_seconds": 141.068,
+    "wall_seconds": 141.29,
+    "median_provider_seconds": 1.472462,
+    "p95_provider_seconds": 7.875815,
+    "timing": {
+      "measured_turns": 22,
+      "turn_wall_seconds": 129.791312,
+      "model_seconds": 129.688189,
+      "tool_seconds": 3.9e-05,
+      "framework_seconds": 0.103083,
+      "framework_ratio": 0.000794,
+      "ttft_samples": 51,
+      "median_ttft_seconds": 1.1003,
+      "p95_ttft_seconds": 2.994563
+    }
+  },
+  "provider_calls": [
+    {
+      "case_id": "long-single-turn",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 0,
+      "request_sha256": "cc2e8e163e22f1d29f6b38ee5fbc5239fe06b8727504008a9705b29967be0ecc",
+      "started_monotonic": 2189310.941900541,
+      "usage": {
+        "input_tokens": 13060,
+        "output_tokens": 321,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 8,
+      "ttft_seconds": 1.777324,
+      "streaming_seconds": 1.448785,
+      "elapsed_seconds": 3.226108,
+      "ended_monotonic": 2189314.16800875
+    },
+    {
+      "case_id": "long-single-turn",
+      "turn": 1,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 11,
+      "shared_prefix_messages": 2,
+      "request_sha256": "efc1192a718a27b8ee5fa2f84a78dfc184c8da5f45d2cbca0c763aae9dffc4dc",
+      "started_monotonic": 2189314.170509291,
+      "usage": {
+        "input_tokens": 13621,
+        "output_tokens": 512,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "length",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.164271,
+      "streaming_seconds": 6.821289,
+      "elapsed_seconds": 7.98556,
+      "ended_monotonic": 2189322.156069291
+    },
+    {
+      "case_id": "long-single-turn",
+      "turn": 1,
+      "step": 3,
+      "attempt": 1,
+      "message_count": 12,
+      "shared_prefix_messages": 11,
+      "request_sha256": "18434e127f21ffdefa7651d858ec652b29205d18ebb9f6ee8f6731ef3574828b",
+      "started_monotonic": 2189322.158065166,
+      "usage": {
+        "input_tokens": 13654,
+        "output_tokens": 501,
+        "cached_input_tokens": 13568
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 2.416221,
+      "streaming_seconds": 4.552992,
+      "elapsed_seconds": 6.969213,
+      "ended_monotonic": 2189329.127278041
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "505b0fd003cd980336fae7ab4be190f2f629821da95cbae7ff074d8f5a103bdc",
+      "started_monotonic": 2189329.133876958,
+      "usage": {
+        "input_tokens": 13012,
+        "output_tokens": 71,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.183932,
+      "streaming_seconds": 0.186747,
+      "elapsed_seconds": 1.370679,
+      "ended_monotonic": 2189330.504555916
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 1,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 4,
+      "shared_prefix_messages": 2,
+      "request_sha256": "16f11c5e2f06022460fd9de47fd73d7f3a2f18a37e655613959687fe7f09fbb2",
+      "started_monotonic": 2189330.506631166,
+      "usage": {
+        "input_tokens": 13119,
+        "output_tokens": 108,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.847382,
+      "streaming_seconds": 1.182928,
+      "elapsed_seconds": 2.030311,
+      "ended_monotonic": 2189332.536941791
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 2,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 6,
+      "shared_prefix_messages": 4,
+      "request_sha256": "243e5e1c4fb5e694ba4d33f9c87f02f3765b6f7550a5c14bdcefc8fc1ff8ab1f",
+      "started_monotonic": 2189332.539513083,
+      "usage": {
+        "input_tokens": 13259,
+        "output_tokens": 72,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.1003,
+      "streaming_seconds": 0.131314,
+      "elapsed_seconds": 1.231613,
+      "ended_monotonic": 2189333.771126541
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 2,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 8,
+      "shared_prefix_messages": 6,
+      "request_sha256": "f2a5f6811f050bed8bcd858449830371dbb4ca75b5f2087acffe886301899f14",
+      "started_monotonic": 2189333.773240083,
+      "usage": {
+        "input_tokens": 13367,
+        "output_tokens": 110,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.907141,
+      "streaming_seconds": 0.700091,
+      "elapsed_seconds": 1.607232,
+      "ended_monotonic": 2189335.380472375
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 3,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 10,
+      "shared_prefix_messages": 8,
+      "request_sha256": "d9f7a6f14c3e65b69f56174f96b856edade40b6c0c7ea1ab1906c0dcd1caf3d2",
+      "started_monotonic": 2189335.382757375,
+      "usage": {
+        "input_tokens": 13509,
+        "output_tokens": 72,
+        "cached_input_tokens": 13312
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.017275,
+      "streaming_seconds": 0.123581,
+      "elapsed_seconds": 1.140855,
+      "ended_monotonic": 2189336.523612541
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 3,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 12,
+      "shared_prefix_messages": 10,
+      "request_sha256": "2a748bcd24461de95fdbd9df98c4bc31b615c1c98718e878e8fd038f353f8fd6",
+      "started_monotonic": 2189336.526464541,
+      "usage": {
+        "input_tokens": 13617,
+        "output_tokens": 111,
+        "cached_input_tokens": 13312
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.937014,
+      "streaming_seconds": 0.634443,
+      "elapsed_seconds": 1.571457,
+      "ended_monotonic": 2189338.097921708
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 4,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 14,
+      "shared_prefix_messages": 12,
+      "request_sha256": "c0f3bd55e07c7dda90d556953ec1553c9b3122fc02d1728db805d00f48ba9974",
+      "started_monotonic": 2189338.103042125,
+      "usage": {
+        "input_tokens": 13760,
+        "output_tokens": 72,
+        "cached_input_tokens": 13568
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 0.967399,
+      "streaming_seconds": 0.132422,
+      "elapsed_seconds": 1.099821,
+      "ended_monotonic": 2189339.202863541
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 4,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 16,
+      "shared_prefix_messages": 14,
+      "request_sha256": "6b2e12e36117d99b10edad9b8430169e2c7865cbea9ab96fb9737502879d13d3",
+      "started_monotonic": 2189339.205129625,
+      "usage": {
+        "input_tokens": 13868,
+        "output_tokens": 119,
+        "cached_input_tokens": 13568
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.868884,
+      "streaming_seconds": 0.57471,
+      "elapsed_seconds": 1.443594,
+      "ended_monotonic": 2189340.648723166
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 5,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 18,
+      "shared_prefix_messages": 16,
+      "request_sha256": "b496775660764e6309d0b4d225e4eab723a9282b87eb82537457d20b1650077e",
+      "started_monotonic": 2189340.651980916,
+      "usage": {
+        "input_tokens": 14019,
+        "output_tokens": 72,
+        "cached_input_tokens": 13824
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.748734,
+      "streaming_seconds": 0.129327,
+      "elapsed_seconds": 1.878062,
+      "ended_monotonic": 2189342.53004275
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 5,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 20,
+      "shared_prefix_messages": 18,
+      "request_sha256": "c933a900edb7144b456ea0e6cceea7d875b8fb5d8e907062006c995256115065",
+      "started_monotonic": 2189342.531524583,
+      "usage": {
+        "input_tokens": 14127,
+        "output_tokens": 117,
+        "cached_input_tokens": 13824
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.933617,
+      "streaming_seconds": 0.481618,
+      "elapsed_seconds": 1.415236,
+      "ended_monotonic": 2189343.946760375
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 6,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 22,
+      "shared_prefix_messages": 20,
+      "request_sha256": "382686a04ad6b05f9c87f78f2da04125d3054dc0e3b545686a7b104047e136ce",
+      "started_monotonic": 2189343.9515955,
+      "usage": {
+        "input_tokens": 14277,
+        "output_tokens": 74,
+        "cached_input_tokens": 14080
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.019189,
+      "streaming_seconds": 0.134476,
+      "elapsed_seconds": 1.153665,
+      "ended_monotonic": 2189345.105260333
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 6,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 24,
+      "shared_prefix_messages": 22,
+      "request_sha256": "3cc4bbf769aa2d6352062770e5ed1a2a478123f09dd060248e7aaf66441ae2d5",
+      "started_monotonic": 2189345.108147166,
+      "usage": {
+        "input_tokens": 14388,
+        "output_tokens": 121,
+        "cached_input_tokens": 14080
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.791628,
+      "streaming_seconds": 0.52371,
+      "elapsed_seconds": 1.315338,
+      "ended_monotonic": 2189346.423484791
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 7,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 26,
+      "shared_prefix_messages": 24,
+      "request_sha256": "5e468b076fbc83222c9e27c6965e6a7b69e70b3dfb88dbedaf0e04cc0754bd82",
+      "started_monotonic": 2189346.429261666,
+      "usage": {
+        "input_tokens": 14541,
+        "output_tokens": 72,
+        "cached_input_tokens": 14336
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.034917,
+      "streaming_seconds": 0.129603,
+      "elapsed_seconds": 1.16452,
+      "ended_monotonic": 2189347.593781333
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 7,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 28,
+      "shared_prefix_messages": 26,
+      "request_sha256": "df052783d183b8330f6ab4ab0477b4cd84929ff665229cf3efb6f5e5d006f9f0",
+      "started_monotonic": 2189347.596303458,
+      "usage": {
+        "input_tokens": 14649,
+        "output_tokens": 124,
+        "cached_input_tokens": 14336
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.920765,
+      "streaming_seconds": 0.55047,
+      "elapsed_seconds": 1.471235,
+      "ended_monotonic": 2189349.06753875
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 8,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 30,
+      "shared_prefix_messages": 28,
+      "request_sha256": "f89334a95ba839afe8821cb4b8813243865e2bf197d1258070221f17457314e0",
+      "started_monotonic": 2189349.073136875,
+      "usage": {
+        "input_tokens": 14805,
+        "output_tokens": 72,
+        "cached_input_tokens": 14592
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 0.899125,
+      "streaming_seconds": 0.117529,
+      "elapsed_seconds": 1.016654,
+      "ended_monotonic": 2189350.089790916
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 8,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 32,
+      "shared_prefix_messages": 30,
+      "request_sha256": "9bd468f275bcc6046d8c0c0b4b0bb2ad5f0e46ddbb85ac5ce2e95c30b6152469",
+      "started_monotonic": 2189350.091700208,
+      "usage": {
+        "input_tokens": 14913,
+        "output_tokens": 127,
+        "cached_input_tokens": 14592
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.838707,
+      "streaming_seconds": 0.709894,
+      "elapsed_seconds": 1.548601,
+      "ended_monotonic": 2189351.640301083
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 9,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 34,
+      "shared_prefix_messages": 32,
+      "request_sha256": "ed9113d3f0fecf7cb356e82383ba7e27a3e2540c4b8985704c259b975bf77c28",
+      "started_monotonic": 2189351.64566875,
+      "usage": {
+        "input_tokens": 15082,
+        "output_tokens": 512,
+        "cached_input_tokens": 14848
+      },
+      "finish_reason": "length",
+      "tool_call_count": 0,
+      "ttft_seconds": 2.994563,
+      "streaming_seconds": 3.177359,
+      "elapsed_seconds": 6.171921,
+      "ended_monotonic": 2189357.817590208
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 9,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 35,
+      "shared_prefix_messages": 34,
+      "request_sha256": "57fe855aa05a3537e6c7037e714cc8fb54d1104926b8aa8ec2ffa38f0e205c46",
+      "started_monotonic": 2189357.819196083,
+      "usage": {
+        "input_tokens": 15115,
+        "output_tokens": 512,
+        "cached_input_tokens": 14848
+      },
+      "finish_reason": "length",
+      "tool_call_count": 0,
+      "ttft_seconds": 4.251125,
+      "streaming_seconds": 1.907359,
+      "elapsed_seconds": 6.158484,
+      "ended_monotonic": 2189363.977680041
+    },
+    {
+      "case_id": "long-multi-turn",
+      "turn": 9,
+      "step": 3,
+      "attempt": 1,
+      "message_count": 36,
+      "shared_prefix_messages": 35,
+      "request_sha256": "7b766ad371546a993167d57aa5daba0656a6e789a2339b6b29d9c9d8b87dbcf6",
+      "started_monotonic": 2189363.979798875,
+      "usage": {
+        "input_tokens": 15148,
+        "output_tokens": 506,
+        "cached_input_tokens": 15104
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 2.062893,
+      "streaming_seconds": 5.369416,
+      "elapsed_seconds": 7.43231,
+      "ended_monotonic": 2189371.412108541
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "3acc67921b5b3b706d97ca1714bf69be23092b6b03949e1537e766c7ee372de3",
+      "started_monotonic": 2189371.422030375,
+      "usage": {
+        "input_tokens": 13012,
+        "output_tokens": 77,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 2.034329,
+      "streaming_seconds": 0.070108,
+      "elapsed_seconds": 2.104437,
+      "ended_monotonic": 2189373.526467416
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 1,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 4,
+      "shared_prefix_messages": 2,
+      "request_sha256": "e38d9a1c13096b9c7de8e1c658e789064de238ed2050d4135bc9ba596c545971",
+      "started_monotonic": 2189373.527174625,
+      "usage": {
+        "input_tokens": 13116,
+        "output_tokens": 38,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.314246,
+      "streaming_seconds": 0.158216,
+      "elapsed_seconds": 1.472462,
+      "ended_monotonic": 2189374.999636916
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 2,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 6,
+      "shared_prefix_messages": 4,
+      "request_sha256": "ba723d6234a17d064b521e1f8676912f11bc07ff70447ac7982ca4fe129908e3",
+      "started_monotonic": 2189375.000738166,
+      "usage": {
+        "input_tokens": 13186,
+        "output_tokens": 58,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 0.965522,
+      "streaming_seconds": 0.108118,
+      "elapsed_seconds": 1.07364,
+      "ended_monotonic": 2189376.074377791
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 2,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 8,
+      "shared_prefix_messages": 6,
+      "request_sha256": "ffd3a3379eee8e57d012d90ea4ad57d81fae3340d05457773cf44b0c9f8e2bb4",
+      "started_monotonic": 2189376.07527425,
+      "usage": {
+        "input_tokens": 13271,
+        "output_tokens": 33,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.627764,
+      "streaming_seconds": 0.119632,
+      "elapsed_seconds": 0.747396,
+      "ended_monotonic": 2189376.822670541
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 3,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 10,
+      "shared_prefix_messages": 8,
+      "request_sha256": "50e2ba65dcbba46b0a76c75a6238cb4e70f4d612f87146650c30cda1ad2bd373",
+      "started_monotonic": 2189376.824473125,
+      "usage": {
+        "input_tokens": 13341,
+        "output_tokens": 77,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.171052,
+      "streaming_seconds": 0.12038,
+      "elapsed_seconds": 1.291432,
+      "ended_monotonic": 2189378.115905
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 3,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 12,
+      "shared_prefix_messages": 10,
+      "request_sha256": "196d59d9a4356c905c22fb62e5f55900563e5245e7e0eaf383558eff4fe24d7d",
+      "started_monotonic": 2189378.1182975,
+      "usage": {
+        "input_tokens": 13445,
+        "output_tokens": 56,
+        "cached_input_tokens": 13312
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.984147,
+      "streaming_seconds": 0.340358,
+      "elapsed_seconds": 1.324504,
+      "ended_monotonic": 2189379.442801916
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 4,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 14,
+      "shared_prefix_messages": 12,
+      "request_sha256": "9f07d8bdb294c440641e4f744762955ae1fee1fbf86cb7f28d04c3278bb7dd63",
+      "started_monotonic": 2189379.444369458,
+      "usage": {
+        "input_tokens": 13537,
+        "output_tokens": 118,
+        "cached_input_tokens": 13312
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.095781,
+      "streaming_seconds": 0.114967,
+      "elapsed_seconds": 1.210748,
+      "ended_monotonic": 2189380.655117541
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 4,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 16,
+      "shared_prefix_messages": 14,
+      "request_sha256": "8ae5d1de02217e2cd44b8059467dcf4e55965cb9f97c3ea14d8ea100499eb8f2",
+      "started_monotonic": 2189380.655998333,
+      "usage": {
+        "input_tokens": 13682,
+        "output_tokens": 195,
+        "cached_input_tokens": 13312
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.396675,
+      "streaming_seconds": 0.81061,
+      "elapsed_seconds": 2.207284,
+      "ended_monotonic": 2189382.863282625
+    },
+    {
+      "case_id": "iterative-calculations",
+      "turn": 5,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 18,
+      "shared_prefix_messages": 16,
+      "request_sha256": "20b3fc88c3dabc0c5a5485ddcee0c9ead000dad99a40d51256fa31c6abec8584",
+      "started_monotonic": 2189382.864944625,
+      "usage": {
+        "input_tokens": 13910,
+        "output_tokens": 348,
+        "cached_input_tokens": 13568
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.741236,
+      "streaming_seconds": 3.118023,
+      "elapsed_seconds": 4.859259,
+      "ended_monotonic": 2189387.724203583
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "6bacd1da1ba81dd64335bff0f1d5b2a15f8b0b3cc5f8ccdc9a02e415322f8cc1",
+      "started_monotonic": 2189387.727924958,
+      "usage": {
+        "input_tokens": 13009,
+        "output_tokens": 112,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 2,
+      "ttft_seconds": 0.917431,
+      "streaming_seconds": 0.381946,
+      "elapsed_seconds": 1.299377,
+      "ended_monotonic": 2189389.02730175
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "turn": 1,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 5,
+      "shared_prefix_messages": 2,
+      "request_sha256": "8ee1a424fddc1c9b37f3cf6dfe1fa76c6f95f9285c3c626a0aedff649adda30d",
+      "started_monotonic": 2189389.028178041,
+      "usage": {
+        "input_tokens": 13186,
+        "output_tokens": 58,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.716531,
+      "streaming_seconds": 0.18892,
+      "elapsed_seconds": 0.905451,
+      "ended_monotonic": 2189389.933629125
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "turn": 2,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 7,
+      "shared_prefix_messages": 5,
+      "request_sha256": "e1a4765fef1f369655eb63d345117cef1f5a0d5d1e0ac499df2f81e0ffc2a919",
+      "started_monotonic": 2189389.934854833,
+      "usage": {
+        "input_tokens": 13279,
+        "output_tokens": 512,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "length",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.509201,
+      "streaming_seconds": 5.213191,
+      "elapsed_seconds": 6.722392,
+      "ended_monotonic": 2189396.6572465
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "turn": 2,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 8,
+      "shared_prefix_messages": 7,
+      "request_sha256": "c323a86cc77c130deeaca592e4332467041743f91551b80e80cb159f4a246eef",
+      "started_monotonic": 2189396.658014291,
+      "usage": {
+        "input_tokens": 13312,
+        "output_tokens": 459,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.744108,
+      "streaming_seconds": 4.224336,
+      "elapsed_seconds": 5.968444,
+      "ended_monotonic": 2189402.626458041
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "turn": 3,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 10,
+      "shared_prefix_messages": 8,
+      "request_sha256": "221c53de2d54ab566de699ad4e3f3dfd057c922179400089b20f049d5aee2677",
+      "started_monotonic": 2189402.629431416,
+      "usage": {
+        "input_tokens": 13803,
+        "output_tokens": 457,
+        "cached_input_tokens": 13312
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.525486,
+      "streaming_seconds": 6.350329,
+      "elapsed_seconds": 7.875815,
+      "ended_monotonic": 2189410.50524625
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "turn": 4,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 12,
+      "shared_prefix_messages": 10,
+      "request_sha256": "1c71896d30a7babcb5e3ee499e9d91ecff62b1d86bb8433e2bec2d2cd150acd4",
+      "started_monotonic": 2189410.507500458,
+      "usage": {
+        "input_tokens": 14292,
+        "output_tokens": 512,
+        "cached_input_tokens": 13568
+      },
+      "finish_reason": "length",
+      "tool_call_count": 0,
+      "ttft_seconds": 4.320732,
+      "streaming_seconds": 4.408943,
+      "elapsed_seconds": 8.729675,
+      "ended_monotonic": 2189419.237175375
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "turn": 4,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 13,
+      "shared_prefix_messages": 12,
+      "request_sha256": "3096fca4a698a6f69d3ede9040120925d716ce06e3436859b007b47726820e7a",
+      "started_monotonic": 2189419.239397083,
+      "usage": {
+        "input_tokens": 14325,
+        "output_tokens": 445,
+        "cached_input_tokens": 14080
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.432469,
+      "streaming_seconds": 4.020613,
+      "elapsed_seconds": 5.453082,
+      "ended_monotonic": 2189424.692479125
+    },
+    {
+      "case_id": "paged-result",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "26fe0d82cf65931ddf841667aef3b209acb99e2671d993da06505302f9068691",
+      "started_monotonic": 2189424.700838416,
+      "usage": {
+        "input_tokens": 13006,
+        "output_tokens": 71,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.100742,
+      "streaming_seconds": 0.126404,
+      "elapsed_seconds": 1.227146,
+      "ended_monotonic": 2189425.927984666
+    },
+    {
+      "case_id": "paged-result",
+      "turn": 1,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 4,
+      "shared_prefix_messages": 2,
+      "request_sha256": "5f1efb01cf95b8b3b42d3a487f4eb291d41cd93249313363b31cffdd99c18801",
+      "started_monotonic": 2189425.930023333,
+      "usage": {
+        "input_tokens": 13206,
+        "output_tokens": 251,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 2.420499,
+      "streaming_seconds": 0.408033,
+      "elapsed_seconds": 2.828532,
+      "ended_monotonic": 2189428.758554916
+    },
+    {
+      "case_id": "paged-result",
+      "turn": 1,
+      "step": 3,
+      "attempt": 1,
+      "message_count": 6,
+      "shared_prefix_messages": 4,
+      "request_sha256": "c012253622b245cd2b70106372376846786ce5419b79be84900445c9f4896e43",
+      "started_monotonic": 2189428.760560875,
+      "usage": {
+        "input_tokens": 13575,
+        "output_tokens": 106,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.98852,
+      "streaming_seconds": 0.825557,
+      "elapsed_seconds": 1.814076,
+      "ended_monotonic": 2189430.574637041
+    },
+    {
+      "case_id": "paged-result",
+      "turn": 2,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 8,
+      "shared_prefix_messages": 6,
+      "request_sha256": "c716959ed9c620ab10da1ca3cc9ce5ebd0865590da978cfe3b32cb5398ad7bfd",
+      "started_monotonic": 2189430.582848291,
+      "usage": {
+        "input_tokens": 13745,
+        "output_tokens": 136,
+        "cached_input_tokens": 13568
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 0.945613,
+      "streaming_seconds": 0.390379,
+      "elapsed_seconds": 1.335991,
+      "ended_monotonic": 2189431.918839708
+    },
+    {
+      "case_id": "paged-result",
+      "turn": 2,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 10,
+      "shared_prefix_messages": 8,
+      "request_sha256": "d39b5aad5de94bdabe9552ec6ff0ee19895eed684313a24e8ff61ee1a0c2f474",
+      "started_monotonic": 2189431.9212655,
+      "usage": {
+        "input_tokens": 13998,
+        "output_tokens": 153,
+        "cached_input_tokens": 13568
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 7.232504,
+      "streaming_seconds": 0.702883,
+      "elapsed_seconds": 7.935388,
+      "ended_monotonic": 2189439.856653083
+    },
+    {
+      "case_id": "compaction",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 0,
+      "request_sha256": "0d8f84b2090bab6f331a3fb3672ea88910cbfcaf9801b255d38283ac41fdd341",
+      "started_monotonic": 2189439.862043125,
+      "usage": {
+        "input_tokens": 873,
+        "output_tokens": 56,
+        "cached_input_tokens": 768
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.876263,
+      "streaming_seconds": 0.218385,
+      "elapsed_seconds": 1.094648,
+      "ended_monotonic": 2189440.956690916
+    },
+    {
+      "case_id": "compaction",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 0,
+      "request_sha256": "12a195043a4129d9350b2fa7a477500089f6571bfdfe76f668e0a42fdfade77d",
+      "started_monotonic": 2189440.957189958,
+      "usage": {
+        "input_tokens": 527,
+        "output_tokens": 138,
+        "cached_input_tokens": 256
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.250836,
+      "streaming_seconds": 1.11501,
+      "elapsed_seconds": 2.365845,
+      "ended_monotonic": 2189443.323035333
+    },
+    {
+      "case_id": "provider-retry",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "496cee13de7f6534312f2deca8b78fba9d6cd808dfb7aa7a6c715cb4c504b113",
+      "started_monotonic": 2189443.328994333,
+      "usage": null,
+      "finish_reason": null,
+      "error": "ProviderError: Injected transient provider failure",
+      "ttft_seconds": null,
+      "streaming_seconds": null,
+      "elapsed_seconds": 2e-05,
+      "ended_monotonic": 2189443.329014041
+    },
+    {
+      "case_id": "provider-retry",
+      "turn": 1,
+      "step": 1,
+      "attempt": 2,
+      "message_count": 2,
+      "shared_prefix_messages": 2,
+      "request_sha256": "496cee13de7f6534312f2deca8b78fba9d6cd808dfb7aa7a6c715cb4c504b113",
+      "started_monotonic": 2189443.329670416,
+      "usage": {
+        "input_tokens": 13007,
+        "output_tokens": 37,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 0.819488,
+      "streaming_seconds": 0.079682,
+      "elapsed_seconds": 0.89917,
+      "ended_monotonic": 2189444.228840916
+    },
+    {
+      "case_id": "delivery-recovery",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "bb73fdadeb41c7d8123a081cfaa4f48eec530afc54a8b6d916a1619dc1417fbb",
+      "started_monotonic": 2189444.236958291,
+      "usage": {
+        "input_tokens": 13007,
+        "output_tokens": 60,
+        "cached_input_tokens": 12800
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.298316,
+      "streaming_seconds": 0.076431,
+      "elapsed_seconds": 1.374748,
+      "ended_monotonic": 2189445.611705833
+    },
+    {
+      "case_id": "approval-resume",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "5b4d3aa53dacfdd59d99a4da1cbfa461d037f3625df53aa088d4b1f620e5aa1b",
+      "started_monotonic": 2189445.621136375,
+      "usage": {
+        "input_tokens": 13057,
+        "output_tokens": 105,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 1.420004,
+      "streaming_seconds": 0.117381,
+      "elapsed_seconds": 1.537385,
+      "ended_monotonic": 2189447.158521
+    },
+    {
+      "case_id": "approval-resume",
+      "turn": 2,
+      "step": 2,
+      "attempt": 1,
+      "message_count": 5,
+      "shared_prefix_messages": 2,
+      "request_sha256": "f7b4964e6c8817873ace229f2f9642c1c0754388ee556a17f64a516e73d92a93",
+      "started_monotonic": 2189447.161738666,
+      "usage": {
+        "input_tokens": 13206,
+        "output_tokens": 167,
+        "cached_input_tokens": 13056
+      },
+      "finish_reason": "stop",
+      "tool_call_count": 0,
+      "ttft_seconds": 1.929604,
+      "streaming_seconds": 1.017947,
+      "elapsed_seconds": 2.94755,
+      "ended_monotonic": 2189450.109288958
+    },
+    {
+      "case_id": "uncertain-reconcile",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "496ae2ab4f182fbcee420b5ae4ae00011c9bde7644619b210a51cd4d62c8fd53",
+      "started_monotonic": 2189450.111648875,
+      "usage": {
+        "input_tokens": 12705,
+        "output_tokens": 92,
+        "cached_input_tokens": 12544
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 0.904544,
+      "streaming_seconds": 0.21413,
+      "elapsed_seconds": 1.118674,
+      "ended_monotonic": 2189451.230322958
+    },
+    {
+      "case_id": "cancellation",
+      "turn": 1,
+      "step": 1,
+      "attempt": 1,
+      "message_count": 2,
+      "shared_prefix_messages": 1,
+      "request_sha256": "b1a027e15e8baf7ec7e869a5197208f15bcf782b9cb63e59119881ec41b1d77c",
+      "started_monotonic": 2189451.2854345,
+      "usage": {
+        "input_tokens": 12692,
+        "output_tokens": 73,
+        "cached_input_tokens": 12544
+      },
+      "finish_reason": "tool_calls",
+      "tool_call_count": 1,
+      "ttft_seconds": 0.835535,
+      "streaming_seconds": 0.105828,
+      "elapsed_seconds": 0.941363,
+      "ended_monotonic": 2189452.226797083
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "long-single-turn",
+      "outcomes": [
+        {
+          "status": "succeeded",
+          "turn": 1,
+          "step": 3,
+          "final_message_id": "final_c59b9fca8dbd4abc9778bd972daed103",
+          "error": null
+        }
+      ],
+      "turn_timings": [
+        {
+          "turn": 1,
+          "wall_seconds": 18.18732,
+          "model_seconds": 18.180881,
+          "tool_seconds": 1e-05,
+          "framework_seconds": 0.006429,
+          "framework_ratio": 0.000353
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "alpha.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.168947166,
+          "ended_monotonic": 2189314.168951125
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "beta.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.169020541,
+          "ended_monotonic": 2189314.169021583
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "gamma.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.169058875,
+          "ended_monotonic": 2189314.169059708
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "delta.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.169089375,
+          "ended_monotonic": 2189314.169089833
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "epsilon.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.169123583,
+          "ended_monotonic": 2189314.169124333
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "zeta.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.169151041,
+          "ended_monotonic": 2189314.169151541
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "eta.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.169179666,
+          "ended_monotonic": 2189314.16918025
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "theta.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189314.169225541,
+          "ended_monotonic": 2189314.169227208
+        }
+      ],
+      "delivered": [
+        "All eight files were read successfully in a single parallel batch, one read per file. Here is the consolidated report.\n\n**Inventory:** alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, eta.txt, theta.txt — all eight files exist and are readable. No read errors, missing files, or permission problems occurred.\n\n**Content findings:** Every file contains exactly the same single line of text: \"hello from nextloop\". The content is byte-identical across the set — no variation in wording, casing, spacing, or trailing content was observed. There are no differences to reconcile between files, so the consolidated content is effectively one message replicated eight times.\n\n**Interpretation:** The naming scheme (Greek letters alpha through theta) suggests these files form a deliberate test set — likely a fixture for verifying parallel file reads or tool-call batching. The repeated \"hello from nextloop\" payload is a placeholder greeting rather than meaningful document data, and \"nextloop\" may refer to the system or process that generated them.\n\n**Implications:** Because the files are uniform, no merge, deduplication, or conflict-resolution work is needed. If these files were intended to hold distinct data, they were written incorrectly or overwritten, since all eight collapsed to the same value. If they were intended as a round-trip test, the test passes: parallel reads return consistent, complete results.\n\n**Recommendation:** If differentiated content was expected, check the writing process upstream. Otherwise, the eight-file corpus can be treated as a single canonical string, \"hello from nextloop\", with eight redundant sources. No further reads are required, and each file was accessed exactly once as instructed."
+      ],
+      "events": {
+        "event_count": 38,
+        "event_types": {
+          "input/accepted": 1,
+          "turn/start": 1,
+          "step/start": 3,
+          "user/message": 2,
+          "assistant/attempt": 6,
+          "assistant/message": 3,
+          "tool/call": 8,
+          "tool/result": 8,
+          "step/end": 3,
+          "final/message": 1,
+          "turn/end": 1,
+          "delivery/committed": 1
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "wall_seconds": 18.19,
+      "passed": true,
+      "expected_minimum_tools": 8
+    },
+    {
+      "case_id": "long-multi-turn",
+      "outcomes": [
+        {
+          "status": "succeeded",
+          "turn": 1,
+          "step": 2,
+          "final_message_id": "final_5e601741fa2d4c41bee5c5c4570b6e66",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 2,
+          "step": 2,
+          "final_message_id": "final_de866b5ec12448d6bf30e461860f05b9",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 3,
+          "step": 2,
+          "final_message_id": "final_9c06fc98b7b44131979fc9db80ab4ef4",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 4,
+          "step": 2,
+          "final_message_id": "final_b8c2eb46df4d40baa352cd3026c9e2de",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 5,
+          "step": 2,
+          "final_message_id": "final_1700a560b0604a589fda74d9c029998c",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 6,
+          "step": 2,
+          "final_message_id": "final_7697fb1e69c04dcaa792c2ca43e13cde",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 7,
+          "step": 2,
+          "final_message_id": "final_667f2bc1e3094e38aaff3f11bf850ce2",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 8,
+          "step": 2,
+          "final_message_id": "final_54702fee849a4e04bf56d2b60d81afd6",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 9,
+          "step": 3,
+          "final_message_id": "final_ccf02581b4334f8bb02ed75ecc1dde49",
+          "error": null
+        }
+      ],
+      "turn_timings": [
+        {
+          "turn": 1,
+          "wall_seconds": 3.404956,
+          "model_seconds": 3.40099,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.003964,
+          "framework_ratio": 0.001164
+        },
+        {
+          "turn": 2,
+          "wall_seconds": 2.843341,
+          "model_seconds": 2.838846,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.004493,
+          "framework_ratio": 0.00158
+        },
+        {
+          "turn": 3,
+          "wall_seconds": 2.718732,
+          "model_seconds": 2.712312,
+          "tool_seconds": 4e-06,
+          "framework_seconds": 0.006416,
+          "framework_ratio": 0.00236
+        },
+        {
+          "turn": 4,
+          "wall_seconds": 2.549579,
+          "model_seconds": 2.543415,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.006162,
+          "framework_ratio": 0.002417
+        },
+        {
+          "turn": 5,
+          "wall_seconds": 3.298019,
+          "model_seconds": 3.293298,
+          "tool_seconds": 1e-06,
+          "framework_seconds": 0.00472,
+          "framework_ratio": 0.001431
+        },
+        {
+          "turn": 6,
+          "wall_seconds": 2.477097,
+          "model_seconds": 2.469002,
+          "tool_seconds": 3e-06,
+          "framework_seconds": 0.008091,
+          "framework_ratio": 0.003266
+        },
+        {
+          "turn": 7,
+          "wall_seconds": 2.644017,
+          "model_seconds": 2.635755,
+          "tool_seconds": 3e-06,
+          "framework_seconds": 0.00826,
+          "framework_ratio": 0.003124
+        },
+        {
+          "turn": 8,
+          "wall_seconds": 2.572958,
+          "model_seconds": 2.565255,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.007701,
+          "framework_ratio": 0.002993
+        },
+        {
+          "turn": 9,
+          "wall_seconds": 19.771603,
+          "model_seconds": 19.762715,
+          "tool_seconds": 0.0,
+          "framework_seconds": 0.008888,
+          "framework_ratio": 0.00045
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "alpha.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189330.505336458,
+          "ended_monotonic": 2189330.505338625
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "beta.txt"
+          },
+          "turn": 2,
+          "step": 1,
+          "started_monotonic": 2189333.771855333,
+          "ended_monotonic": 2189333.771857333
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "gamma.txt"
+          },
+          "turn": 3,
+          "step": 1,
+          "started_monotonic": 2189336.524667333,
+          "ended_monotonic": 2189336.524670958
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "delta.txt"
+          },
+          "turn": 4,
+          "step": 1,
+          "started_monotonic": 2189339.203606875,
+          "ended_monotonic": 2189339.20360925
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "epsilon.txt"
+          },
+          "turn": 5,
+          "step": 1,
+          "started_monotonic": 2189342.530393708,
+          "ended_monotonic": 2189342.530394916
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "zeta.txt"
+          },
+          "turn": 6,
+          "step": 1,
+          "started_monotonic": 2189345.106063708,
+          "ended_monotonic": 2189345.106066666
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "eta.txt"
+          },
+          "turn": 7,
+          "step": 1,
+          "started_monotonic": 2189347.594563625,
+          "ended_monotonic": 2189347.594566125
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "theta.txt"
+          },
+          "turn": 8,
+          "step": 1,
+          "started_monotonic": 2189350.090389583,
+          "ended_monotonic": 2189350.090391791
+        }
+      ],
+      "delivered": [
+        "The `read_file` call succeeded. The actual result is that alpha.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nSo the file is a small plain-text file whose entire content is the greeting \"hello from nextloop\" (likely a test/fixture file from something called \"nextloop\"). No errors, no extra metadata — just that one string returned as the file contents.",
+        "The `read_file` call succeeded. The actual result is that beta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical in content to alpha.txt — same single-line greeting, same \"nextloop\" string. So both files appear to be matching test/fixture files rather than distinct content. No errors or surprises occurred during the read.",
+        "The `read_file` call succeeded. The actual result is that gamma.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to both alpha.txt and beta.txt — all three files so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
+        "The `read_file` call succeeded. The actual result is that delta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, and gamma.txt — all four files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
+        "The `read_file` call succeeded. The actual result is that epsilon.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, and delta.txt — all five files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
+        "The `read_file` call succeeded. The actual result is that zeta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, delta.txt, and epsilon.txt — all six files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
+        "The `read_file` call succeeded. The actual result is that eta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, and zeta.txt — all seven files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
+        "The `read_file` call succeeded. The actual result is that theta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, and eta.txt — all eight files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
+        "# Consolidated Report: Eight-File Read Sequence\n\n## Summary\nAcross the session, I executed eight `read_file` calls, one per request, in this order: alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, eta.txt, and theta.txt. Every call completed successfully with no errors, exceptions, timeouts, or malformed output.\n\n## Findings\nThe actual result of each read was identical. All eight files contain exactly one line of text:\n\n```\nhello from nextloop\n```\n\nThere was no variation in content, formatting, encoding artifacts, or trailing metadata across any of the files. Each tool result was returned in the same form: a \"Contents of [filename]\" header followed by the single greeting line.\n\n## Observations\n1. **Uniformity**: alpha, beta, gamma, delta, epsilon, zeta, eta, and theta are byte-for-byte equivalent in content as far as the reads revealed. The Greek-letter naming pattern (alpha through theta, skipping iota) strongly suggests a generated fixture or test-file set, likely produced by a tool, harness, or demo environment called \"nextloop.\"\n2. **Reliability**: The `read_file` tool behaved deterministically — consistent output format, consistent success, no partial reads.\n3. **No hidden data**: Nothing in any result indicated additional lines, binary content, or truncation; the files appear to be minimal plain-text stubs.\n\n## Conclusion\nThe eight-file sequence was a repetitive verification exercise. The consolidated outcome: eight successful reads, zero failures, and one repeated string — \"hello from nextloop\" — as the sole content of every file. If differentiation between files was expected, it does not exist at the content level; any distinction would have to come from filenames, metadata, or filesystem properties, none of which were surfaced by these reads."
+      ],
+      "events": {
+        "event_count": 167,
+        "event_types": {
+          "input/accepted": 9,
+          "turn/start": 9,
+          "step/start": 19,
+          "user/message": 11,
+          "assistant/attempt": 38,
+          "assistant/message": 19,
+          "tool/call": 8,
+          "tool/result": 8,
+          "step/end": 19,
+          "final/message": 9,
+          "turn/end": 9,
+          "delivery/committed": 9
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "wall_seconds": 42.287,
+      "passed": true,
+      "expected_minimum_tools": 8
+    },
+    {
+      "case_id": "iterative-calculations",
+      "outcomes": [
+        {
+          "status": "succeeded",
+          "turn": 1,
+          "step": 2,
+          "final_message_id": "final_f04fa477ba57402ead498969dbc19be4",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 2,
+          "step": 2,
+          "final_message_id": "final_3048942b7be94584b5b827d91e82ac2d",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 3,
+          "step": 2,
+          "final_message_id": "final_82061e19b2ef4591ae1576a06b00019f",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 4,
+          "step": 2,
+          "final_message_id": "final_a4c3e360450f4b87983c66d7dec1fd18",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 5,
+          "step": 1,
+          "final_message_id": "final_b7b5fbf9ce944624aaf4c77676cfa007",
+          "error": null
+        }
+      ],
+      "turn_timings": [
+        {
+          "turn": 1,
+          "wall_seconds": 3.579148,
+          "model_seconds": 3.576899,
+          "tool_seconds": 1e-06,
+          "framework_seconds": 0.002248,
+          "framework_ratio": 0.000628
+        },
+        {
+          "turn": 2,
+          "wall_seconds": 1.823095,
+          "model_seconds": 1.821036,
+          "tool_seconds": 1e-06,
+          "framework_seconds": 0.002058,
+          "framework_ratio": 0.001129
+        },
+        {
+          "turn": 3,
+          "wall_seconds": 2.620027,
+          "model_seconds": 2.615936,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.004089,
+          "framework_ratio": 0.001561
+        },
+        {
+          "turn": 4,
+          "wall_seconds": 3.420497,
+          "model_seconds": 3.418032,
+          "tool_seconds": 1e-06,
+          "framework_seconds": 0.002464,
+          "framework_ratio": 0.00072
+        },
+        {
+          "turn": 5,
+          "wall_seconds": 4.860945,
+          "model_seconds": 4.859259,
+          "tool_seconds": 0.0,
+          "framework_seconds": 0.001686,
+          "framework_ratio": 0.000347
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "calculate",
+          "arguments": {
+            "expression": "2+2"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189373.526693458,
+          "ended_monotonic": 2189373.526694
+        },
+        {
+          "name": "calculate",
+          "arguments": {
+            "expression": "40+2"
+          },
+          "turn": 2,
+          "step": 1,
+          "started_monotonic": 2189376.074719583,
+          "ended_monotonic": 2189376.074720416
+        },
+        {
+          "name": "calculate",
+          "arguments": {
+            "expression": "2+2"
+          },
+          "turn": 3,
+          "step": 1,
+          "started_monotonic": 2189378.116730208,
+          "ended_monotonic": 2189378.116732416
+        },
+        {
+          "name": "calculate",
+          "arguments": {
+            "expression": "40+2"
+          },
+          "turn": 4,
+          "step": 1,
+          "started_monotonic": 2189380.655345708,
+          "ended_monotonic": 2189380.6553465
+        }
+      ],
+      "delivered": [
+        "The result of 2+2 is **4**.",
+        "The result of 40+2 is **42**.",
+        "The result of 2+2 is **4** — identical to the first calculation. Both evaluations agree, confirming the result is consistent.",
+        "The result of 40+2 is **42**.\n\nComparison of all four tool results:\n1. 2+2 → **4**\n2. 40+2 → **42**\n3. 2+2 → **4**\n4. 40+2 → **42**\n\nThe results are fully consistent: each repeated expression produced an identical value (4 and 42 respectively), and the two distinct expressions differ by exactly 38 (42 − 4 = 38), as expected since 40 differs from 2 by 38.",
+        "The calculation history across this conversation consists of four tool invocations involving two distinct arithmetic expressions. The session began with a request to evaluate 2+2, which returned 4 — a straightforward sum confirming basic addition of two equal addends. The second request shifted to a slightly larger expression, 40+2, which returned 42, illustrating how adding 2 to a round two-digit number produces the next integer beyond it.\n\nThe third step deliberately repeated the first expression, 2+2, again yielding 4. This redundancy served a verification purpose: it demonstrated determinism, meaning the calculation tool produces identical outputs for identical inputs, with no state, rounding variance, or hidden randomness influencing the result.\n\nThe fourth and final step repeated 40+2, once again returning 42. Comparing all four results reveals a clean pattern: two unique expressions, each evaluated twice, with perfect internal consistency. The difference between the two distinct outcomes is 38, exactly the gap between 40 and 2, confirming the arithmetic is internally coherent. Overall, the history shows a small but rigorous sequence of checks establishing reliability through repetition."
+      ],
+      "events": {
+        "event_count": 83,
+        "event_types": {
+          "input/accepted": 5,
+          "turn/start": 5,
+          "step/start": 9,
+          "user/message": 5,
+          "assistant/attempt": 18,
+          "assistant/message": 9,
+          "tool/call": 4,
+          "tool/result": 4,
+          "step/end": 9,
+          "final/message": 5,
+          "turn/end": 5,
+          "delivery/committed": 5
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "wall_seconds": 16.309,
+      "passed": true,
+      "expected_minimum_tools": 4
+    },
+    {
+      "case_id": "long-context-reasoning",
+      "outcomes": [
+        {
+          "status": "succeeded",
+          "turn": 1,
+          "step": 2,
+          "final_message_id": "final_90c01f1e681542729cc25ae918bb1ac3",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 2,
+          "step": 2,
+          "final_message_id": "final_8e56ae581f4941bcbd174089ba087bf8",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 3,
+          "step": 1,
+          "final_message_id": "final_eeea00451bcc41ae821ef1d6c76c2896",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 4,
+          "step": 2,
+          "final_message_id": "final_e46a86a2d8d14aee839c00ac965b29cc",
+          "error": null
+        }
+      ],
+      "turn_timings": [
+        {
+          "turn": 1,
+          "wall_seconds": 2.206736,
+          "model_seconds": 2.204828,
+          "tool_seconds": 1e-06,
+          "framework_seconds": 0.001907,
+          "framework_ratio": 0.000864
+        },
+        {
+          "turn": 2,
+          "wall_seconds": 12.693132,
+          "model_seconds": 12.690835,
+          "tool_seconds": 0.0,
+          "framework_seconds": 0.002296,
+          "framework_ratio": 0.000181
+        },
+        {
+          "turn": 3,
+          "wall_seconds": 7.878481,
+          "model_seconds": 7.875815,
+          "tool_seconds": 0.0,
+          "framework_seconds": 0.002666,
+          "framework_ratio": 0.000338
+        },
+        {
+          "turn": 4,
+          "wall_seconds": 14.187587,
+          "model_seconds": 14.182757,
+          "tool_seconds": 0.0,
+          "framework_seconds": 0.00483,
+          "framework_ratio": 0.00034
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "alpha.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189389.02758775,
+          "ended_monotonic": 2189389.027588583
+        },
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "beta.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189389.02761475,
+          "ended_monotonic": 2189389.027615208
+        }
+      ],
+      "delivered": [
+        "Both files read successfully:\n\n- **alpha.txt**: `hello from nextloop`\n- **beta.txt**: `hello from nextloop`\n\nBoth files contain the same content.",
+        "**Structured Analysis: alpha.txt vs. beta.txt**\n\n**1. Content Summary**\nBoth files were read successfully via `read_file`. Each contains the single line: `hello from nextloop`.\n\n**2. Comparative Findings**\n- **Equivalence:** The contents are byte-identical in observable output. There is no divergence in text, length, or structure.\n- **Length:** Each file holds one short line (19 characters including spaces), suggesting placeholder, test, or seed data rather than substantive documents.\n- **Naming:** The Greek-letter naming convention (alpha/beta) typically implies a primary/secondary pair or two variants — yet here the variants are indistinguishable.\n\n**3. Interpretation**\nThe identical content likely indicates one of three scenarios: (a) a file-copy or duplication event, (b) synchronized outputs from a repeated process (\"nextloop\" hints at an iterative loop writing the same greeting each cycle), or (c) intentional fixtures for testing read/compare operations.\n\n**4. Limitations**\nWithout metadata (timestamps, sizes, hashes) or directory context, I cannot determine which file was written first, whether they are hard links, or if differences exist beyond the rendered text (e.g., trailing newlines, encoding).\n\n**5. Conclusion**\nThe two files are functionally identical in content. Any meaningful next step — diffing, deduplication, or provenance tracing — would require additional inspection beyond a plain read.",
+        "**Extension: Risks and Mitigations**\n\n**Risk 1 — Silent Data Duplication**\nIdentical contents across logically distinct files (alpha/beta) can mask a copy/paste or sync error, where one file should have held unique data. Downstream jobs reading \"beta\" may unknowingly process alpha's data twice.\n\n*Mitigation:* Enforce a write-time uniqueness check (hash comparison) and add validation that flags byte-identical siblings unless explicitly expected.\n\n**Risk 2 — Loop/Process Misconfiguration**\nThe string \"nextloop\" suggests an iterative process. If every loop iteration writes the same output path or content, a stuck loop could be overwriting genuine results with placeholders.\n\n*Mitigation:* Include iteration IDs or timestamps in written content, monitor file modification cadence, and alert when output content is invariant across N iterations.\n\n**Risk 3 — Placeholder Data in Production**\nTest fixtures (\"hello from ...\") leaking into production pipelines can cause jobs to succeed while processing meaningless input — a silent failure mode worse than a crash.\n\n*Mitigation:* Gate fixture data behind separate directories/environment markers, and schema-validate file contents before consumption.\n\n**Risk 4 — Incomplete Verification**\nPlain reads cannot reveal encoding differences, trailing newlines, permissions, or hard-link relationships. Decisions based on apparent equality may be wrong.\n\n*Mitigation:* Use checksums (e.g., SHA-256) plus metadata comparison (size, mtime, inode) before declaring equivalence.\n\n**Risk 5 — Provenance Loss**\nWithout timestamps or ownership metadata, the authoritative source cannot be identified, complicating rollback or auditing.\n\n*Mitigation:* Adopt append-only logging of file writes (as with event logs) so origin and sequence are reconstructable.\n\n**Overall:** The observed equality is benign in isolation but represents a class of silent-failure risks best addressed with hashing, instrumentation, and environment separation.",
+        "**Final Session Summary**\n\n**1. Objective**\nThe session began with a simple task: read `alpha.txt` and `beta.txt` using the `read_file` tool, then progressively analyze and expand on the results without further tool calls.\n\n**2. Tool Execution**\nBoth files were read in a single parallel tool block. Results showed each file contains the identical one-line string: `hello from nextloop`. No errors or missing-file issues occurred, and no other tools were invoked during the session.\n\n**3. Analysis Delivered**\nA structured analysis compared the two files and found them equivalent in observable content. Key interpretations offered: (a) a duplication/copy event, (b) output from an iterative loop process writing the same greeting, or (c) intentional test fixtures. Limitations were noted — plain reads cannot expose encoding, trailing characters, timestamps, or inode/hard-link relationships, so provenance and true byte-level equality remain unverified.\n\n**4. Risks and Mitigations Extension**\nFive risks were identified with mitigations: silent data duplication (hash checks at write time); loop/process misconfiguration given the \"nextloop\" string (iteration IDs and cadence monitoring); placeholder data leaking into production (environment separation and schema validation); incomplete verification via plain reads (SHA-256 plus metadata comparison); and provenance loss (append-only write logging). The overarching theme: identical files are benign in isolation but exemplify silent-failure risks.\n\n**5. Session Notes**\nA protocol correction instructed that responses be complete and shorter after a prior truncation. Accordingly, later responses were delivered in full but more concisely. Overall, the session fulfilled all requests: two successful file reads, one comparative analysis, and one risk/mitigation extension — all preserved in the append-only event log."
+      ],
+      "events": {
+        "event_count": 65,
+        "event_types": {
+          "input/accepted": 4,
+          "turn/start": 4,
+          "step/start": 7,
+          "user/message": 6,
+          "assistant/attempt": 14,
+          "assistant/message": 7,
+          "tool/call": 2,
+          "tool/result": 2,
+          "step/end": 7,
+          "final/message": 4,
+          "turn/end": 4,
+          "delivery/committed": 4
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "wall_seconds": 36.969,
+      "passed": true,
+      "expected_minimum_tools": 2
+    },
+    {
+      "case_id": "paged-result",
+      "outcomes": [
+        {
+          "status": "succeeded",
+          "turn": 1,
+          "step": 3,
+          "final_message_id": "final_a7e1c5d8fffa4584b48250ad19babfb2",
+          "error": null
+        },
+        {
+          "status": "succeeded",
+          "turn": 2,
+          "step": 2,
+          "final_message_id": "final_b714e35d0d8747e487e1a3186fe1c23b",
+          "error": null
+        }
+      ],
+      "turn_timings": [
+        {
+          "turn": 1,
+          "wall_seconds": 5.875842,
+          "model_seconds": 5.869754,
+          "tool_seconds": 4e-06,
+          "framework_seconds": 0.006084,
+          "framework_ratio": 0.001035
+        },
+        {
+          "turn": 2,
+          "wall_seconds": 9.276114,
+          "model_seconds": 9.271379,
+          "tool_seconds": 0.0,
+          "framework_seconds": 0.004735,
+          "framework_ratio": 0.00051
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "big.txt"
+          },
+          "turn": 1,
+          "step": 1,
+          "started_monotonic": 2189425.928668583,
+          "ended_monotonic": 2189425.928672583
+        }
+      ],
+      "delivered": [
+        "Read `big.txt`: it's a 20,000-byte file consisting entirely of filler — the character `x` repeated end to end, with no other content or structure. Nothing actionable in it; tool result preserved as event `evt_5dafc2efecbb4d61af1abde30688a478`.",
+        "Page metadata from the actual result:\n\n- **event_id:** `evt_5dafc2efecbb4d61af1abde30688a478`\n- **offset:** 256\n- **total_bytes:** 20000\n- **next_offset:** 640\n\nSo this page returned 512 bytes (256 → 640) of the 20,000-byte result, and the content is, as before, just the `x` filler characters."
+      ],
+      "events": {
+        "event_count": 43,
+        "event_types": {
+          "input/accepted": 2,
+          "turn/start": 2,
+          "step/start": 5,
+          "user/message": 2,
+          "assistant/attempt": 10,
+          "assistant/message": 5,
+          "tool/call": 3,
+          "tool/result": 3,
+          "step/end": 5,
+          "final/message": 2,
+          "turn/end": 2,
+          "delivery/committed": 2
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "paged_calls": 2,
+      "valid_pages": 2,
+      "passed": true
+    },
+    {
+      "case_id": "compaction",
+      "outcomes": [
+        {
+          "status": "succeeded",
+          "turn": 1,
+          "step": 1,
+          "error": null
+        }
+      ],
+      "tool_invocations": [],
+      "delivered": [
+        "The provided task background is empty — the message contains only a placeholder (\"[Task summary]\") with no actual content, details, or context.\n\n**Current objective:** Cannot be determined. No task background, data, or goal was included, so there is nothing to summarize or act on. Please provide the actual task background or content, and I can summarize it and restate the objective."
+      ],
+      "events": {
+        "event_count": 14,
+        "event_types": {
+          "input/accepted": 1,
+          "turn/start": 1,
+          "step/start": 1,
+          "user/message": 1,
+          "assistant/attempt": 4,
+          "compaction": 1,
+          "assistant/message": 1,
+          "final/message": 1,
+          "step/end": 1,
+          "turn/end": 1,
+          "delivery/committed": 1
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "compactions": 1,
+      "passed": true
+    },
+    {
+      "case_id": "provider-retry",
+      "outcomes": [
+        {
+          "status": "succeeded",
+          "turn": 1,
+          "step": 1,
+          "final_message_id": "final_e1e35c8f7d9546b0b4cbfcec3a7f4568",
+          "error": null
+        }
+      ],
+      "turn_timings": [
+        {
+          "turn": 1,
+          "wall_seconds": 0.902086,
+          "model_seconds": 0.89919,
+          "tool_seconds": 0.0,
+          "framework_seconds": 0.002896,
+          "framework_ratio": 0.00321
+        }
+      ],
+      "tool_invocations": [],
+      "delivered": [
+        "PROVIDER_RETRY_OK"
+      ],
+      "provider_errors": 1,
+      "passed": true
+    },
+    {
+      "case_id": "delivery-recovery",
+      "outcomes": [
+        {
+          "status": "delivery_unknown",
+          "turn": 1,
+          "step": 1
+        }
+      ],
+      "tool_invocations": [],
+      "delivered": [
+        "DELIVERY_OK"
+      ],
+      "events": {
+        "event_count": 12,
+        "event_types": {
+          "input/accepted": 1,
+          "turn/start": 1,
+          "step/start": 1,
+          "user/message": 1,
+          "assistant/attempt": 2,
+          "assistant/message": 1,
+          "final/message": 1,
+          "step/end": 1,
+          "turn/end": 1,
+          "delivery/unknown": 1,
+          "delivery/committed": 1
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "recovered_ids": [
+        "final_50f5702c72d1495fa06a9a739fd880ed"
+      ],
+      "provider_calls_during_recovery": 0,
+      "passed": true
+    },
+    {
+      "case_id": "approval-resume",
+      "outcomes": [
+        {
+          "status": "approval_pending",
+          "turn": 1,
+          "step": 1
+        },
+        {
+          "status": "succeeded",
+          "turn": 2,
+          "step": 2
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "protected_write",
+          "arguments": {
+            "value": "approved"
+          }
+        }
+      ],
+      "delivered": [
+        "The protected write completed successfully (value 'approved'), and there's no pending operation in the log to resume. Nothing else was in progress — let me know what specific operation you'd like to continue, and I'll proceed."
+      ],
+      "events": {
+        "event_count": 26,
+        "event_types": {
+          "input/accepted": 2,
+          "turn/start": 2,
+          "step/start": 3,
+          "user/message": 2,
+          "assistant/attempt": 4,
+          "assistant/message": 2,
+          "approval/requested": 1,
+          "step/end": 3,
+          "turn/end": 2,
+          "approval/granted": 1,
+          "tool/call": 1,
+          "tool/result": 1,
+          "final/message": 1,
+          "delivery/committed": 1
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "passed": true
+    },
+    {
+      "case_id": "uncertain-reconcile",
+      "outcomes": [
+        {
+          "status": "blocked",
+          "turn": 1,
+          "step": 1
+        },
+        {
+          "status": "succeeded",
+          "turn": 2,
+          "step": 1
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "write_file",
+          "arguments": {
+            "path": "recovery.txt",
+            "content": "test"
+          }
+        },
+        {
+          "name": "write_file",
+          "arguments": {
+            "path": "recovery.txt",
+            "content": "test"
+          }
+        }
+      ],
+      "delivered": [],
+      "events": {
+        "event_count": 19,
+        "event_types": {
+          "input/accepted": 2,
+          "turn/start": 2,
+          "step/start": 2,
+          "user/message": 2,
+          "assistant/attempt": 2,
+          "assistant/message": 1,
+          "tool/call": 2,
+          "tool/result": 1,
+          "step/end": 2,
+          "turn/end": 2,
+          "reconciliation/result": 1
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "resource_locks": [],
+      "passed": true
+    },
+    {
+      "case_id": "cancellation",
+      "outcomes": [
+        {
+          "status": "cancelled",
+          "turn": 1,
+          "step": 1
+        }
+      ],
+      "tool_invocations": [
+        {
+          "name": "read_file",
+          "arguments": {
+            "path": "cancel.txt"
+          }
+        }
+      ],
+      "delivered": [],
+      "events": {
+        "event_count": 12,
+        "event_types": {
+          "input/accepted": 1,
+          "turn/start": 1,
+          "step/start": 1,
+          "user/message": 1,
+          "assistant/attempt": 2,
+          "assistant/message": 1,
+          "tool/call": 1,
+          "cancellation/requested": 1,
+          "tool/result": 1,
+          "step/end": 1,
+          "turn/end": 1
+        },
+        "unclosed_steps": [],
+        "unexpected_step_ends": []
+      },
+      "cancel_accepted": true,
+      "passed": true
+    }
+  ]
+}
