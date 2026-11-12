@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
+from .adapters.capabilities import HistoryCheck, read_event, read_last_seq
 from .adapters.memory import InMemoryEventStore
 from .contracts import (
     DeliveryOwner,
@@ -89,9 +90,33 @@ class FaultInjectingEventStore(_FaultInjector):
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
         return await self._store.attach_writer(session_id, force=force)
 
+    async def attach_writer_checked(
+        self,
+        session_id: str,
+        check: HistoryCheck,
+        *,
+        force: bool = False,
+    ) -> tuple[int, int, int, Sequence[Event]]:
+        checked_attach = getattr(self._store, "attach_writer_checked", None)
+        if callable(checked_attach):
+            return cast(
+                tuple[int, int, int, Sequence[Event]],
+                await checked_attach(session_id, check, force=force),
+            )
+        history = await self._store.load_recovery(session_id)
+        check(history)
+        epoch, last_seq, last_turn = await self._store.attach_writer(session_id, force=force)
+        return epoch, last_seq, last_turn, history
+
     @property
     def lease_seconds(self) -> float | None:
         return getattr(self._store, "lease_seconds", None)
+
+    @property
+    def last_seq_fallback(self) -> bool:
+        return not callable(getattr(self._store, "last_seq", None)) or bool(
+            getattr(self._store, "last_seq_fallback", False)
+        )
 
     async def check_writer(self, session_id: str, writer_epoch: int) -> None:
         await self._store.check_writer(session_id, writer_epoch)
@@ -119,6 +144,12 @@ class FaultInjectingEventStore(_FaultInjector):
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:
         return await self._store.load_recovery(session_id)
+
+    async def get_event(self, session_id: str, event_id: str) -> Event | None:
+        return await read_event(self._store, session_id, event_id)
+
+    async def last_seq(self, session_id: str) -> int:
+        return await read_last_seq(self._store, session_id)
 
 
 class FaultInjectingToolRuntime(_FaultInjector):
@@ -232,6 +263,11 @@ async def check_event_store(
     session_id = new_id("store_contract")
     epoch, seq, turn = await store.attach_writer(session_id)
     assert (epoch, seq, turn) == (1, 0, 0)
+    lease_seconds = getattr(store, "lease_seconds", None)
+    if lease_seconds is not None:
+        assert lease_seconds > 0
+        assert await store.has_writer(session_id)
+        await store.renew_writer(session_id, epoch)
     assert await store.session_ids() == ()
     drafts = [
         NewEvent(EventType.TURN_START, turn=1, step=0),

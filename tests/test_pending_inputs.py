@@ -354,3 +354,56 @@ async def test_automatic_steer_id_cannot_collide_with_explicit_pending_input():
     contents = [message.content for message in provider.requests[-1].messages]
     assert "original" in contents and "replacement" in contents
     assert await loop.pending_inputs("s", store) == ()
+
+
+@pytest.mark.asyncio
+async def test_reaccepted_pending_input_moves_to_latest_seq_order():
+    store = InMemoryEventStore()
+    epoch, _, _ = await store.attach_writer("s")
+    await store.append(
+        "s",
+        epoch,
+        1,
+        [accepted("a", "first"), accepted("b", "second"), accepted("a", "first")],
+    )
+
+    pending = await AgentLoop().pending_inputs("s", store)
+
+    assert [item.input_id for item in pending] == ["b", "a"]
+    assert [item.seq for item in pending] == [2, 3]
+
+
+@pytest.mark.asyncio
+async def test_unrelated_pending_input_does_not_replay_completed_side_effects():
+    writes = []
+    provider = FakeProvider(
+        [
+            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(content="done"),
+            ModelResponse(content="duplicate"),
+        ]
+    )
+    store = InMemoryEventStore()
+    loop = AgentLoop()
+    ctx = context(
+        store,
+        provider,
+        registry(write_handler=lambda arguments, ctx: writes.append(arguments) or "written"),
+        FakeDelivery(),
+        input_id="completed",
+    )
+    first = await loop.run(ctx)
+    epoch, last_seq, last_turn = await store.attach_writer("s")
+    await store.append(
+        "s",
+        epoch,
+        last_seq + 1,
+        [accepted("unrelated", "finish later", turn=last_turn + 1)],
+    )
+
+    second = await loop.run(ctx)
+
+    assert second == first
+    assert len(writes) == 1
+    assert len(provider.requests) == 2
+    assert [item.input_id for item in await loop.pending_inputs("s", store)] == ["unrelated"]

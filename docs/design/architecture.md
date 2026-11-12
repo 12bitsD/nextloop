@@ -36,9 +36,9 @@ Owner leases are optional. Same-owner restarts take over immediately; different 
 
 ## Complexity boundaries
 
-Conversation projection makes one pass over the surface returned by the Store and serializes the resulting messages. Its cost scales with returned events and message bytes, not with events hidden before the latest Compaction watermark.
+Conversation projection loads the current Surface once per Turn and uses the pure projection fold for each model request. Surface storage advances by append without repeatedly copying the event tuple, while rejected batches, approval-result anchors, Pending changes, WorkingContext changes, and Compaction boundaries retain the same pure-fold semantics. Compaction snapshots the committed Surface before awaiting a summary so concurrent steer cannot alter its source range. An incremental message-cache prototype was not retained because its 100-Step improvement did not meet the required 50% threshold on both Store backends.
 
-Pending Input requires an ordered log scan. A new Turn currently performs that scan once; it is not an O(1) operation. Trace replay is linear in processed events and payload size. Incremental and whole-history Trace projection use the same fold.
+Pending Input requires an ordered log scan. A new Turn performs that scan once; it is not an O(1) operation. Trace replay is linear in processed events and payload size. Incremental and whole-history Trace projection use the same fold.
 
 Run the 10,505-event parity benchmark with:
 
@@ -46,7 +46,7 @@ Run the 10,505-event parity benchmark with:
 .venv/bin/python tests/projection_benchmark.py
 ```
 
-The benchmark checks Memory/SQLite Conversation Projection parity, Model/Tool Trace payload parity, and incremental/whole-history Trace parity. Explicit canaries require the Compaction summary, assistant output, Tool arguments/results, and final content to survive projection; identical erased outputs do not pass. Timings are measurements, not a cross-machine latency guarantee.
+The benchmark checks Memory/SQLite Conversation Projection parity, Model/Tool Trace payload parity, and incremental/whole-history Trace parity. Explicit canaries require the Compaction summary, assistant output, Tool arguments/results, and final content to survive projection; identical erased outputs do not pass. `tests/turn_projection_benchmark.py` measures complete 100/400-Step Turns on Memory and SQLite. Timings are measurements, not a cross-machine latency guarantee.
 
 ## Frozen import contract
 

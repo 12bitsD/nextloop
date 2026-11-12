@@ -6,7 +6,7 @@ import threading
 import time
 
 import pytest
-from helpers import FakeDelivery, FakeProvider
+from helpers import CountingEventStore, FakeDelivery, FakeProvider, MinimalEventStore
 from test_approval import approval_tools
 from test_loop import call, context
 from test_outbox import closed_turn
@@ -17,12 +17,14 @@ from nextloop import (
     FinishReason,
     InMemoryEventStore,
     ModelResponse,
+    NewEvent,
+    ObservingEventStore,
     SQLiteOutbox,
     ToolCallTrace,
     TurnTrace,
     project_traces,
 )
-from nextloop.testing import InjectedCrash
+from nextloop.testing import FaultInjectingEventStore, InjectedCrash
 
 
 @pytest.mark.asyncio
@@ -320,3 +322,51 @@ async def test_concurrent_old_lock_table_migration_adds_owner_once(tmp_path):
     assert [row["name"] for row in columns].count("owner_token") == 1
     first.close()
     second.close()
+
+
+@pytest.mark.asyncio
+async def test_delivery_only_tail_advances_cursor_without_rescanning():
+    store = CountingEventStore()
+    epoch, _, _ = await store.attach_writer("s")
+    await store.append("s", epoch, 1, closed_turn())
+    epoch, last_seq, _ = await store.attach_writer("s")
+    await store.append(
+        "s",
+        epoch,
+        last_seq + 1,
+        [
+            NewEvent(
+                EventType.DELIVERY_COMMITTED,
+                turn=1,
+                step=1,
+                payload={"final_message_id": "final-1"},
+            )
+        ],
+    )
+    outbox = SQLiteOutbox(store, ":memory:", [])
+    await outbox.export_pending()
+    reads = store.recovery_reads
+
+    report = await outbox.export_pending()
+
+    assert report.exported == 0
+    assert store.recovery_reads == reads
+    assert outbox.watermark("s") == 4
+    outbox.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrapper", ["fault", "observing"])
+async def test_fallback_capability_reads_history_once_per_export(wrapper):
+    base = MinimalEventStore()
+    store = FaultInjectingEventStore(base) if wrapper == "fault" else ObservingEventStore(base, [])
+    epoch, _, _ = await store.attach_writer("s")
+    await store.append("s", epoch, 1, closed_turn())
+    outbox = SQLiteOutbox(store, ":memory:", [])
+
+    await outbox.export_pending("s")
+
+    assert base.recovery_reads == 1
+    outbox.close()
+    if wrapper == "observing":
+        await store.close()

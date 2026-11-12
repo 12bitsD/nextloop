@@ -4,6 +4,7 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
+from ..adapters.capabilities import read_event
 from ..contracts import (
     DEFAULT_TOOL_RESULT_BYTES,
     READ_TOOL_RESULT_NAME,
@@ -67,7 +68,8 @@ def _read_handler(
         limit = int(arguments["limit"])
         if limit < TOOL_RESULT_MIN_BYTES:
             return _error("invalid_limit", event_id)
-        events = await store.load_recovery(context.session_id)
+        event = await read_event(store, context.session_id, event_id)
+        events = (event,) if event is not None else ()
         for event in events:
             if event.event_id != event_id or event.event_type != EventType.TOOL_RESULT:
                 continue

@@ -67,12 +67,16 @@ Relative paths are resolved from the configuration file. The API key is read onl
 ```python
 harness = Harness.load("harness.toml")
 await harness.check()
-outcome = await harness.run("Hello")
+outcome = await harness.run("Hello", input_id="request-1", preview=None)
 await harness.steer("More detail")
 await harness.cancel()
-recovery = await harness.recover()
+pending = await harness.pending_inputs()
+locks = await harness.resource_locks()
+recovery = await harness.recover(force=False)
 await harness.close()
 ```
+
+`Harness` also thinly delegates `steer_result()`, `resume()`, `retry_operation()`, `resource_locks()`, `release_resource()`, and `delete_session()`. Execution entries share the same checked Tool/Skill context and reuse a Harness-owned Provider. `resume()` accepts decisions or `reject_all`, optional replacement input, `input_id`, and `preview`; `retry_operation()` preserves the original operation ID. `delete_session()` deletes only EventStore state; an independently constructed SQLiteOutbox retains its separate explicit cleanup contract.
 
 Skills remain instructions only. Their metadata is added to the system prompt, and the read-only `skill_view` Tool loads a body on demand. Loading a Skill never runs adjacent scripts or expands Tool permissions.
 
@@ -96,7 +100,7 @@ Python ToolSpecs can declare `ApprovalPolicy(version, predicate=None, expires_af
 
 ## Pending Input
 
-The event log is the sole source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs that have not been consumed by a USER_MESSAGE, ordered by their original seq. The next Turn loads these inputs from the log and commits their USER_MESSAGE consumption at its first Step boundary; `recover()` itself does not rebuild an in-memory inbox. Callers must provide a stable `input_id` to deduplicate retries or query Pending before retrying.
+The event log is the sole source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs that have not been consumed by a USER_MESSAGE, ordered by their latest acceptance seq. Reaccepting an ID after consumption reopens Pending; a USER_MESSAGE consumes only that ID. The next Turn loads these inputs from the log and commits their USER_MESSAGE consumption at its first Step boundary; `recover()` itself does not rebuild an in-memory inbox. Callers must provide a stable `input_id` to deduplicate retries or query Pending before retrying.
 
 ```python
 pending = await loop.pending_inputs("session-id", store)
@@ -106,7 +110,7 @@ Pending historical inputs appear before the new Turn's initial input. Inputs fro
 
 ## Budgets and Tool Results
 
-All budget fields default to `None`. Step, model-attempt, and validated Tool-batch limits stop the next side effect. Model attempts include retries and compaction. Token limits use Provider-reported usage and fail closed when required usage is missing or invalid. `turn_deadline_seconds` reuses cancellation and uncertain Tool semantics. Budgets are Turn-local; recovery closes an interrupted Turn and a later Turn gets a new budget.
+All budget fields default to `None`. Step, model-attempt, and validated Tool-batch limits stop the next side effect. `max_tool_calls = 0` disables Tool dispatch; `output_reserve = 0` and `pacing_step_interval = 0` retain their direct LoopConfig meanings in TOML as well. Model attempts include retries and compaction. Token limits use Provider-reported usage and fail closed when required usage is missing or invalid. `turn_deadline_seconds` reuses cancellation and uncertain Tool semantics. Budgets are Turn-local; recovery closes an interrupted Turn and a later Turn gets a new budget.
 
 `ToolSpec.result_mode` supports `PREVIEW`, `PAGED`, and `FULL`, with `PREVIEW` as the default. Small results are unchanged. Large previews retain UTF-8-safe head/tail content and an `event_id`; pages are continuous. The durable outcome retains full content while the model Message contains the projection. `read_tool_result` reads committed content from the recovery log by `event_id`, UTF-8 byte offset, and bounded limit. FULL and terminal results are not generically truncated; exceeding the hard limit commits the full result and ends the Turn as failed without final delivery.
 

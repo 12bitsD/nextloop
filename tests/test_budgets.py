@@ -184,9 +184,10 @@ async def test_deadline_preserves_uncertain_tool_resource_lock():
         await asyncio.sleep(1)
 
     loop = AgentLoop()
+    store = InMemoryEventStore()
     outcome = await loop.run(
         context(
-            InMemoryEventStore(),
+            store,
             FakeProvider(
                 [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
             ),
@@ -198,7 +199,7 @@ async def test_deadline_preserves_uncertain_tool_resource_lock():
 
     assert outcome.status == TurnStatus.FAILED
     assert outcome.error == "turn_deadline_exceeded"
-    assert loop._resource_locks["s"] == {"workspace"}
+    assert await loop.resource_locks("s", store) == frozenset({"workspace"})
 
 
 @pytest.mark.asyncio

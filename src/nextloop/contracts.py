@@ -435,17 +435,17 @@ class CandidateRequest:
             ],
             "messages": [
                 {
-                    "role": m.role,
-                    "content": m.content,
+                    "role": message.role,
+                    "content": message.content,
                     "tool_calls": [
-                        {"call_id": c.call_id, "name": c.name, "arguments": c.arguments}
-                        for c in m.tool_calls
+                        {"call_id": call.call_id, "name": call.name, "arguments": call.arguments}
+                        for call in message.tool_calls
                     ],
-                    "tool_call_id": m.tool_call_id,
-                    "name": m.name,
-                    "provider_data": dict(m.provider_data),
+                    "tool_call_id": message.tool_call_id,
+                    "name": message.name,
+                    "provider_data": dict(message.provider_data),
                 }
-                for m in self.messages
+                for message in self.messages
             ],
         }
         return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(

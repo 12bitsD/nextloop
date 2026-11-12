@@ -13,7 +13,7 @@ from typing import Any, NoReturn, cast
 
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
-from .adapters.observing import ObservingEventStore, StdoutExporter, _get_turn, _query_history
+from .adapters.observing import ObservingEventStore, StdoutExporter, get_turn_trace, query_history
 from .adapters.openai import OpenAIProvider
 from .adapters.sqlite import SQLiteEventStore
 from .contracts import (
@@ -27,9 +27,12 @@ from .contracts import (
     HarnessSpec,
     LoopConfig,
     ModelProvider,
+    PendingInput,
+    PreviewSink,
     ProviderConfig,
     RecoveryOutcome,
     SkillConfig,
+    SteerResult,
     StoreConfig,
     ToolConfig,
     ToolExecutionMode,
@@ -121,6 +124,7 @@ class Harness:
         self.spec = spec
         self.session_id = session_id or new_id("session")
         self._provider = provider
+        self._owned_provider: ModelProvider | None = None
         self._owns_tools = tools is None
         self.tools = (
             CompositeToolRuntime.from_configs(
@@ -189,11 +193,27 @@ class Harness:
             ],
         }
 
-    async def run(self, initial_input: str) -> TurnOutcome:
+    async def run(
+        self,
+        initial_input: str,
+        *,
+        input_id: str | None = None,
+        preview: PreviewSink | None = None,
+    ) -> TurnOutcome:
+        context = await self._make_context(initial_input, input_id=input_id, preview=preview)
+        return await self.loop.run(context)
+
+    async def _make_context(
+        self,
+        initial_input: str,
+        *,
+        input_id: str | None,
+        preview: PreviewSink | None,
+    ) -> TurnContext:
         await self.check()
         provider = self._make_provider()
         assert self._all_tools is not None
-        context = TurnContext(
+        return TurnContext(
             session_id=self.session_id,
             initial_input=initial_input,
             config=self._loop_config(),
@@ -201,27 +221,71 @@ class Harness:
             provider=provider,
             tools=self._all_tools,
             delivery=self.delivery,
+            input_id=input_id if input_id is not None else new_id("in"),
+            preview=preview,
         )
-        return await self.loop.run(context)
 
     async def steer(self, content: str, *, input_id: str | None = None) -> bool:
         return await self.loop.steer(self.session_id, content, input_id=input_id)
 
+    async def steer_result(self, content: str, *, input_id: str | None = None) -> SteerResult:
+        return await self.loop.steer_result(self.session_id, content, input_id=input_id)
+
     async def cancel(self, cause: str = "user_stop") -> bool:
         return await self.loop.cancel(self.session_id, cause)
 
-    async def recover(self) -> RecoveryOutcome:
-        return await self.loop.recover(self.session_id, self.store, self.delivery)
+    async def recover(self, *, force: bool = False) -> RecoveryOutcome:
+        return await self.loop.recover(self.session_id, self.store, self.delivery, force=force)
+
+    async def pending_inputs(self) -> tuple[PendingInput, ...]:
+        return await self.loop.pending_inputs(self.session_id, self.store)
+
+    async def resume(
+        self,
+        *,
+        decisions: Mapping[str, bool] | None = None,
+        reject_all: bool = False,
+        new_input: str | None = None,
+        input_id: str | None = None,
+        preview: PreviewSink | None = None,
+    ) -> TurnOutcome:
+        context = await self._make_context(
+            new_input if new_input is not None else "Resume approval",
+            input_id=input_id,
+            preview=preview,
+        )
+        return await self.loop.resume(context, decisions=decisions, reject_all=reject_all)
+
+    async def retry_operation(
+        self,
+        operation_id: str,
+        *,
+        initial_input: str = "Reconcile uncertain operation",
+        input_id: str | None = None,
+    ) -> TurnOutcome:
+        context = await self._make_context(initial_input, input_id=input_id, preview=None)
+        return await self.loop.retry_operation(context, operation_id)
+
+    async def resource_locks(self) -> frozenset[str]:
+        return await self.loop.resource_locks(self.session_id, self.store)
+
+    async def release_resource(self, resource: str, *, actor: str, evidence: str) -> bool:
+        return await self.loop.release_resource(
+            self.session_id, self.store, resource, actor=actor, evidence=evidence
+        )
+
+    async def delete_session(self) -> None:
+        await self.store.delete_session(self.session_id)
 
     async def history(
         self, *, from_turn: int = 1, to_turn: int | None = None
     ) -> tuple[TraceRecord, ...]:
-        return await _query_history(
+        return await query_history(
             self.store, self.session_id, from_turn=from_turn, to_turn=to_turn
         )
 
     async def get_turn(self, turn: int) -> TurnTrace | None:
-        return await _get_turn(self.store, self.session_id, turn)
+        return await get_turn_trace(self.store, self.session_id, turn)
 
     async def close(self) -> None:
         cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
@@ -233,15 +297,24 @@ class Harness:
             if self._owns_tools and isinstance(self.tools, CompositeToolRuntime):
                 await self.tools.close()
         finally:
-            close = getattr(self.store, "close", None) if self._close_store_on_close else None
-            if callable(close):
-                result = close()
-                if inspect.isawaitable(result):
-                    await result
+            try:
+                close = getattr(self._owned_provider, "close", None)
+                if callable(close):
+                    result = close()
+                    if inspect.isawaitable(result):
+                        await result
+            finally:
+                close = getattr(self.store, "close", None) if self._close_store_on_close else None
+                if callable(close):
+                    result = close()
+                    if inspect.isawaitable(result):
+                        await result
 
     def _make_provider(self) -> ModelProvider:
         if self._provider is not None:
             return self._provider
+        if self._owned_provider is not None:
+            return self._owned_provider
         config = self.spec.provider
         if config.protocol not in ("openai", "anthropic"):
             raise HarnessError(f"Unsupported Provider protocol: {config.protocol}")
@@ -251,21 +324,15 @@ class Harness:
                 f"{self.spec.source_path}: provider.api_key_env environment variable "
                 f"'{config.api_key_env}' is not set"
             )
-        if config.protocol == "openai":
-            return OpenAIProvider(
-                model_id=config.model_id,
-                base_url=config.base_url,
-                api_key=api_key,
-                default_parameters=config.default_parameters,
-                timeout_seconds=config.timeout_seconds,
-            )
-        return AnthropicProvider(
+        provider_class = OpenAIProvider if config.protocol == "openai" else AnthropicProvider
+        self._owned_provider = provider_class(
             model_id=config.model_id,
             base_url=config.base_url,
             api_key=api_key,
             default_parameters=config.default_parameters,
             timeout_seconds=config.timeout_seconds,
         )
+        return self._owned_provider
 
     def _runtime_with_skills(self) -> ToolRuntime:
         if self._all_tools is not None:
@@ -541,24 +608,26 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
             _fail(source, f"loop.{name}", "must be a string")
     for name in (
         "context_window",
-        "output_reserve",
         "max_parallel_tools",
         "max_provider_attempts",
-        "pacing_step_interval",
         "tool_result_bytes",
         "tool_result_full_max_bytes",
     ):
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             _fail(source, f"loop.{name}", "must be a positive integer")
-    for name in ("max_protocol_corrections", "max_pending_inputs"):
+    for name in (
+        "max_protocol_corrections",
+        "max_pending_inputs",
+        "output_reserve",
+        "pacing_step_interval",
+    ):
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             _fail(source, f"loop.{name}", "must be a nonnegative integer")
     for name in (
         "max_steps",
         "max_model_calls",
-        "max_tool_calls",
         "max_input_tokens",
         "max_output_tokens",
         "max_total_tokens",
@@ -568,6 +637,9 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
             not isinstance(value, int) or isinstance(value, bool) or value <= 0
         ):
             _fail(source, f"loop.{name}", "must be null or a positive integer")
+    value = config.max_tool_calls
+    if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
+        _fail(source, "loop.max_tool_calls", "must be null or a nonnegative integer")
     deadline = config.turn_deadline_seconds
     if deadline is not None and (
         not isinstance(deadline, (int, float)) or isinstance(deadline, bool) or deadline <= 0

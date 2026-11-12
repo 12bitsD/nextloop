@@ -36,7 +36,7 @@ from nextloop import (
     TurnTrace,
     utc_now,
 )
-from nextloop.adapters.observing import _query_history
+from nextloop.adapters.observing import query_history
 from nextloop.contracts import Message, ToolCall
 from nextloop.events.project import message_to_data
 from nextloop.events.trace import project_traces
@@ -395,7 +395,7 @@ async def test_recovery_seeds_open_state_after_advancing_watermark():
 async def test_history_without_observing_store_and_stdout(tmp_path: Path):
     raw = InMemoryEventStore()
     await run(raw, [response()])
-    records = await _query_history(raw, "s")
+    records = await query_history(raw, "s")
     assert len(records) == 2
     assert isinstance(records[-1], TurnTrace)
 

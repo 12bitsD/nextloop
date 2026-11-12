@@ -9,16 +9,16 @@ from dataclasses import dataclass
 
 from ..contracts import (
     Event,
-    EventType,
     InvariantViolation,
     NewEvent,
-    PayloadErasedError,
     SessionDeletedError,
     SurfaceOp,
     WriterLeaseError,
     utc_now,
 )
-from ..events.upcast import upcast_event, validate_event_schema
+from ..events.codec import is_surface_event, verify_idempotent_append
+from ..events.upcast import upcast_event
+from .capabilities import HistoryCheck
 
 
 @dataclass
@@ -41,6 +41,7 @@ class InMemoryEventStore:
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
         self._events: dict[str, list[Event]] = defaultdict(list)
+        self._event_ids: dict[str, dict[str, Event]] = defaultdict(dict)
         self._epochs: dict[str, int] = defaultdict(int)
         self._leases: dict[str, _Lease] = {}
         self._deleted: set[str] = set()
@@ -63,6 +64,7 @@ class InMemoryEventStore:
         async with self._lock:
             self._deleted.add(session_id)
             self._events.pop(session_id, None)
+            self._event_ids.pop(session_id, None)
             self._epochs.pop(session_id, None)
             self._leases.pop(session_id, None)
 
@@ -71,8 +73,33 @@ class InMemoryEventStore:
             raise SessionDeletedError(f"Session is deleted: {session_id}")
 
     async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
+        epoch, last_seq, last_turn, _ = await self._attach_writer(session_id, force=force)
+        return epoch, last_seq, last_turn
+
+    async def attach_writer_checked(
+        self,
+        session_id: str,
+        check: HistoryCheck,
+        *,
+        force: bool = False,
+    ) -> tuple[int, int, int, Sequence[Event]]:
+        return await self._attach_writer(session_id, force=force, check=check)
+
+    async def _attach_writer(
+        self,
+        session_id: str,
+        *,
+        force: bool,
+        check: HistoryCheck | None = None,
+    ) -> tuple[int, int, int, Sequence[Event]]:
         async with self._lock:
             self._ensure_active(session_id)
+            history: Sequence[Event] = ()
+            if check is not None:
+                history = tuple(
+                    upcast_event(copy.deepcopy(event)) for event in self._events[session_id]
+                )
+                check(history)
             if self.lease_seconds is not None:
                 lease = self._leases.get(session_id)
                 if (
@@ -90,7 +117,7 @@ class InMemoryEventStore:
             self._epochs[session_id] += 1
             events = self._events[session_id]
             last_turn = max((event.turn for event in events), default=0)
-            return self._epochs[session_id], len(events), last_turn
+            return self._epochs[session_id], len(events), last_turn, history
 
     def _check_writer_locked(self, session_id: str, writer_epoch: int) -> None:
         self._ensure_active(session_id)
@@ -142,28 +169,29 @@ class InMemoryEventStore:
             existing = self._events[session_id]
             if expected_seq != len(existing) + 1:
                 return self._idempotent(existing, events)
-            known_ids = {event.event_id for event in existing}
+            known_ids = self._event_ids[session_id]
+            batch_ids = set(known_ids)
             committed = []
             for offset, draft in enumerate(events):
-                if draft.event_id in known_ids:
+                if draft.event_id in batch_ids:
                     raise InvariantViolation("Event ID reused with different content")
-                known_ids.add(draft.event_id)
-                committed.append(
-                    Event(
-                        session_id=session_id,
-                        seq=expected_seq + offset,
-                        turn=draft.turn,
-                        step=draft.step,
-                        attempt=draft.attempt,
-                        writer_epoch=writer_epoch,
-                        event_id=draft.event_id,
-                        event_type=draft.event_type,
-                        surface_op=draft.surface_op,
-                        payload=copy.deepcopy(dict(draft.payload)),
-                        occurred_at=utc_now(),
-                    )
+                batch_ids.add(draft.event_id)
+                event = Event(
+                    session_id=session_id,
+                    seq=expected_seq + offset,
+                    turn=draft.turn,
+                    step=draft.step,
+                    attempt=draft.attempt,
+                    writer_epoch=writer_epoch,
+                    event_id=draft.event_id,
+                    event_type=draft.event_type,
+                    surface_op=draft.surface_op,
+                    payload=copy.deepcopy(dict(draft.payload)),
+                    occurred_at=utc_now(),
                 )
+                committed.append(event)
             existing.extend(committed)
+            known_ids.update((event.event_id, event) for event in committed)
             return committed
 
     async def load_surface(self, session_id: str) -> Sequence[Event]:
@@ -177,11 +205,7 @@ class InMemoryEventStore:
             return tuple(
                 upcast_event(copy.deepcopy(event))
                 for event in events
-                if event.seq >= epoch_seq
-                and (
-                    event.surface_op != SurfaceOp.NONE
-                    or event.event_type in (EventType.TOOL_BATCH_REJECTED, EventType.INPUT_ACCEPTED)
-                )
+                if event.seq >= epoch_seq and is_surface_event(event.event_type, event.surface_op)
             )
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:
@@ -191,23 +215,15 @@ class InMemoryEventStore:
 
     @staticmethod
     def _idempotent(existing: list[Event], drafts: Sequence[NewEvent]) -> Sequence[Event]:
-        by_id = {event.event_id: event for event in existing}
-        committed = []
-        for draft in drafts:
-            event = by_id.get(draft.event_id)
-            if event is None:
-                raise InvariantViolation("Expected sequence does not match Session tail")
-            validate_event_schema(event)
-            if event.payload == {"_nextloop_erased": True}:
-                raise PayloadErasedError(f"Event payload is erased: {event.event_id}")
-            if (
-                event.event_type != draft.event_type
-                or event.turn != draft.turn
-                or event.step != draft.step
-                or event.attempt != draft.attempt
-                or event.surface_op != draft.surface_op
-                or event.payload != dict(draft.payload)
-            ):
-                raise InvariantViolation("Event ID reused with different content")
-            committed.append(event)
-        return committed
+        return verify_idempotent_append(existing, drafts)
+
+    async def get_event(self, session_id: str, event_id: str) -> Event | None:
+        async with self._lock:
+            self._ensure_active(session_id)
+            event = self._event_ids[session_id].get(event_id)
+            return upcast_event(copy.deepcopy(event)) if event is not None else None
+
+    async def last_seq(self, session_id: str) -> int:
+        async with self._lock:
+            self._ensure_active(session_id)
+            return len(self._events[session_id])

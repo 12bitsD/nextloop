@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from ..contracts import (
     CandidateRequest,
@@ -76,6 +77,31 @@ class Projection:
     working_context: Message | None
 
 
+def make_working_context_message(
+    content: str, *, scope: Literal["turn", "session"] = "turn"
+) -> Message:
+    if scope not in ("turn", "session"):
+        raise ValueError("WorkingContext scope must be 'turn' or 'session'")
+    content = content.strip()
+    if not content:
+        raise ValueError("WorkingContext content must be non-empty")
+    return Message(
+        role="user",
+        content=f"[WorkingContext · {scope}]\n{content}",
+        provider_data={"working_context": {"action": "set", "scope": scope}},
+    )
+
+
+def make_clear_working_context_message(*, scope: Literal["turn", "session"] = "turn") -> Message:
+    if scope not in ("turn", "session"):
+        raise ValueError("WorkingContext scope must be 'turn' or 'session'")
+    return Message(
+        role="user",
+        content=f"[WorkingContext cleared · {scope}]",
+        provider_data={"working_context": {"action": "clear", "scope": scope}},
+    )
+
+
 def latest_working_context(events: Sequence[Event]) -> Message | None:
     active: Message | None = None
     for event in events:
@@ -90,6 +116,15 @@ def latest_working_context(events: Sequence[Event]) -> Message | None:
         elif action in ("clear", "expired"):
             active = None
     return active
+
+
+def _capacity_reason(request_bytes: int, config: LoopConfig) -> str | None:
+    estimated_input = max(1, (request_bytes + 3) // 4)
+    if estimated_input >= config.context_window * 0.75:
+        return "input_threshold_75_percent"
+    if estimated_input + config.output_reserve > config.context_window:
+        return "input_output_capacity"
+    return None
 
 
 def project_events(
@@ -164,12 +199,7 @@ def project_events(
         messages=tuple(messages),
         tools=tuple(tools),
     )
-    estimated_input = max(1, (len(request.canonical_bytes()) + 3) // 4)
-    reason = None
-    if estimated_input >= config.context_window * 0.75:
-        reason = "input_threshold_75_percent"
-    elif estimated_input + config.output_reserve > config.context_window:
-        reason = "input_output_capacity"
+    reason = _capacity_reason(len(request.canonical_bytes()), config)
     return Projection(
         request=request,
         compaction_reason=reason,
@@ -194,11 +224,25 @@ def make_compaction_request(projection: Projection, config: LoopConfig) -> Candi
     )
 
 
-def valid_compaction(summary: str, projection: Projection) -> bool:
-    if not summary.strip():
+def _message_bytes(message: Message) -> int:
+    return len(
+        json.dumps(
+            message_to_data(message), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    )
+
+
+def valid_compaction(summary: str, projection: Projection, *, bootstrap_count: int = 0) -> bool:
+    summary = summary.strip()
+    if not summary:
         return False
-    previous_size = sum(len(message.content) for message in projection.request.messages)
-    return len(summary.strip()) < previous_size
+    replaced = projection.request.messages[1 + bootstrap_count :]
+    before_bytes = sum(_message_bytes(message) for message in replaced)
+    retained = (Message(role="user", content="[Task summary]\n" + summary),) + (
+        (projection.working_context,) if projection.working_context is not None else ()
+    )
+    after_bytes = sum(_message_bytes(message) for message in retained)
+    return after_bytes < before_bytes
 
 
 def _require_paired_tool_intents(events: Sequence[Event]) -> None:

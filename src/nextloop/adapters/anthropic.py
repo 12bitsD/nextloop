@@ -16,6 +16,7 @@ from ..contracts import (
     ProviderError,
     ToolCall,
 )
+from ._http import AsyncClientOwner
 from ._sse import data_events, read_error_text
 
 
@@ -36,6 +37,7 @@ class AnthropicProvider:
         self.default_parameters = {"max_tokens": 4096, **dict(default_parameters or {})}
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client
+        self._clients = AsyncClientOwner(http_client, timeout_seconds)
 
     async def complete(
         self,
@@ -89,7 +91,7 @@ class AnthropicProvider:
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         }
-        client = self.http_client or httpx.AsyncClient(timeout=self.timeout_seconds)
+        client = await self._clients.client()
         text_blocks: dict[int, list[str]] = {}
         tool_blocks: dict[int, dict[str, Any]] = {}
         finish_reason: FinishReason | None = None
@@ -267,9 +269,9 @@ class AnthropicProvider:
                 retryable=True,
                 partial_output=bool(text_blocks or tool_blocks or thinking_blocks or provider_data),
             ) from exc
-        finally:
-            if self.http_client is None:
-                await client.aclose()
+
+    async def close(self) -> None:
+        await self._clients.close()
 
     def _endpoint(self) -> str:
         if self.base_url.endswith("/v1/messages"):

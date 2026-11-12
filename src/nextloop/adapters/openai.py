@@ -16,6 +16,7 @@ from ..contracts import (
     ProviderError,
     ToolCall,
 )
+from ._http import AsyncClientOwner
 from ._sse import data_events, read_error_text
 
 
@@ -36,6 +37,7 @@ class OpenAIProvider:
         self.default_parameters = dict(default_parameters or {})
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client
+        self._clients = AsyncClientOwner(http_client, timeout_seconds)
 
     async def complete(
         self,
@@ -83,7 +85,7 @@ class OpenAIProvider:
                 for tool in request.tools
             ]
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        client = self.http_client or httpx.AsyncClient(timeout=self.timeout_seconds)
+        client = await self._clients.client()
         content_parts: list[str] = []
         refusal_parts: list[str] = []
         calls: dict[int, dict[str, str]] = {}
@@ -214,9 +216,9 @@ class OpenAIProvider:
                 retryable=True,
                 partial_output=partial,
             ) from exc
-        finally:
-            if self.http_client is None:
-                await client.aclose()
+
+    async def close(self) -> None:
+        await self._clients.close()
 
     def _endpoint(self) -> str:
         if self.base_url.endswith("/chat/completions"):

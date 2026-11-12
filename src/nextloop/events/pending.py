@@ -7,11 +7,11 @@ from ..contracts import Event, EventType, InvariantViolation, PendingInput, Turn
 
 def pending_inputs(events: Sequence[Event]) -> tuple[PendingInput, ...]:
     pending: dict[str, PendingInput] = {}
-    consumed: set[str] = set()
     for event in events:
         if event.event_type == EventType.INPUT_ACCEPTED:
             input_id = str(event.payload.get("input_id", ""))
             if input_id:
+                pending.pop(input_id, None)
                 pending[input_id] = PendingInput(
                     input_id=input_id,
                     turn=event.turn,
@@ -21,26 +21,24 @@ def pending_inputs(events: Sequence[Event]) -> tuple[PendingInput, ...]:
         elif event.event_type == EventType.USER_MESSAGE:
             input_id = str(event.payload.get("input_id", ""))
             if input_id:
-                consumed.add(input_id)
-    return tuple(item for input_id, item in pending.items() if input_id not in consumed)
+                pending.pop(input_id, None)
+    return tuple(pending.values())
 
 
 def completed_input_outcome(
     events: Sequence[Event], session_id: str, input_id: str, content: str
 ) -> TurnOutcome | None:
-    accepted_turns = []
+    consumed_turns = []
     for event in events:
         if (
-            event.event_type != EventType.INPUT_ACCEPTED
-            or event.payload.get("input_id") != input_id
+            event.event_type == EventType.INPUT_ACCEPTED
+            and event.payload.get("input_id") == input_id
+            and event.payload.get("content", "") != content
         ):
-            continue
-        if event.payload.get("content", "") != content:
             raise InvariantViolation("input_id reused with different content")
-        accepted_turns.append(event.turn)
-    if pending_inputs(events):
-        return None
-    for accepted_turn in reversed(accepted_turns):
+        if event.event_type == EventType.USER_MESSAGE and event.payload.get("input_id") == input_id:
+            consumed_turns.append(event.turn)
+    for accepted_turn in reversed(consumed_turns):
         end = next(
             (
                 event

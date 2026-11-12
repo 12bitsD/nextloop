@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from helpers import FakeDelivery, FakeProvider
 from test_loop import call, context, registry
@@ -133,6 +135,86 @@ async def test_resource_lock_query_and_release_are_log_derived():
     )
     assert release.payload["actor"] == "operator"
     assert release.payload["evidence"] == "verified external write"
+
+
+@pytest.mark.asyncio
+async def test_new_loop_enforces_recovered_resource_lock_from_log():
+    invocations = []
+
+    def write(arguments, ctx):
+        invocations.append(arguments)
+        return UncertainHanging("unknown", resource_locks=("workspace",))
+
+    tools = registry(write_handler=write)
+    store = InMemoryEventStore()
+    first = await AgentLoop().run(
+        context(
+            store,
+            FakeProvider(
+                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+            ),
+            tools,
+            FakeDelivery(),
+        )
+    )
+    assert first.status == "blocked"
+
+    second = await AgentLoop().run(
+        context(
+            store,
+            FakeProvider(
+                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+            ),
+            tools,
+            FakeDelivery(),
+        )
+    )
+
+    assert second.status == "blocked"
+    assert len(invocations) == 1
+
+
+@pytest.mark.asyncio
+async def test_release_resource_rejects_active_turn_without_fencing_writer():
+    tools = registry(
+        write_handler=lambda arguments, ctx: UncertainHanging(
+            "unknown", resource_locks=("workspace",)
+        )
+    )
+    store = InMemoryEventStore()
+    loop = AgentLoop()
+    await loop.run(
+        context(
+            store,
+            FakeProvider(
+                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+            ),
+            tools,
+            FakeDelivery(),
+        )
+    )
+    started = asyncio.Event()
+    resume = asyncio.Event()
+
+    async def respond(**kwargs):
+        started.set()
+        await resume.wait()
+        return ModelResponse(content="done")
+
+    running = asyncio.create_task(
+        loop.run(context(store, FakeProvider([respond]), registry(), FakeDelivery()))
+    )
+    await started.wait()
+
+    with pytest.raises(RuntimeError, match="active Turn"):
+        await loop.release_resource("s", store, "workspace", actor="operator", evidence="verified")
+    resume.set()
+    outcome = await running
+
+    assert outcome.status == "succeeded"
+    assert not any(
+        event.event_type == EventType.RESOURCE_RELEASED for event in await store.load_recovery("s")
+    )
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,7 @@ from ..contracts import (
 from ..events.trace import TraceProjector, project_traces
 from ..events.trace_ids import span_id, trace_id
 from ..execute.cleanup import wait_for_cleanup
+from .capabilities import HistoryCheck, read_event, read_last_seq
 
 TraceErrorHandler = Callable[[Exception, TraceRecord | None], None]
 
@@ -128,9 +129,45 @@ class ObservingEventStore:
                 self._report_error(exc, None)
             return result
 
+    async def attach_writer_checked(
+        self,
+        session_id: str,
+        check: HistoryCheck,
+        *,
+        force: bool = False,
+    ) -> tuple[int, int, int, Sequence[Event]]:
+        async with self._activity_lock:
+            checked_attach = getattr(self._store, "attach_writer_checked", None)
+            if callable(checked_attach):
+                epoch, last_seq, last_turn, history = await checked_attach(
+                    session_id, check, force=force
+                )
+            else:
+                history = await self._store.load_recovery(session_id)
+                check(history)
+                epoch, last_seq, last_turn = await self._store.attach_writer(
+                    session_id, force=force
+                )
+            try:
+                async with self._projector_lock:
+                    if session_id not in self._seeded_sessions:
+                        self._projector.seed(history)
+                        self._seeded_sessions.add(session_id)
+                    else:
+                        self._projector.advance_seq(session_id, last_seq)
+            except Exception as exc:
+                self._report_error(exc, None)
+            return epoch, last_seq, last_turn, history
+
     @property
     def lease_seconds(self) -> float | None:
         return getattr(self._store, "lease_seconds", None)
+
+    @property
+    def last_seq_fallback(self) -> bool:
+        return not callable(getattr(self._store, "last_seq", None)) or bool(
+            getattr(self._store, "last_seq_fallback", False)
+        )
 
     async def check_writer(self, session_id: str, writer_epoch: int) -> None:
         await self._store.check_writer(session_id, writer_epoch)
@@ -155,6 +192,12 @@ class ObservingEventStore:
                 except Exception as exc:
                     self._report_error(exc, None)
             return events
+
+    async def get_event(self, session_id: str, event_id: str) -> Event | None:
+        return await read_event(self._store, session_id, event_id, load_recovery=self.load_recovery)
+
+    async def last_seq(self, session_id: str) -> int:
+        return await read_last_seq(self._store, session_id)
 
     async def append(
         self,
@@ -199,7 +242,7 @@ class ObservingEventStore:
                         continue
                     for exporter in self._exporters:
                         try:
-                            await _export(exporter, record)
+                            await export_trace(exporter, record)
                         except Exception as exc:
                             self._report_error(exc, record)
                 finally:
@@ -224,7 +267,7 @@ class ObservingEventStore:
         for exporter in self._exporters:
             try:
                 await asyncio.wait_for(
-                    _exporter_lifecycle(exporter, "flush"), timeout=timeout_seconds
+                    exporter_lifecycle(exporter, "flush"), timeout=timeout_seconds
                 )
             except Exception as exc:
                 self._report_error(exc, None)
@@ -275,9 +318,7 @@ class ObservingEventStore:
             for exporter in self._close_exporters:
                 try:
                     remaining = max(0.0, deadline - asyncio.get_running_loop().time())
-                    await asyncio.wait_for(
-                        _exporter_lifecycle(exporter, "close"), timeout=remaining
-                    )
+                    await asyncio.wait_for(exporter_lifecycle(exporter, "close"), timeout=remaining)
                 except TimeoutError:
                     raise
                 except Exception as exc:
@@ -292,13 +333,13 @@ class ObservingEventStore:
     async def history(
         self, session_id: str, *, from_turn: int = 1, to_turn: int | None = None
     ) -> tuple[TraceRecord, ...]:
-        return await _query_history(self._store, session_id, from_turn=from_turn, to_turn=to_turn)
+        return await query_history(self._store, session_id, from_turn=from_turn, to_turn=to_turn)
 
     async def get_turn(self, session_id: str, turn: int) -> TurnTrace | None:
-        return await _get_turn(self._store, session_id, turn)
+        return await get_turn_trace(self._store, session_id, turn)
 
 
-async def _export(exporter: TraceExporterInput, record: TraceRecord) -> None:
+async def export_trace(exporter: TraceExporterInput, record: TraceRecord) -> None:
     export = getattr(exporter, "export", None)
     callback = export if callable(export) else cast(Callable[[TraceRecord], Any], exporter)
     if inspect.iscoroutinefunction(callback):
@@ -309,7 +350,7 @@ async def _export(exporter: TraceExporterInput, record: TraceRecord) -> None:
         await result
 
 
-async def _exporter_lifecycle(exporter: TraceExporterInput, method: str) -> None:
+async def exporter_lifecycle(exporter: TraceExporterInput, method: str) -> None:
     callback = getattr(exporter, method, None)
     if not callable(callback):
         return
@@ -321,12 +362,12 @@ async def _exporter_lifecycle(exporter: TraceExporterInput, method: str) -> None
         await result
 
 
-async def _get_turn(store: EventStore, session_id: str, turn: int) -> TurnTrace | None:
-    records = await _query_history(store, session_id, from_turn=turn, to_turn=turn)
+async def get_turn_trace(store: EventStore, session_id: str, turn: int) -> TurnTrace | None:
+    records = await query_history(store, session_id, from_turn=turn, to_turn=turn)
     return next((record for record in records if isinstance(record, TurnTrace)), None)
 
 
-async def _query_history(
+async def query_history(
     store: EventStore,
     session_id: str,
     *,

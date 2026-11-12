@@ -18,8 +18,8 @@ from ..contracts import (
     utc_now,
 )
 from ..events.trace import project_traces
-from ._sqlite import execute_with_busy_retry, purge_deleted_bytes
-from .observing import _export
+from ._sqlite import execute_with_busy_retry, purge_deleted_bytes, write_transaction
+from .observing import export_trace
 
 
 class SQLiteOutbox:
@@ -140,23 +140,28 @@ class SQLiteOutbox:
         deadline = time.monotonic() + 5.0
         while True:
             try:
-                with self._lock, self._connection:
-                    self._connection.execute(
-                        "DELETE FROM outbox_locks WHERE session_id = ? AND locked_at < ?",
-                        (session_id, time.time() - self.lock_timeout_seconds),
-                    )
-                    self._connection.execute(
-                        "INSERT INTO outbox_locks(session_id, locked_at, owner_token) "
-                        "VALUES (?, ?, ?)",
-                        (session_id, time.time(), self._lock_owner),
-                    )
+                await asyncio.to_thread(self._try_acquire, session_id)
                 return
             except sqlite3.IntegrityError as err:
                 if time.monotonic() >= deadline:
                     raise TimeoutError(f"Timed out acquiring export lock for {session_id}") from err
                 await asyncio.sleep(0.01)
 
+    def _try_acquire(self, session_id: str) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "DELETE FROM outbox_locks WHERE session_id = ? AND locked_at < ?",
+                (session_id, time.time() - self.lock_timeout_seconds),
+            )
+            self._connection.execute(
+                "INSERT INTO outbox_locks(session_id, locked_at, owner_token) VALUES (?, ?, ?)",
+                (session_id, time.time(), self._lock_owner),
+            )
+
     async def _release(self, session_id: str) -> None:
+        await asyncio.to_thread(self._release_sync, session_id)
+
+    def _release_sync(self, session_id: str) -> None:
         with self._lock, self._connection:
             self._connection.execute(
                 "DELETE FROM outbox_locks WHERE session_id = ? AND owner_token = ?",
@@ -175,7 +180,7 @@ class SQLiteOutbox:
     async def _keep_lock(self, session_id: str) -> None:
         while True:
             await asyncio.sleep(self.lock_timeout_seconds / 3)
-            self._touch(session_id)
+            await asyncio.to_thread(self._touch, session_id)
 
     def delete_session(self, session_id: str) -> None:
         with self._lock:
@@ -189,7 +194,9 @@ class SQLiteOutbox:
 
     async def _call_exporters(self, record: TraceRecord) -> None:
         for exporter in self._exporters:
-            await asyncio.wait_for(_export(exporter, record), timeout=self.export_timeout_seconds)
+            await asyncio.wait_for(
+                export_trace(exporter, record), timeout=self.export_timeout_seconds
+            )
 
     async def _export_record(self, record: TraceRecord, heartbeat: asyncio.Task[None]) -> None:
         export_task = asyncio.create_task(self._call_exporters(record))
@@ -217,39 +224,58 @@ class SQLiteOutbox:
         gaps = []
         pending_sessions = []
         for session in sessions:
+            cursor = await asyncio.to_thread(self.watermark, session)
+            last_seq = (
+                None
+                if getattr(self._store, "last_seq_fallback", False)
+                else getattr(self._store, "last_seq", None)
+            )
+            if callable(last_seq) and await last_seq(session) <= cursor:
+                continue
             events = await self._store.load_recovery(session)
             if not events:
                 continue
+            tail_seq = events[-1].seq
             closed_turns = {event.turn for event in events if event.event_type.value == "turn/end"}
             records = [record for record in project_traces(events) if record.turn in closed_turns]
             await self._acquire(session)
             heartbeat = asyncio.create_task(self._keep_lock(session))
             try:
-                cursor = self.watermark(session)
+                cursor = await asyncio.to_thread(self.watermark, session)
                 pending = [record for record in records if max(record.source_seqs) > cursor]
                 if not pending:
+                    if tail_seq > cursor:
+                        await asyncio.to_thread(self._advance, session, tail_seq)
                     continue
                 pending_sessions.append(session)
+                completed = True
                 for record in pending:
                     last_seq = max(record.source_seqs)
-                    attempts = self._attempts(session, last_seq) + 1
+                    attempts = await asyncio.to_thread(self._attempts, session, last_seq) + 1
                     try:
                         await self._export_record(record, heartbeat)
                     except WriterLeaseError:
                         raise
                     except Exception:
                         if attempts >= self.max_attempts:
-                            gap = self._record_gap(
-                                session, cursor, last_seq, "max_attempts_exceeded"
+                            gap = await asyncio.to_thread(
+                                self._record_gap,
+                                session,
+                                cursor,
+                                last_seq,
+                                "max_attempts_exceeded",
                             )
                             gaps.append(gap)
                             cursor = last_seq
                             continue
-                        self._set_attempts(session, last_seq, attempts)
+                        await asyncio.to_thread(self._set_attempts, session, last_seq, attempts)
+                        completed = False
                         break
-                    self._advance(session, last_seq)
+                    await asyncio.to_thread(self._advance, session, last_seq)
                     exported += 1
                     cursor = last_seq
+                if completed and tail_seq > cursor:
+                    await asyncio.to_thread(self._advance, session, tail_seq)
             finally:
                 heartbeat.cancel()
                 try:
@@ -270,8 +296,7 @@ class SQLiteOutbox:
             return int(row["attempts"]) if row else 0
 
     def _set_attempts(self, session_id: str, seq: int, attempts: int) -> None:
-        with self._lock, self._connection:
-            self._begin_immediate(self._connection)
+        with self._lock, write_transaction(self._connection):
             self._check_lock_owner_locked(session_id)
             self._connection.execute(
                 "INSERT INTO outbox_attempts(session_id, seq, attempts) VALUES (?, ?, ?) "
@@ -280,8 +305,7 @@ class SQLiteOutbox:
             )
 
     def _advance(self, session_id: str, seq: int) -> None:
-        with self._lock, self._connection:
-            self._begin_immediate(self._connection)
+        with self._lock, write_transaction(self._connection):
             self._check_lock_owner_locked(session_id)
             self._commit_cursor_locked(session_id, seq)
 
@@ -307,8 +331,7 @@ class SQLiteOutbox:
 
     def _record_gap(self, session_id: str, from_seq: int, to_seq: int, reason: str) -> ExportGap:
         created_at = utc_now()
-        with self._lock, self._connection:
-            self._begin_immediate(self._connection)
+        with self._lock, write_transaction(self._connection):
             self._check_lock_owner_locked(session_id)
             self._connection.execute(
                 "INSERT INTO outbox_gaps(session_id, from_seq, to_seq, reason, created_at) "

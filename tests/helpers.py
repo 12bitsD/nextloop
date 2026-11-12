@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 
+from nextloop.adapters.memory import InMemoryEventStore
 from nextloop.contracts import LoopConfig
 
 
@@ -42,3 +43,20 @@ def config(**kwargs):
     kwargs.setdefault("system_prompt", "system")
     kwargs.setdefault("retry_backoff_seconds", 0)
     return LoopConfig(**kwargs)
+
+
+class CountingEventStore(InMemoryEventStore):
+    def __init__(self):
+        super().__init__()
+        self.recovery_reads = 0
+
+    async def load_recovery(self, session_id):
+        self.recovery_reads += 1
+        return await super().load_recovery(session_id)
+
+
+class MinimalEventStore(CountingEventStore):
+    def __getattribute__(self, name):
+        if name in ("get_event", "last_seq"):
+            raise AttributeError(name)
+        return super().__getattribute__(name)

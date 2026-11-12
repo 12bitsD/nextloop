@@ -95,7 +95,7 @@ class ModelCaller:
                     )
                     if preview is not None:
                         preview.snapshot(request, attempt, response)
-            except (_CancelledByUser, asyncio.CancelledError):
+            except _CancelledByUser:
                 events.append(
                     self._timed_event(request, attempt, "cancelled", purpose, started_at, started)
                 )

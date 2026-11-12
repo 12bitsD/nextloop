@@ -14,7 +14,7 @@ A Session and its Trajectory can outlive any individual model request. The provi
 
 Within one compaction boundary and a fixed set of prompt revisions, previously submitted Tool definitions, system content, and conversation messages remain unchanged. New assistant messages, Tool Calls, Tool Results, user input, steer, and WorkingContext versions are appended rather than inserted into or replacing earlier content.
 
-This is a logical provider-visible content-prefix guarantee; canonical serialization and each provider's wire mapping remain M5 implementation-contract work. Compaction creates a new Conversation prefix, while the underlying Trajectory remains append-only and immutable.
+This is a logical provider-visible content-prefix guarantee; canonical serialization and each provider's wire mapping remain M5 implementation-contract work. Compaction creates a new Conversation prefix, while the underlying Trajectory remains append-only and immutable. This prefix rule has two execution-specific exceptions: a committed rejected batch removes or strips its earlier assistant Tool Intent, and Pending Input is folded at the current consumption/approval anchor rather than treated as an already consumed message. The pure projection fold owns those rules.
 
 The intended cache model is:
 
@@ -103,7 +103,7 @@ The dedicated [https://github.com/12bitsD/nika/blob/main/docs/design/compaction-
 
 Compaction starts on user `/compact`, the 75% input threshold, or a preflight capacity violation as defined above. `/compact` runs immediately while Idle and otherwise at the next safe model boundary. A failed or unusable summary is not committed; the previous projection remains and the failure is reported. Provider overflow permits one compaction, not an unbounded sequence. A fresh compaction that still cannot produce an admissible request ends with the error.
 
-The next request is normal System Prompt + `AGENTS.md` + the new task summary + the latest active WorkingContext, if any + subsequent messages. Validation requires a nonempty, meaningfully smaller result, unchanged normal System Prompt and `AGENTS.md`, valid request structure, and successful `I + O` preflight. Runtime state remains in Session, and old Trajectory is never rewritten.
+The next request is normal System Prompt + `AGENTS.md` + the new task summary + the latest active WorkingContext, if any + subsequent messages. Validation requires a nonempty result whose canonical UTF-8 representation, together with the retained WorkingContext, is strictly smaller than the replaced Conversation slice (excluding unchanged System Prompt, bootstrap messages, and Tool definitions). It also requires unchanged normal System Prompt and `AGENTS.md`, valid request structure, and successful `I + O` preflight. Runtime state remains in Session, and old Trajectory is never rewritten.
 
 ### Proactive is a separate mechanism
 
