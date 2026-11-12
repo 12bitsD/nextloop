@@ -181,6 +181,7 @@ class TraceProjector:
             retryable=_boolean(payload.get("retryable")),
             code=_string(payload.get("code")),
             source_seqs=source_seqs,
+            ttft_ms=_number(payload.get("ttft_ms")),
         )
         turn.model_traces.append(trace)
         return (trace,)

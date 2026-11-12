@@ -3,27 +3,32 @@
     "model": "kimi-k2.8-highspeed",
     "case_count": 11,
     "passed_cases": 11,
-    "model_call_count": 51,
+    "model_call_count": 49,
     "injected_provider_errors": 1,
     "tool_call_count": 27,
-    "input_tokens": 671220,
-    "cached_input_tokens": 658176,
-    "cache_ratio": 0.9806,
-    "output_tokens": 9378,
-    "provider_seconds": 141.068,
-    "wall_seconds": 141.29,
-    "median_provider_seconds": 1.472462,
-    "p95_provider_seconds": 7.875815,
+    "input_tokens": 639106,
+    "cached_input_tokens": 626432,
+    "cache_ratio": 0.9802,
+    "output_tokens": 8101,
+    "provider_seconds": 112.704,
+    "wall_seconds": 112.929,
+    "median_provider_seconds": 1.3953,
+    "p95_provider_seconds": 5.994232,
     "timing": {
       "measured_turns": 22,
-      "turn_wall_seconds": 129.791312,
-      "model_seconds": 129.688189,
-      "tool_seconds": 3.9e-05,
-      "framework_seconds": 0.103083,
-      "framework_ratio": 0.000794,
-      "ttft_samples": 51,
-      "median_ttft_seconds": 1.1003,
-      "p95_ttft_seconds": 2.994563
+      "turn_wall_seconds": 100.768491,
+      "model_seconds": 100.666508,
+      "tool_seconds": 3.3e-05,
+      "framework_seconds": 0.101952,
+      "framework_ratio": 0.001012,
+      "ttft_samples": 49,
+      "median_ttft_seconds": 1.019989,
+      "p95_ttft_seconds": 2.032656
+    },
+    "trace_ttft": {
+      "samples": 48,
+      "median_ms": 1025.945,
+      "p95_ms": 2033.15
     }
   },
   "provider_calls": [
@@ -35,18 +40,18 @@
       "message_count": 2,
       "shared_prefix_messages": 0,
       "request_sha256": "cc2e8e163e22f1d29f6b38ee5fbc5239fe06b8727504008a9705b29967be0ecc",
-      "started_monotonic": 2189310.941900541,
+      "started_monotonic": 2191292.606502958,
       "usage": {
         "input_tokens": 13060,
-        "output_tokens": 321,
+        "output_tokens": 302,
         "cached_input_tokens": 13056
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 8,
-      "ttft_seconds": 1.777324,
-      "streaming_seconds": 1.448785,
-      "elapsed_seconds": 3.226108,
-      "ended_monotonic": 2189314.16800875
+      "ttft_seconds": 1.83346,
+      "streaming_seconds": 1.50971,
+      "elapsed_seconds": 3.343169,
+      "ended_monotonic": 2191295.949672416
     },
     {
       "case_id": "long-single-turn",
@@ -55,19 +60,19 @@
       "attempt": 1,
       "message_count": 11,
       "shared_prefix_messages": 2,
-      "request_sha256": "efc1192a718a27b8ee5fa2f84a78dfc184c8da5f45d2cbca0c763aae9dffc4dc",
-      "started_monotonic": 2189314.170509291,
+      "request_sha256": "8a6d99c87927b7c8b63502401c950afca831217b0bdb91c8ae4e73eb2bd3c61f",
+      "started_monotonic": 2191295.951029,
       "usage": {
-        "input_tokens": 13621,
+        "input_tokens": 13602,
         "output_tokens": 512,
         "cached_input_tokens": 13056
       },
       "finish_reason": "length",
       "tool_call_count": 0,
-      "ttft_seconds": 1.164271,
-      "streaming_seconds": 6.821289,
-      "elapsed_seconds": 7.98556,
-      "ended_monotonic": 2189322.156069291
+      "ttft_seconds": 1.839043,
+      "streaming_seconds": 5.722104,
+      "elapsed_seconds": 7.561147,
+      "ended_monotonic": 2191303.512175791
     },
     {
       "case_id": "long-single-turn",
@@ -76,19 +81,19 @@
       "attempt": 1,
       "message_count": 12,
       "shared_prefix_messages": 11,
-      "request_sha256": "18434e127f21ffdefa7651d858ec652b29205d18ebb9f6ee8f6731ef3574828b",
-      "started_monotonic": 2189322.158065166,
+      "request_sha256": "b8a0649cb3602bfb06d08080d0e9ea2005586ed83f30a8ebddc4d419e86a0874",
+      "started_monotonic": 2191303.512880291,
       "usage": {
-        "input_tokens": 13654,
-        "output_tokens": 501,
+        "input_tokens": 13635,
+        "output_tokens": 414,
         "cached_input_tokens": 13568
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 2.416221,
-      "streaming_seconds": 4.552992,
-      "elapsed_seconds": 6.969213,
-      "ended_monotonic": 2189329.127278041
+      "ttft_seconds": 2.750242,
+      "streaming_seconds": 3.026493,
+      "elapsed_seconds": 5.776735,
+      "ended_monotonic": 2191309.289615375
     },
     {
       "case_id": "long-multi-turn",
@@ -98,7 +103,7 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "505b0fd003cd980336fae7ab4be190f2f629821da95cbae7ff074d8f5a103bdc",
-      "started_monotonic": 2189329.133876958,
+      "started_monotonic": 2191309.2981585,
       "usage": {
         "input_tokens": 13012,
         "output_tokens": 71,
@@ -106,10 +111,10 @@
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.183932,
-      "streaming_seconds": 0.186747,
-      "elapsed_seconds": 1.370679,
-      "ended_monotonic": 2189330.504555916
+      "ttft_seconds": 0.955242,
+      "streaming_seconds": 0.123344,
+      "elapsed_seconds": 1.078586,
+      "ended_monotonic": 2191310.376744625
     },
     {
       "case_id": "long-multi-turn",
@@ -118,19 +123,19 @@
       "attempt": 1,
       "message_count": 4,
       "shared_prefix_messages": 2,
-      "request_sha256": "16f11c5e2f06022460fd9de47fd73d7f3a2f18a37e655613959687fe7f09fbb2",
-      "started_monotonic": 2189330.506631166,
+      "request_sha256": "7a7acf9f7bacaf53aec47fa3d59f6cd716bfc01637502f3a54574221501fcf65",
+      "started_monotonic": 2191310.37823275,
       "usage": {
         "input_tokens": 13119,
-        "output_tokens": 108,
+        "output_tokens": 90,
         "cached_input_tokens": 12800
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.847382,
-      "streaming_seconds": 1.182928,
-      "elapsed_seconds": 2.030311,
-      "ended_monotonic": 2189332.536941791
+      "ttft_seconds": 0.699957,
+      "streaming_seconds": 0.945463,
+      "elapsed_seconds": 1.64542,
+      "ended_monotonic": 2191312.023653208
     },
     {
       "case_id": "long-multi-turn",
@@ -139,19 +144,19 @@
       "attempt": 1,
       "message_count": 6,
       "shared_prefix_messages": 4,
-      "request_sha256": "243e5e1c4fb5e694ba4d33f9c87f02f3765b6f7550a5c14bdcefc8fc1ff8ab1f",
-      "started_monotonic": 2189332.539513083,
+      "request_sha256": "224ca24d2821705af8c7ad6acc203ea5f4ce2e38d8f03f9262d7eb7bf9369aa2",
+      "started_monotonic": 2191312.026410583,
       "usage": {
-        "input_tokens": 13259,
-        "output_tokens": 72,
+        "input_tokens": 13241,
+        "output_tokens": 61,
         "cached_input_tokens": 13056
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.1003,
-      "streaming_seconds": 0.131314,
-      "elapsed_seconds": 1.231613,
-      "ended_monotonic": 2189333.771126541
+      "ttft_seconds": 0.902936,
+      "streaming_seconds": 0.127455,
+      "elapsed_seconds": 1.030391,
+      "ended_monotonic": 2191313.056801875
     },
     {
       "case_id": "long-multi-turn",
@@ -160,19 +165,19 @@
       "attempt": 1,
       "message_count": 8,
       "shared_prefix_messages": 6,
-      "request_sha256": "f2a5f6811f050bed8bcd858449830371dbb4ca75b5f2087acffe886301899f14",
-      "started_monotonic": 2189333.773240083,
+      "request_sha256": "3ebe6d44933f318e92f04ee2572f4f74f3de0be80fe7ecc8d3f5873b813b5a23",
+      "started_monotonic": 2191313.059555875,
       "usage": {
-        "input_tokens": 13367,
-        "output_tokens": 110,
+        "input_tokens": 13338,
+        "output_tokens": 95,
         "cached_input_tokens": 13056
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.907141,
-      "streaming_seconds": 0.700091,
-      "elapsed_seconds": 1.607232,
-      "ended_monotonic": 2189335.380472375
+      "ttft_seconds": 0.942614,
+      "streaming_seconds": 0.572017,
+      "elapsed_seconds": 1.514631,
+      "ended_monotonic": 2191314.57418725
     },
     {
       "case_id": "long-multi-turn",
@@ -181,19 +186,19 @@
       "attempt": 1,
       "message_count": 10,
       "shared_prefix_messages": 8,
-      "request_sha256": "d9f7a6f14c3e65b69f56174f96b856edade40b6c0c7ea1ab1906c0dcd1caf3d2",
-      "started_monotonic": 2189335.382757375,
+      "request_sha256": "e0c20292de68eeaeaa8544702b3d0562e5719ead5c5a48434367456bb690fdf1",
+      "started_monotonic": 2191314.578223291,
       "usage": {
-        "input_tokens": 13509,
-        "output_tokens": 72,
+        "input_tokens": 13465,
+        "output_tokens": 62,
         "cached_input_tokens": 13312
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.017275,
-      "streaming_seconds": 0.123581,
-      "elapsed_seconds": 1.140855,
-      "ended_monotonic": 2189336.523612541
+      "ttft_seconds": 0.87279,
+      "streaming_seconds": 0.176052,
+      "elapsed_seconds": 1.048842,
+      "ended_monotonic": 2191315.627064833
     },
     {
       "case_id": "long-multi-turn",
@@ -202,19 +207,19 @@
       "attempt": 1,
       "message_count": 12,
       "shared_prefix_messages": 10,
-      "request_sha256": "2a748bcd24461de95fdbd9df98c4bc31b615c1c98718e878e8fd038f353f8fd6",
-      "started_monotonic": 2189336.526464541,
+      "request_sha256": "7974aa69da4478478c4feb5a36c54e11e92a2ffa578f57c8206cfc39a83e8cbf",
+      "started_monotonic": 2191315.629099791,
       "usage": {
-        "input_tokens": 13617,
-        "output_tokens": 111,
+        "input_tokens": 13563,
+        "output_tokens": 86,
         "cached_input_tokens": 13312
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.937014,
-      "streaming_seconds": 0.634443,
-      "elapsed_seconds": 1.571457,
-      "ended_monotonic": 2189338.097921708
+      "ttft_seconds": 0.864573,
+      "streaming_seconds": 0.635698,
+      "elapsed_seconds": 1.500271,
+      "ended_monotonic": 2191317.129371208
     },
     {
       "case_id": "long-multi-turn",
@@ -223,19 +228,19 @@
       "attempt": 1,
       "message_count": 14,
       "shared_prefix_messages": 12,
-      "request_sha256": "c0f3bd55e07c7dda90d556953ec1553c9b3122fc02d1728db805d00f48ba9974",
-      "started_monotonic": 2189338.103042125,
+      "request_sha256": "09e6be95e1ef3e398d1eda3f2a286cdf1a9cdc8083e04ad82a96a6b920ee0555",
+      "started_monotonic": 2191317.131476791,
       "usage": {
-        "input_tokens": 13760,
-        "output_tokens": 72,
-        "cached_input_tokens": 13568
+        "input_tokens": 13681,
+        "output_tokens": 62,
+        "cached_input_tokens": 13312
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 0.967399,
-      "streaming_seconds": 0.132422,
-      "elapsed_seconds": 1.099821,
-      "ended_monotonic": 2189339.202863541
+      "ttft_seconds": 1.511737,
+      "streaming_seconds": 0.137606,
+      "elapsed_seconds": 1.649343,
+      "ended_monotonic": 2191318.780819875
     },
     {
       "case_id": "long-multi-turn",
@@ -244,19 +249,19 @@
       "attempt": 1,
       "message_count": 16,
       "shared_prefix_messages": 14,
-      "request_sha256": "6b2e12e36117d99b10edad9b8430169e2c7865cbea9ab96fb9737502879d13d3",
-      "started_monotonic": 2189339.205129625,
+      "request_sha256": "f24d1ebfbed0787a598a8f9c6f03be89d9b5e22ce1132f6b6662d0360cc22a7a",
+      "started_monotonic": 2191318.781642625,
       "usage": {
-        "input_tokens": 13868,
-        "output_tokens": 119,
+        "input_tokens": 13779,
+        "output_tokens": 89,
         "cached_input_tokens": 13568
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.868884,
-      "streaming_seconds": 0.57471,
-      "elapsed_seconds": 1.443594,
-      "ended_monotonic": 2189340.648723166
+      "ttft_seconds": 0.847603,
+      "streaming_seconds": 0.534318,
+      "elapsed_seconds": 1.381921,
+      "ended_monotonic": 2191320.163563416
     },
     {
       "case_id": "long-multi-turn",
@@ -265,19 +270,19 @@
       "attempt": 1,
       "message_count": 18,
       "shared_prefix_messages": 16,
-      "request_sha256": "b496775660764e6309d0b4d225e4eab723a9282b87eb82537457d20b1650077e",
-      "started_monotonic": 2189340.651980916,
+      "request_sha256": "96425f820fc14a08ce4514c3594dc9c08d680bbf37ef99f7b87fdac0afc09363",
+      "started_monotonic": 2191320.16586825,
       "usage": {
-        "input_tokens": 14019,
-        "output_tokens": 72,
-        "cached_input_tokens": 13824
+        "input_tokens": 13900,
+        "output_tokens": 61,
+        "cached_input_tokens": 13568
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.748734,
-      "streaming_seconds": 0.129327,
-      "elapsed_seconds": 1.878062,
-      "ended_monotonic": 2189342.53004275
+      "ttft_seconds": 0.899598,
+      "streaming_seconds": 0.135736,
+      "elapsed_seconds": 1.035335,
+      "ended_monotonic": 2191321.201202958
     },
     {
       "case_id": "long-multi-turn",
@@ -286,19 +291,19 @@
       "attempt": 1,
       "message_count": 20,
       "shared_prefix_messages": 18,
-      "request_sha256": "c933a900edb7144b456ea0e6cceea7d875b8fb5d8e907062006c995256115065",
-      "started_monotonic": 2189342.531524583,
+      "request_sha256": "cd357ef81e37d833202710f8ba8a3d847d1075536a066a2323ae16fd22b27ca1",
+      "started_monotonic": 2191321.203368083,
       "usage": {
-        "input_tokens": 14127,
-        "output_tokens": 117,
+        "input_tokens": 13997,
+        "output_tokens": 87,
         "cached_input_tokens": 13824
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.933617,
-      "streaming_seconds": 0.481618,
-      "elapsed_seconds": 1.415236,
-      "ended_monotonic": 2189343.946760375
+      "ttft_seconds": 0.677949,
+      "streaming_seconds": 0.604831,
+      "elapsed_seconds": 1.28278,
+      "ended_monotonic": 2191322.486148375
     },
     {
       "case_id": "long-multi-turn",
@@ -307,19 +312,19 @@
       "attempt": 1,
       "message_count": 22,
       "shared_prefix_messages": 20,
-      "request_sha256": "382686a04ad6b05f9c87f78f2da04125d3054dc0e3b545686a7b104047e136ce",
-      "started_monotonic": 2189343.9515955,
+      "request_sha256": "78811b4cc489fdb49671dc54e7596cb7ad90dc893651d99e7ed40b99401bd26a",
+      "started_monotonic": 2191322.490682875,
       "usage": {
-        "input_tokens": 14277,
-        "output_tokens": 74,
-        "cached_input_tokens": 14080
+        "input_tokens": 14117,
+        "output_tokens": 59,
+        "cached_input_tokens": 13824
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.019189,
-      "streaming_seconds": 0.134476,
-      "elapsed_seconds": 1.153665,
-      "ended_monotonic": 2189345.105260333
+      "ttft_seconds": 0.938541,
+      "streaming_seconds": 0.139506,
+      "elapsed_seconds": 1.078047,
+      "ended_monotonic": 2191323.568730083
     },
     {
       "case_id": "long-multi-turn",
@@ -328,19 +333,19 @@
       "attempt": 1,
       "message_count": 24,
       "shared_prefix_messages": 22,
-      "request_sha256": "3cc4bbf769aa2d6352062770e5ed1a2a478123f09dd060248e7aaf66441ae2d5",
-      "started_monotonic": 2189345.108147166,
+      "request_sha256": "5447f704c4cc7668124f8410922db7840793fc723e1f4ed5418273b5f6a16437",
+      "started_monotonic": 2191323.570265625,
       "usage": {
-        "input_tokens": 14388,
-        "output_tokens": 121,
+        "input_tokens": 14213,
+        "output_tokens": 85,
         "cached_input_tokens": 14080
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.791628,
-      "streaming_seconds": 0.52371,
-      "elapsed_seconds": 1.315338,
-      "ended_monotonic": 2189346.423484791
+      "ttft_seconds": 0.827413,
+      "streaming_seconds": 0.66097,
+      "elapsed_seconds": 1.488383,
+      "ended_monotonic": 2191325.058648791
     },
     {
       "case_id": "long-multi-turn",
@@ -349,19 +354,19 @@
       "attempt": 1,
       "message_count": 26,
       "shared_prefix_messages": 24,
-      "request_sha256": "5e468b076fbc83222c9e27c6965e6a7b69e70b3dfb88dbedaf0e04cc0754bd82",
-      "started_monotonic": 2189346.429261666,
+      "request_sha256": "42e40db2b1745927207ea6cced229e0a8a3d37f65323391019fe0f739a4339a3",
+      "started_monotonic": 2191325.064230458,
       "usage": {
-        "input_tokens": 14541,
-        "output_tokens": 72,
-        "cached_input_tokens": 14336
+        "input_tokens": 14330,
+        "output_tokens": 61,
+        "cached_input_tokens": 14080
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.034917,
-      "streaming_seconds": 0.129603,
-      "elapsed_seconds": 1.16452,
-      "ended_monotonic": 2189347.593781333
+      "ttft_seconds": 0.82909,
+      "streaming_seconds": 0.141267,
+      "elapsed_seconds": 0.970357,
+      "ended_monotonic": 2191326.034587
     },
     {
       "case_id": "long-multi-turn",
@@ -370,19 +375,19 @@
       "attempt": 1,
       "message_count": 28,
       "shared_prefix_messages": 26,
-      "request_sha256": "df052783d183b8330f6ab4ab0477b4cd84929ff665229cf3efb6f5e5d006f9f0",
-      "started_monotonic": 2189347.596303458,
+      "request_sha256": "ac2f0d23f1893af09e99583ad74209618750974e7349ba5b5e31b1d3a599e4ce",
+      "started_monotonic": 2191326.036543041,
       "usage": {
-        "input_tokens": 14649,
-        "output_tokens": 124,
-        "cached_input_tokens": 14336
+        "input_tokens": 14427,
+        "output_tokens": 90,
+        "cached_input_tokens": 14080
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.920765,
-      "streaming_seconds": 0.55047,
-      "elapsed_seconds": 1.471235,
-      "ended_monotonic": 2189349.06753875
+      "ttft_seconds": 0.840178,
+      "streaming_seconds": 0.540645,
+      "elapsed_seconds": 1.380823,
+      "ended_monotonic": 2191327.417366208
     },
     {
       "case_id": "long-multi-turn",
@@ -391,19 +396,19 @@
       "attempt": 1,
       "message_count": 30,
       "shared_prefix_messages": 28,
-      "request_sha256": "f89334a95ba839afe8821cb4b8813243865e2bf197d1258070221f17457314e0",
-      "started_monotonic": 2189349.073136875,
+      "request_sha256": "952f1c45c975aab6bf6b20521c84377e01b9d410f30bb4c68a90dfb16a7fa5f7",
+      "started_monotonic": 2191327.421742291,
       "usage": {
-        "input_tokens": 14805,
-        "output_tokens": 72,
-        "cached_input_tokens": 14592
+        "input_tokens": 14549,
+        "output_tokens": 62,
+        "cached_input_tokens": 14336
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 0.899125,
-      "streaming_seconds": 0.117529,
-      "elapsed_seconds": 1.016654,
-      "ended_monotonic": 2189350.089790916
+      "ttft_seconds": 1.0381,
+      "streaming_seconds": 0.130922,
+      "elapsed_seconds": 1.169022,
+      "ended_monotonic": 2191328.590764083
     },
     {
       "case_id": "long-multi-turn",
@@ -412,19 +417,19 @@
       "attempt": 1,
       "message_count": 32,
       "shared_prefix_messages": 30,
-      "request_sha256": "9bd468f275bcc6046d8c0c0b4b0bb2ad5f0e46ddbb85ac5ce2e95c30b6152469",
-      "started_monotonic": 2189350.091700208,
+      "request_sha256": "8c3fb66d36c5a0b91f41b14d7cddb67fab075c7ffb2ac3ad0f08db8ee04bea5c",
+      "started_monotonic": 2191328.595285958,
       "usage": {
-        "input_tokens": 14913,
-        "output_tokens": 127,
-        "cached_input_tokens": 14592
+        "input_tokens": 14647,
+        "output_tokens": 87,
+        "cached_input_tokens": 14336
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.838707,
-      "streaming_seconds": 0.709894,
-      "elapsed_seconds": 1.548601,
-      "ended_monotonic": 2189351.640301083
+      "ttft_seconds": 0.741386,
+      "streaming_seconds": 0.451512,
+      "elapsed_seconds": 1.192898,
+      "ended_monotonic": 2191329.788183875
     },
     {
       "case_id": "long-multi-turn",
@@ -433,61 +438,19 @@
       "attempt": 1,
       "message_count": 34,
       "shared_prefix_messages": 32,
-      "request_sha256": "ed9113d3f0fecf7cb356e82383ba7e27a3e2540c4b8985704c259b975bf77c28",
-      "started_monotonic": 2189351.64566875,
+      "request_sha256": "691a078b02103e744582cff75160d2f782e79c380afca74bad2a31a25ab00f27",
+      "started_monotonic": 2191329.794994958,
       "usage": {
-        "input_tokens": 15082,
-        "output_tokens": 512,
-        "cached_input_tokens": 14848
-      },
-      "finish_reason": "length",
-      "tool_call_count": 0,
-      "ttft_seconds": 2.994563,
-      "streaming_seconds": 3.177359,
-      "elapsed_seconds": 6.171921,
-      "ended_monotonic": 2189357.817590208
-    },
-    {
-      "case_id": "long-multi-turn",
-      "turn": 9,
-      "step": 2,
-      "attempt": 1,
-      "message_count": 35,
-      "shared_prefix_messages": 34,
-      "request_sha256": "57fe855aa05a3537e6c7037e714cc8fb54d1104926b8aa8ec2ffa38f0e205c46",
-      "started_monotonic": 2189357.819196083,
-      "usage": {
-        "input_tokens": 15115,
-        "output_tokens": 512,
-        "cached_input_tokens": 14848
-      },
-      "finish_reason": "length",
-      "tool_call_count": 0,
-      "ttft_seconds": 4.251125,
-      "streaming_seconds": 1.907359,
-      "elapsed_seconds": 6.158484,
-      "ended_monotonic": 2189363.977680041
-    },
-    {
-      "case_id": "long-multi-turn",
-      "turn": 9,
-      "step": 3,
-      "attempt": 1,
-      "message_count": 36,
-      "shared_prefix_messages": 35,
-      "request_sha256": "7b766ad371546a993167d57aa5daba0656a6e789a2339b6b29d9c9d8b87dbcf6",
-      "started_monotonic": 2189363.979798875,
-      "usage": {
-        "input_tokens": 15148,
-        "output_tokens": 506,
-        "cached_input_tokens": 15104
+        "input_tokens": 14776,
+        "output_tokens": 437,
+        "cached_input_tokens": 14592
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 2.062893,
-      "streaming_seconds": 5.369416,
-      "elapsed_seconds": 7.43231,
-      "ended_monotonic": 2189371.412108541
+      "ttft_seconds": 1.10019,
+      "streaming_seconds": 5.439534,
+      "elapsed_seconds": 6.539725,
+      "ended_monotonic": 2191336.334719791
     },
     {
       "case_id": "iterative-calculations",
@@ -497,18 +460,18 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "3acc67921b5b3b706d97ca1714bf69be23092b6b03949e1537e766c7ee372de3",
-      "started_monotonic": 2189371.422030375,
+      "started_monotonic": 2191336.345066125,
       "usage": {
         "input_tokens": 13012,
-        "output_tokens": 77,
+        "output_tokens": 94,
         "cached_input_tokens": 12800
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 2.034329,
-      "streaming_seconds": 0.070108,
-      "elapsed_seconds": 2.104437,
-      "ended_monotonic": 2189373.526467416
+      "ttft_seconds": 1.002427,
+      "streaming_seconds": 0.104073,
+      "elapsed_seconds": 1.1065,
+      "ended_monotonic": 2191337.4515665
     },
     {
       "case_id": "iterative-calculations",
@@ -517,19 +480,19 @@
       "attempt": 1,
       "message_count": 4,
       "shared_prefix_messages": 2,
-      "request_sha256": "e38d9a1c13096b9c7de8e1c658e789064de238ed2050d4135bc9ba596c545971",
-      "started_monotonic": 2189373.527174625,
+      "request_sha256": "f7dd688494b394c49187924f0b3d43f4b77fdb90f01d58246b1e5d131c43d4bb",
+      "started_monotonic": 2191337.45327325,
       "usage": {
-        "input_tokens": 13116,
-        "output_tokens": 38,
+        "input_tokens": 13133,
+        "output_tokens": 47,
         "cached_input_tokens": 12800
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.314246,
-      "streaming_seconds": 0.158216,
-      "elapsed_seconds": 1.472462,
-      "ended_monotonic": 2189374.999636916
+      "ttft_seconds": 0.998442,
+      "streaming_seconds": 0.045978,
+      "elapsed_seconds": 1.04442,
+      "ended_monotonic": 2191338.49769325
     },
     {
       "case_id": "iterative-calculations",
@@ -538,19 +501,19 @@
       "attempt": 1,
       "message_count": 6,
       "shared_prefix_messages": 4,
-      "request_sha256": "ba723d6234a17d064b521e1f8676912f11bc07ff70447ac7982ca4fe129908e3",
-      "started_monotonic": 2189375.000738166,
+      "request_sha256": "b22bece0e5e6c1a2113cfdf908e8834b76b99a8330f17cf170bf7d6f9987dc46",
+      "started_monotonic": 2191338.498703416,
       "usage": {
-        "input_tokens": 13186,
-        "output_tokens": 58,
+        "input_tokens": 13212,
+        "output_tokens": 69,
         "cached_input_tokens": 13056
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 0.965522,
-      "streaming_seconds": 0.108118,
-      "elapsed_seconds": 1.07364,
-      "ended_monotonic": 2189376.074377791
+      "ttft_seconds": 0.818211,
+      "streaming_seconds": 0.110533,
+      "elapsed_seconds": 0.928744,
+      "ended_monotonic": 2191339.427446958
     },
     {
       "case_id": "iterative-calculations",
@@ -559,19 +522,19 @@
       "attempt": 1,
       "message_count": 8,
       "shared_prefix_messages": 6,
-      "request_sha256": "ffd3a3379eee8e57d012d90ea4ad57d81fae3340d05457773cf44b0c9f8e2bb4",
-      "started_monotonic": 2189376.07527425,
+      "request_sha256": "b8b1b22a79eeaa39b1fa7d18a48971cf1f527777b612303b9dbd20f94f3ecc5b",
+      "started_monotonic": 2191339.428400708,
       "usage": {
-        "input_tokens": 13271,
-        "output_tokens": 33,
+        "input_tokens": 13308,
+        "output_tokens": 37,
         "cached_input_tokens": 13056
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.627764,
-      "streaming_seconds": 0.119632,
-      "elapsed_seconds": 0.747396,
-      "ended_monotonic": 2189376.822670541
+      "ttft_seconds": 0.796772,
+      "streaming_seconds": 0.117192,
+      "elapsed_seconds": 0.913964,
+      "ended_monotonic": 2191340.342364625
     },
     {
       "case_id": "iterative-calculations",
@@ -580,19 +543,19 @@
       "attempt": 1,
       "message_count": 10,
       "shared_prefix_messages": 8,
-      "request_sha256": "50e2ba65dcbba46b0a76c75a6238cb4e70f4d612f87146650c30cda1ad2bd373",
-      "started_monotonic": 2189376.824473125,
+      "request_sha256": "6e71271ce436bdf62baafd1e486d9ab3a39df3ee0e938395df74046c48ff2e39",
+      "started_monotonic": 2191340.346184458,
       "usage": {
-        "input_tokens": 13341,
-        "output_tokens": 77,
+        "input_tokens": 13382,
+        "output_tokens": 85,
         "cached_input_tokens": 13056
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.171052,
-      "streaming_seconds": 0.12038,
-      "elapsed_seconds": 1.291432,
-      "ended_monotonic": 2189378.115905
+      "ttft_seconds": 1.121032,
+      "streaming_seconds": 0.110691,
+      "elapsed_seconds": 1.231723,
+      "ended_monotonic": 2191341.577907666
     },
     {
       "case_id": "iterative-calculations",
@@ -601,19 +564,19 @@
       "attempt": 1,
       "message_count": 12,
       "shared_prefix_messages": 10,
-      "request_sha256": "196d59d9a4356c905c22fb62e5f55900563e5245e7e0eaf383558eff4fe24d7d",
-      "started_monotonic": 2189378.1182975,
+      "request_sha256": "5432a7191cffb1fe39d6efa158f089160a9c2cfbe82b7f4722f23e0bcfd36506",
+      "started_monotonic": 2191341.579569625,
       "usage": {
-        "input_tokens": 13445,
-        "output_tokens": 56,
+        "input_tokens": 13494,
+        "output_tokens": 55,
         "cached_input_tokens": 13312
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.984147,
-      "streaming_seconds": 0.340358,
-      "elapsed_seconds": 1.324504,
-      "ended_monotonic": 2189379.442801916
+      "ttft_seconds": 0.764169,
+      "streaming_seconds": 0.21486,
+      "elapsed_seconds": 0.979028,
+      "ended_monotonic": 2191342.558598125
     },
     {
       "case_id": "iterative-calculations",
@@ -622,19 +585,19 @@
       "attempt": 1,
       "message_count": 14,
       "shared_prefix_messages": 12,
-      "request_sha256": "9f07d8bdb294c440641e4f744762955ae1fee1fbf86cb7f28d04c3278bb7dd63",
-      "started_monotonic": 2189379.444369458,
+      "request_sha256": "c1f84b15bc175bd2874388985e0fa0a12272f4476f86701aec58e6a3e3b1d3c4",
+      "started_monotonic": 2191342.562160541,
       "usage": {
-        "input_tokens": 13537,
-        "output_tokens": 118,
+        "input_tokens": 13585,
+        "output_tokens": 134,
         "cached_input_tokens": 13312
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.095781,
-      "streaming_seconds": 0.114967,
-      "elapsed_seconds": 1.210748,
-      "ended_monotonic": 2189380.655117541
+      "ttft_seconds": 1.361036,
+      "streaming_seconds": 0.091491,
+      "elapsed_seconds": 1.452527,
+      "ended_monotonic": 2191344.014687875
     },
     {
       "case_id": "iterative-calculations",
@@ -643,19 +606,19 @@
       "attempt": 1,
       "message_count": 16,
       "shared_prefix_messages": 14,
-      "request_sha256": "8ae5d1de02217e2cd44b8059467dcf4e55965cb9f97c3ea14d8ea100499eb8f2",
-      "started_monotonic": 2189380.655998333,
+      "request_sha256": "dcce9e6ac7cd83014638c388a7f9e47296f67123055def8dae11855aed3b1328",
+      "started_monotonic": 2191344.015806916,
       "usage": {
-        "input_tokens": 13682,
-        "output_tokens": 195,
-        "cached_input_tokens": 13312
+        "input_tokens": 13746,
+        "output_tokens": 198,
+        "cached_input_tokens": 13568
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.396675,
-      "streaming_seconds": 0.81061,
-      "elapsed_seconds": 2.207284,
-      "ended_monotonic": 2189382.863282625
+      "ttft_seconds": 1.403713,
+      "streaming_seconds": 0.632989,
+      "elapsed_seconds": 2.036702,
+      "ended_monotonic": 2191346.052508916
     },
     {
       "case_id": "iterative-calculations",
@@ -664,19 +627,19 @@
       "attempt": 1,
       "message_count": 18,
       "shared_prefix_messages": 16,
-      "request_sha256": "20b3fc88c3dabc0c5a5485ddcee0c9ead000dad99a40d51256fa31c6abec8584",
-      "started_monotonic": 2189382.864944625,
+      "request_sha256": "bb44471755daa014a84cb46c57212e1e00fbc0f7d49327544270e5215fd49dee",
+      "started_monotonic": 2191346.056048,
       "usage": {
-        "input_tokens": 13910,
-        "output_tokens": 348,
+        "input_tokens": 13977,
+        "output_tokens": 325,
         "cached_input_tokens": 13568
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.741236,
-      "streaming_seconds": 3.118023,
-      "elapsed_seconds": 4.859259,
-      "ended_monotonic": 2189387.724203583
+      "ttft_seconds": 1.17821,
+      "streaming_seconds": 2.734149,
+      "elapsed_seconds": 3.912359,
+      "ended_monotonic": 2191349.968407208
     },
     {
       "case_id": "long-context-reasoning",
@@ -686,18 +649,18 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "6bacd1da1ba81dd64335bff0f1d5b2a15f8b0b3cc5f8ccdc9a02e415322f8cc1",
-      "started_monotonic": 2189387.727924958,
+      "started_monotonic": 2191349.976275291,
       "usage": {
         "input_tokens": 13009,
-        "output_tokens": 112,
+        "output_tokens": 108,
         "cached_input_tokens": 12800
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 2,
-      "ttft_seconds": 0.917431,
-      "streaming_seconds": 0.381946,
-      "elapsed_seconds": 1.299377,
-      "ended_monotonic": 2189389.02730175
+      "ttft_seconds": 0.99444,
+      "streaming_seconds": 0.250188,
+      "elapsed_seconds": 1.244629,
+      "ended_monotonic": 2191351.220904083
     },
     {
       "case_id": "long-context-reasoning",
@@ -706,19 +669,19 @@
       "attempt": 1,
       "message_count": 5,
       "shared_prefix_messages": 2,
-      "request_sha256": "8ee1a424fddc1c9b37f3cf6dfe1fa76c6f95f9285c3c626a0aedff649adda30d",
-      "started_monotonic": 2189389.028178041,
+      "request_sha256": "db568ea7097c236aeb9ac5689136ce06d7d65005b41d995ad55eb90160654915",
+      "started_monotonic": 2191351.2220795,
       "usage": {
-        "input_tokens": 13186,
-        "output_tokens": 58,
+        "input_tokens": 13182,
+        "output_tokens": 72,
         "cached_input_tokens": 12800
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.716531,
-      "streaming_seconds": 0.18892,
-      "elapsed_seconds": 0.905451,
-      "ended_monotonic": 2189389.933629125
+      "ttft_seconds": 0.733328,
+      "streaming_seconds": 0.213956,
+      "elapsed_seconds": 0.947284,
+      "ended_monotonic": 2191352.169363416
     },
     {
       "case_id": "long-context-reasoning",
@@ -727,19 +690,19 @@
       "attempt": 1,
       "message_count": 7,
       "shared_prefix_messages": 5,
-      "request_sha256": "e1a4765fef1f369655eb63d345117cef1f5a0d5d1e0ac499df2f81e0ffc2a919",
-      "started_monotonic": 2189389.934854833,
+      "request_sha256": "2b7b22048bd0d4eb95a3bbe9354a2e0d2c6848838fd8f0326184594d97f8f526",
+      "started_monotonic": 2191352.171562125,
       "usage": {
-        "input_tokens": 13279,
+        "input_tokens": 13289,
         "output_tokens": 512,
         "cached_input_tokens": 13056
       },
       "finish_reason": "length",
       "tool_call_count": 0,
-      "ttft_seconds": 1.509201,
-      "streaming_seconds": 5.213191,
-      "elapsed_seconds": 6.722392,
-      "ended_monotonic": 2189396.6572465
+      "ttft_seconds": 2.032656,
+      "streaming_seconds": 3.961576,
+      "elapsed_seconds": 5.994232,
+      "ended_monotonic": 2191358.165794
     },
     {
       "case_id": "long-context-reasoning",
@@ -748,19 +711,19 @@
       "attempt": 1,
       "message_count": 8,
       "shared_prefix_messages": 7,
-      "request_sha256": "c323a86cc77c130deeaca592e4332467041743f91551b80e80cb159f4a246eef",
-      "started_monotonic": 2189396.658014291,
+      "request_sha256": "4075259a76916d7bf504499e7bc0589fa26b1044d4eb049b6ee3151a26443d8d",
+      "started_monotonic": 2191358.16694275,
       "usage": {
-        "input_tokens": 13312,
-        "output_tokens": 459,
+        "input_tokens": 13322,
+        "output_tokens": 377,
         "cached_input_tokens": 13056
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.744108,
-      "streaming_seconds": 4.224336,
-      "elapsed_seconds": 5.968444,
-      "ended_monotonic": 2189402.626458041
+      "ttft_seconds": 1.956861,
+      "streaming_seconds": 2.941924,
+      "elapsed_seconds": 4.898785,
+      "ended_monotonic": 2191363.065727416
     },
     {
       "case_id": "long-context-reasoning",
@@ -769,19 +732,19 @@
       "attempt": 1,
       "message_count": 10,
       "shared_prefix_messages": 8,
-      "request_sha256": "221c53de2d54ab566de699ad4e3f3dfd057c922179400089b20f049d5aee2677",
-      "started_monotonic": 2189402.629431416,
+      "request_sha256": "202d560b9d425c533c4ec6981af34e819623de9a39fe9c941fa7d0b993303cdc",
+      "started_monotonic": 2191363.06730525,
       "usage": {
-        "input_tokens": 13803,
-        "output_tokens": 457,
+        "input_tokens": 13731,
+        "output_tokens": 484,
         "cached_input_tokens": 13312
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.525486,
-      "streaming_seconds": 6.350329,
-      "elapsed_seconds": 7.875815,
-      "ended_monotonic": 2189410.50524625
+      "ttft_seconds": 1.093059,
+      "streaming_seconds": 5.33749,
+      "elapsed_seconds": 6.430549,
+      "ended_monotonic": 2191369.497853958
     },
     {
       "case_id": "long-context-reasoning",
@@ -790,19 +753,19 @@
       "attempt": 1,
       "message_count": 12,
       "shared_prefix_messages": 10,
-      "request_sha256": "1c71896d30a7babcb5e3ee499e9d91ecff62b1d86bb8433e2bec2d2cd150acd4",
-      "started_monotonic": 2189410.507500458,
+      "request_sha256": "65eadfb71f1343ab539d29cec983d8853652727c733f853517a11ce8d77f2014",
+      "started_monotonic": 2191369.500738541,
       "usage": {
-        "input_tokens": 14292,
+        "input_tokens": 14247,
         "output_tokens": 512,
         "cached_input_tokens": 13568
       },
       "finish_reason": "length",
       "tool_call_count": 0,
-      "ttft_seconds": 4.320732,
-      "streaming_seconds": 4.408943,
-      "elapsed_seconds": 8.729675,
-      "ended_monotonic": 2189419.237175375
+      "ttft_seconds": 1.855018,
+      "streaming_seconds": 3.574251,
+      "elapsed_seconds": 5.429269,
+      "ended_monotonic": 2191374.930007708
     },
     {
       "case_id": "long-context-reasoning",
@@ -811,19 +774,19 @@
       "attempt": 1,
       "message_count": 13,
       "shared_prefix_messages": 12,
-      "request_sha256": "3096fca4a698a6f69d3ede9040120925d716ce06e3436859b007b47726820e7a",
-      "started_monotonic": 2189419.239397083,
+      "request_sha256": "50eee58463c2da9ad0604248af43b8539b793367be1dfb1bcad0ec5785addec3",
+      "started_monotonic": 2191374.931004041,
       "usage": {
-        "input_tokens": 14325,
-        "output_tokens": 445,
+        "input_tokens": 14280,
+        "output_tokens": 426,
         "cached_input_tokens": 14080
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.432469,
-      "streaming_seconds": 4.020613,
-      "elapsed_seconds": 5.453082,
-      "ended_monotonic": 2189424.692479125
+      "ttft_seconds": 1.806864,
+      "streaming_seconds": 3.2733,
+      "elapsed_seconds": 5.080163,
+      "ended_monotonic": 2191380.01116725
     },
     {
       "case_id": "paged-result",
@@ -833,18 +796,18 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "26fe0d82cf65931ddf841667aef3b209acb99e2671d993da06505302f9068691",
-      "started_monotonic": 2189424.700838416,
+      "started_monotonic": 2191380.014828625,
       "usage": {
         "input_tokens": 13006,
-        "output_tokens": 71,
+        "output_tokens": 112,
         "cached_input_tokens": 12800
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.100742,
-      "streaming_seconds": 0.126404,
-      "elapsed_seconds": 1.227146,
-      "ended_monotonic": 2189425.927984666
+      "ttft_seconds": 1.617197,
+      "streaming_seconds": 0.126427,
+      "elapsed_seconds": 1.743624,
+      "ended_monotonic": 2191381.758452208
     },
     {
       "case_id": "paged-result",
@@ -853,19 +816,19 @@
       "attempt": 1,
       "message_count": 4,
       "shared_prefix_messages": 2,
-      "request_sha256": "5f1efb01cf95b8b3b42d3a487f4eb291d41cd93249313363b31cffdd99c18801",
-      "started_monotonic": 2189425.930023333,
+      "request_sha256": "dc1fa529303eb0d2043154827d7e61e542e936451723bbdb09316e98f8128408",
+      "started_monotonic": 2191381.761074666,
       "usage": {
-        "input_tokens": 13206,
-        "output_tokens": 251,
+        "input_tokens": 13245,
+        "output_tokens": 225,
         "cached_input_tokens": 12800
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 2.420499,
-      "streaming_seconds": 0.408033,
-      "elapsed_seconds": 2.828532,
-      "ended_monotonic": 2189428.758554916
+      "ttft_seconds": 1.95714,
+      "streaming_seconds": 1.340402,
+      "elapsed_seconds": 3.297542,
+      "ended_monotonic": 2191385.058617166
     },
     {
       "case_id": "paged-result",
@@ -874,19 +837,19 @@
       "attempt": 1,
       "message_count": 6,
       "shared_prefix_messages": 4,
-      "request_sha256": "c012253622b245cd2b70106372376846786ce5419b79be84900445c9f4896e43",
-      "started_monotonic": 2189428.760560875,
+      "request_sha256": "64388e62e79d4be3086a6a14365191ffa269723f81b3e01861827f8df24c832f",
+      "started_monotonic": 2191385.060947541,
       "usage": {
-        "input_tokens": 13575,
-        "output_tokens": 106,
+        "input_tokens": 13587,
+        "output_tokens": 154,
         "cached_input_tokens": 13056
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.98852,
-      "streaming_seconds": 0.825557,
-      "elapsed_seconds": 1.814076,
-      "ended_monotonic": 2189430.574637041
+      "ttft_seconds": 1.128185,
+      "streaming_seconds": 1.223549,
+      "elapsed_seconds": 2.351734,
+      "ended_monotonic": 2191387.412681666
     },
     {
       "case_id": "paged-result",
@@ -895,19 +858,19 @@
       "attempt": 1,
       "message_count": 8,
       "shared_prefix_messages": 6,
-      "request_sha256": "c716959ed9c620ab10da1ca3cc9ce5ebd0865590da978cfe3b32cb5398ad7bfd",
-      "started_monotonic": 2189430.582848291,
+      "request_sha256": "8e24d0cc72054d7267eac2dcc8c0e31f9275c18eafe6f520b31a4ec262d6dc6e",
+      "started_monotonic": 2191387.4222095,
       "usage": {
-        "input_tokens": 13745,
-        "output_tokens": 136,
+        "input_tokens": 13803,
+        "output_tokens": 123,
         "cached_input_tokens": 13568
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 0.945613,
-      "streaming_seconds": 0.390379,
-      "elapsed_seconds": 1.335991,
-      "ended_monotonic": 2189431.918839708
+      "ttft_seconds": 1.019989,
+      "streaming_seconds": 0.375311,
+      "elapsed_seconds": 1.3953,
+      "ended_monotonic": 2191388.81750925
     },
     {
       "case_id": "paged-result",
@@ -916,19 +879,19 @@
       "attempt": 1,
       "message_count": 10,
       "shared_prefix_messages": 8,
-      "request_sha256": "d39b5aad5de94bdabe9552ec6ff0ee19895eed684313a24e8ff61ee1a0c2f474",
-      "started_monotonic": 2189431.9212655,
+      "request_sha256": "3994669282b354903ff5be01970156dd4d63ccf483da6a715494abbf052ecd2b",
+      "started_monotonic": 2191388.820116416,
       "usage": {
-        "input_tokens": 13998,
-        "output_tokens": 153,
+        "input_tokens": 14041,
+        "output_tokens": 319,
         "cached_input_tokens": 13568
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 7.232504,
-      "streaming_seconds": 0.702883,
-      "elapsed_seconds": 7.935388,
-      "ended_monotonic": 2189439.856653083
+      "ttft_seconds": 2.436903,
+      "streaming_seconds": 1.391309,
+      "elapsed_seconds": 3.828213,
+      "ended_monotonic": 2191392.648329083
     },
     {
       "case_id": "compaction",
@@ -938,18 +901,18 @@
       "message_count": 2,
       "shared_prefix_messages": 0,
       "request_sha256": "0d8f84b2090bab6f331a3fb3672ea88910cbfcaf9801b255d38283ac41fdd341",
-      "started_monotonic": 2189439.862043125,
+      "started_monotonic": 2191392.657552291,
       "usage": {
         "input_tokens": 873,
-        "output_tokens": 56,
+        "output_tokens": 91,
         "cached_input_tokens": 768
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.876263,
-      "streaming_seconds": 0.218385,
-      "elapsed_seconds": 1.094648,
-      "ended_monotonic": 2189440.956690916
+      "ttft_seconds": 1.236252,
+      "streaming_seconds": 0.168018,
+      "elapsed_seconds": 1.40427,
+      "ended_monotonic": 2191394.061822333
     },
     {
       "case_id": "compaction",
@@ -958,19 +921,19 @@
       "attempt": 1,
       "message_count": 2,
       "shared_prefix_messages": 0,
-      "request_sha256": "12a195043a4129d9350b2fa7a477500089f6571bfdfe76f668e0a42fdfade77d",
-      "started_monotonic": 2189440.957189958,
+      "request_sha256": "b760b1ed893994b058e72ebe39d504d4b0e8a6c509892d30cbdeb073949eea97",
+      "started_monotonic": 2191394.062602583,
       "usage": {
-        "input_tokens": 527,
-        "output_tokens": 138,
+        "input_tokens": 535,
+        "output_tokens": 104,
         "cached_input_tokens": 256
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.250836,
-      "streaming_seconds": 1.11501,
-      "elapsed_seconds": 2.365845,
-      "ended_monotonic": 2189443.323035333
+      "ttft_seconds": 1.025767,
+      "streaming_seconds": 0.86899,
+      "elapsed_seconds": 1.894757,
+      "ended_monotonic": 2191395.957359958
     },
     {
       "case_id": "provider-retry",
@@ -980,14 +943,14 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "496cee13de7f6534312f2deca8b78fba9d6cd808dfb7aa7a6c715cb4c504b113",
-      "started_monotonic": 2189443.328994333,
+      "started_monotonic": 2191395.965559916,
       "usage": null,
       "finish_reason": null,
       "error": "ProviderError: Injected transient provider failure",
       "ttft_seconds": null,
       "streaming_seconds": null,
-      "elapsed_seconds": 2e-05,
-      "ended_monotonic": 2189443.329014041
+      "elapsed_seconds": 3.6e-05,
+      "ended_monotonic": 2191395.965595791
     },
     {
       "case_id": "provider-retry",
@@ -997,18 +960,18 @@
       "message_count": 2,
       "shared_prefix_messages": 2,
       "request_sha256": "496cee13de7f6534312f2deca8b78fba9d6cd808dfb7aa7a6c715cb4c504b113",
-      "started_monotonic": 2189443.329670416,
+      "started_monotonic": 2191395.96620175,
       "usage": {
         "input_tokens": 13007,
-        "output_tokens": 37,
+        "output_tokens": 32,
         "cached_input_tokens": 12800
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 0.819488,
-      "streaming_seconds": 0.079682,
-      "elapsed_seconds": 0.89917,
-      "ended_monotonic": 2189444.228840916
+      "ttft_seconds": 0.669951,
+      "streaming_seconds": 0.081404,
+      "elapsed_seconds": 0.751354,
+      "ended_monotonic": 2191396.717556125
     },
     {
       "case_id": "delivery-recovery",
@@ -1018,18 +981,18 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "bb73fdadeb41c7d8123a081cfaa4f48eec530afc54a8b6d916a1619dc1417fbb",
-      "started_monotonic": 2189444.236958291,
+      "started_monotonic": 2191396.725225791,
       "usage": {
         "input_tokens": 13007,
-        "output_tokens": 60,
+        "output_tokens": 52,
         "cached_input_tokens": 12800
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.298316,
-      "streaming_seconds": 0.076431,
-      "elapsed_seconds": 1.374748,
-      "ended_monotonic": 2189445.611705833
+      "ttft_seconds": 1.036839,
+      "streaming_seconds": 0.066297,
+      "elapsed_seconds": 1.103137,
+      "ended_monotonic": 2191397.828362375
     },
     {
       "case_id": "approval-resume",
@@ -1039,18 +1002,18 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "5b4d3aa53dacfdd59d99a4da1cbfa461d037f3625df53aa088d4b1f620e5aa1b",
-      "started_monotonic": 2189445.621136375,
+      "started_monotonic": 2191397.834076083,
       "usage": {
         "input_tokens": 13057,
-        "output_tokens": 105,
+        "output_tokens": 87,
         "cached_input_tokens": 13056
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 1.420004,
-      "streaming_seconds": 0.117381,
-      "elapsed_seconds": 1.537385,
-      "ended_monotonic": 2189447.158521
+      "ttft_seconds": 1.185109,
+      "streaming_seconds": 0.138275,
+      "elapsed_seconds": 1.323384,
+      "ended_monotonic": 2191399.157459708
     },
     {
       "case_id": "approval-resume",
@@ -1059,19 +1022,19 @@
       "attempt": 1,
       "message_count": 5,
       "shared_prefix_messages": 2,
-      "request_sha256": "f7b4964e6c8817873ace229f2f9642c1c0754388ee556a17f64a516e73d92a93",
-      "started_monotonic": 2189447.161738666,
+      "request_sha256": "f73a4e85c36ef82940a02af9a48ee3bf13608695ddbdde1fc9193d2fb122da60",
+      "started_monotonic": 2191399.161797916,
       "usage": {
-        "input_tokens": 13206,
-        "output_tokens": 167,
+        "input_tokens": 13188,
+        "output_tokens": 221,
         "cached_input_tokens": 13056
       },
       "finish_reason": "stop",
       "tool_call_count": 0,
-      "ttft_seconds": 1.929604,
-      "streaming_seconds": 1.017947,
-      "elapsed_seconds": 2.94755,
-      "ended_monotonic": 2189450.109288958
+      "ttft_seconds": 3.329184,
+      "streaming_seconds": 0.640869,
+      "elapsed_seconds": 3.970053,
+      "ended_monotonic": 2191403.131850458
     },
     {
       "case_id": "uncertain-reconcile",
@@ -1081,18 +1044,18 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "496ae2ab4f182fbcee420b5ae4ae00011c9bde7644619b210a51cd4d62c8fd53",
-      "started_monotonic": 2189450.111648875,
+      "started_monotonic": 2191403.13481425,
       "usage": {
         "input_tokens": 12705,
-        "output_tokens": 92,
+        "output_tokens": 90,
         "cached_input_tokens": 12544
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 0.904544,
-      "streaming_seconds": 0.21413,
-      "elapsed_seconds": 1.118674,
-      "ended_monotonic": 2189451.230322958
+      "ttft_seconds": 0.929046,
+      "streaming_seconds": 0.261504,
+      "elapsed_seconds": 1.19055,
+      "ended_monotonic": 2191404.325364291
     },
     {
       "case_id": "cancellation",
@@ -1102,18 +1065,18 @@
       "message_count": 2,
       "shared_prefix_messages": 1,
       "request_sha256": "b1a027e15e8baf7ec7e869a5197208f15bcf782b9cb63e59119881ec41b1d77c",
-      "started_monotonic": 2189451.2854345,
+      "started_monotonic": 2191404.378631875,
       "usage": {
         "input_tokens": 12692,
-        "output_tokens": 73,
+        "output_tokens": 83,
         "cached_input_tokens": 12544
       },
       "finish_reason": "tool_calls",
       "tool_call_count": 1,
-      "ttft_seconds": 0.835535,
-      "streaming_seconds": 0.105828,
-      "elapsed_seconds": 0.941363,
-      "ended_monotonic": 2189452.226797083
+      "ttft_seconds": 1.01275,
+      "streaming_seconds": 0.138585,
+      "elapsed_seconds": 1.151336,
+      "ended_monotonic": 2191405.5299675
     }
   ],
   "cases": [
@@ -1124,18 +1087,18 @@
           "status": "succeeded",
           "turn": 1,
           "step": 3,
-          "final_message_id": "final_c59b9fca8dbd4abc9778bd972daed103",
+          "final_message_id": "final_5ef11485641446069357f49db3d96493",
           "error": null
         }
       ],
       "turn_timings": [
         {
           "turn": 1,
-          "wall_seconds": 18.18732,
-          "model_seconds": 18.180881,
-          "tool_seconds": 1e-05,
-          "framework_seconds": 0.006429,
-          "framework_ratio": 0.000353
+          "wall_seconds": 16.685167,
+          "model_seconds": 16.681051,
+          "tool_seconds": 4e-06,
+          "framework_seconds": 0.004111,
+          "framework_ratio": 0.000246
         }
       ],
       "tool_invocations": [
@@ -1146,8 +1109,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.168947166,
-          "ended_monotonic": 2189314.168951125
+          "started_monotonic": 2191295.950157041,
+          "ended_monotonic": 2191295.950158166
         },
         {
           "name": "read_file",
@@ -1156,8 +1119,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.169020541,
-          "ended_monotonic": 2189314.169021583
+          "started_monotonic": 2191295.950196083,
+          "ended_monotonic": 2191295.950196541
         },
         {
           "name": "read_file",
@@ -1166,8 +1129,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.169058875,
-          "ended_monotonic": 2189314.169059708
+          "started_monotonic": 2191295.950214666,
+          "ended_monotonic": 2191295.950215041
         },
         {
           "name": "read_file",
@@ -1176,8 +1139,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.169089375,
-          "ended_monotonic": 2189314.169089833
+          "started_monotonic": 2191295.950233041,
+          "ended_monotonic": 2191295.950233375
         },
         {
           "name": "read_file",
@@ -1186,8 +1149,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.169123583,
-          "ended_monotonic": 2189314.169124333
+          "started_monotonic": 2191295.950248375,
+          "ended_monotonic": 2191295.950248833
         },
         {
           "name": "read_file",
@@ -1196,8 +1159,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.169151041,
-          "ended_monotonic": 2189314.169151541
+          "started_monotonic": 2191295.950262083,
+          "ended_monotonic": 2191295.950262291
         },
         {
           "name": "read_file",
@@ -1206,8 +1169,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.169179666,
-          "ended_monotonic": 2189314.16918025
+          "started_monotonic": 2191295.950275125,
+          "ended_monotonic": 2191295.950275416
         },
         {
           "name": "read_file",
@@ -1216,12 +1179,12 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189314.169225541,
-          "ended_monotonic": 2189314.169227208
+          "started_monotonic": 2191295.950297,
+          "ended_monotonic": 2191295.950297833
         }
       ],
       "delivered": [
-        "All eight files were read successfully in a single parallel batch, one read per file. Here is the consolidated report.\n\n**Inventory:** alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, eta.txt, theta.txt — all eight files exist and are readable. No read errors, missing files, or permission problems occurred.\n\n**Content findings:** Every file contains exactly the same single line of text: \"hello from nextloop\". The content is byte-identical across the set — no variation in wording, casing, spacing, or trailing content was observed. There are no differences to reconcile between files, so the consolidated content is effectively one message replicated eight times.\n\n**Interpretation:** The naming scheme (Greek letters alpha through theta) suggests these files form a deliberate test set — likely a fixture for verifying parallel file reads or tool-call batching. The repeated \"hello from nextloop\" payload is a placeholder greeting rather than meaningful document data, and \"nextloop\" may refer to the system or process that generated them.\n\n**Implications:** Because the files are uniform, no merge, deduplication, or conflict-resolution work is needed. If these files were intended to hold distinct data, they were written incorrectly or overwritten, since all eight collapsed to the same value. If they were intended as a round-trip test, the test passes: parallel reads return consistent, complete results.\n\n**Recommendation:** If differentiated content was expected, check the writing process upstream. Otherwise, the eight-file corpus can be treated as a single canonical string, \"hello from nextloop\", with eight redundant sources. No further reads are required, and each file was accessed exactly once as instructed."
+        "All eight files were read successfully. Consolidated report:\n\n**Files examined:** alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, eta.txt, theta.txt.\n\n**Finding:** Every file contains the exact same single-line content: `hello from nextloop`.\n\n**Details:**\n- alpha.txt — \"hello from nextloop\"\n- beta.txt — \"hello from nextloop\"\n- gamma.txt — \"hello from nextloop\"\n- delta.txt — \"hello from nextloop\"\n- epsilon.txt — \"hello from nextloop\"\n- zeta.txt — \"hello from nextloop\"\n- eta.txt — \"hello from nextloop\"\n- theta.txt — \"hello from nextloop\"\n\n**Analysis:** The eight files form a homogeneous set with no variation in content, length, or structure. Each is a plain-text file consisting of one greeting line referencing \"nextloop,\" suggesting they were generated by the same process or template, or serve as placeholders/fixtures in a test or loop-based workflow. There are no differences to reconcile, no missing files, and no read errors. If these files were expected to contain distinct data, the duplication itself is the key observation and may indicate an unintended copy operation or a misconfigured generation step. All eight reads completed in parallel without issues."
       ],
       "events": {
         "event_count": 38,
@@ -1239,10 +1202,15 @@
           "turn/end": 1,
           "delivery/committed": 1
         },
+        "model_ttft_ms": [
+          1833.899,
+          1839.307,
+          2750.493
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
-      "wall_seconds": 18.19,
+      "wall_seconds": 16.689,
       "passed": true,
       "expected_minimum_tools": 8
     },
@@ -1253,138 +1221,138 @@
           "status": "succeeded",
           "turn": 1,
           "step": 2,
-          "final_message_id": "final_5e601741fa2d4c41bee5c5c4570b6e66",
+          "final_message_id": "final_ff111de53cf441dc94c2cd06f5e1b210",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 2,
           "step": 2,
-          "final_message_id": "final_de866b5ec12448d6bf30e461860f05b9",
+          "final_message_id": "final_9a1f82141521487e842a82c41ee22efd",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 3,
           "step": 2,
-          "final_message_id": "final_9c06fc98b7b44131979fc9db80ab4ef4",
+          "final_message_id": "final_8988e8028f48434faa14100f4b110f5d",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 4,
           "step": 2,
-          "final_message_id": "final_b8c2eb46df4d40baa352cd3026c9e2de",
+          "final_message_id": "final_d14faf1786b9487ab9eb50c2d3e24bc8",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 5,
           "step": 2,
-          "final_message_id": "final_1700a560b0604a589fda74d9c029998c",
+          "final_message_id": "final_6ec90b807808423d87114bf526c29609",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 6,
           "step": 2,
-          "final_message_id": "final_7697fb1e69c04dcaa792c2ca43e13cde",
+          "final_message_id": "final_fecc1dfefe8441578aa1972697223abb",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 7,
           "step": 2,
-          "final_message_id": "final_667f2bc1e3094e38aaff3f11bf850ce2",
+          "final_message_id": "final_858647fd205640f6967d77e13c12d1c8",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 8,
           "step": 2,
-          "final_message_id": "final_54702fee849a4e04bf56d2b60d81afd6",
+          "final_message_id": "final_dc466bf278d5445da78526d44dda9285",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 9,
-          "step": 3,
-          "final_message_id": "final_ccf02581b4334f8bb02ed75ecc1dde49",
+          "step": 1,
+          "final_message_id": "final_f31998dc84144e5897f456706dcb36a0",
           "error": null
         }
       ],
       "turn_timings": [
         {
           "turn": 1,
-          "wall_seconds": 3.404956,
-          "model_seconds": 3.40099,
+          "wall_seconds": 2.727309,
+          "model_seconds": 2.724007,
           "tool_seconds": 2e-06,
-          "framework_seconds": 0.003964,
-          "framework_ratio": 0.001164
+          "framework_seconds": 0.003301,
+          "framework_ratio": 0.00121
         },
         {
           "turn": 2,
-          "wall_seconds": 2.843341,
-          "model_seconds": 2.838846,
+          "wall_seconds": 2.55066,
+          "model_seconds": 2.545023,
           "tool_seconds": 2e-06,
-          "framework_seconds": 0.004493,
-          "framework_ratio": 0.00158
+          "framework_seconds": 0.005635,
+          "framework_ratio": 0.002209
         },
         {
           "turn": 3,
-          "wall_seconds": 2.718732,
-          "model_seconds": 2.712312,
-          "tool_seconds": 4e-06,
-          "framework_seconds": 0.006416,
-          "framework_ratio": 0.00236
+          "wall_seconds": 2.554617,
+          "model_seconds": 2.549113,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.005502,
+          "framework_ratio": 0.002154
         },
         {
           "turn": 4,
-          "wall_seconds": 2.549579,
-          "model_seconds": 2.543415,
-          "tool_seconds": 2e-06,
-          "framework_seconds": 0.006162,
-          "framework_ratio": 0.002417
+          "wall_seconds": 3.034238,
+          "model_seconds": 3.031264,
+          "tool_seconds": 1e-06,
+          "framework_seconds": 0.002974,
+          "framework_ratio": 0.00098
         },
         {
           "turn": 5,
-          "wall_seconds": 3.298019,
-          "model_seconds": 3.293298,
-          "tool_seconds": 1e-06,
-          "framework_seconds": 0.00472,
-          "framework_ratio": 0.001431
+          "wall_seconds": 2.323275,
+          "model_seconds": 2.318115,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.005158,
+          "framework_ratio": 0.00222
         },
         {
           "turn": 6,
-          "wall_seconds": 2.477097,
-          "model_seconds": 2.469002,
-          "tool_seconds": 3e-06,
-          "framework_seconds": 0.008091,
-          "framework_ratio": 0.003266
+          "wall_seconds": 2.57278,
+          "model_seconds": 2.56643,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.006348,
+          "framework_ratio": 0.002467
         },
         {
           "turn": 7,
-          "wall_seconds": 2.644017,
-          "model_seconds": 2.635755,
-          "tool_seconds": 3e-06,
-          "framework_seconds": 0.00826,
-          "framework_ratio": 0.003124
+          "wall_seconds": 2.358401,
+          "model_seconds": 2.35118,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.007219,
+          "framework_ratio": 0.003061
         },
         {
           "turn": 8,
-          "wall_seconds": 2.572958,
-          "model_seconds": 2.565255,
-          "tool_seconds": 2e-06,
-          "framework_seconds": 0.007701,
-          "framework_ratio": 0.002993
+          "wall_seconds": 2.370486,
+          "model_seconds": 2.36192,
+          "tool_seconds": 3e-06,
+          "framework_seconds": 0.008563,
+          "framework_ratio": 0.003612
         },
         {
           "turn": 9,
-          "wall_seconds": 19.771603,
-          "model_seconds": 19.762715,
+          "wall_seconds": 6.546984,
+          "model_seconds": 6.539725,
           "tool_seconds": 0.0,
-          "framework_seconds": 0.008888,
-          "framework_ratio": 0.00045
+          "framework_seconds": 0.007259,
+          "framework_ratio": 0.001109
         }
       ],
       "tool_invocations": [
@@ -1395,8 +1363,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189330.505336458,
-          "ended_monotonic": 2189330.505338625
+          "started_monotonic": 2191310.3772285,
+          "ended_monotonic": 2191310.377230166
         },
         {
           "name": "read_file",
@@ -1405,8 +1373,8 @@
           },
           "turn": 2,
           "step": 1,
-          "started_monotonic": 2189333.771855333,
-          "ended_monotonic": 2189333.771857333
+          "started_monotonic": 2191313.057512625,
+          "ended_monotonic": 2191313.057515125
         },
         {
           "name": "read_file",
@@ -1415,8 +1383,8 @@
           },
           "turn": 3,
           "step": 1,
-          "started_monotonic": 2189336.524667333,
-          "ended_monotonic": 2189336.524670958
+          "started_monotonic": 2191315.627754208,
+          "ended_monotonic": 2191315.627756375
         },
         {
           "name": "read_file",
@@ -1425,8 +1393,8 @@
           },
           "turn": 4,
           "step": 1,
-          "started_monotonic": 2189339.203606875,
-          "ended_monotonic": 2189339.20360925
+          "started_monotonic": 2191318.781070916,
+          "ended_monotonic": 2191318.781071708
         },
         {
           "name": "read_file",
@@ -1435,8 +1403,8 @@
           },
           "turn": 5,
           "step": 1,
-          "started_monotonic": 2189342.530393708,
-          "ended_monotonic": 2189342.530394916
+          "started_monotonic": 2191321.201870791,
+          "ended_monotonic": 2191321.20187275
         },
         {
           "name": "read_file",
@@ -1445,8 +1413,8 @@
           },
           "turn": 6,
           "step": 1,
-          "started_monotonic": 2189345.106063708,
-          "ended_monotonic": 2189345.106066666
+          "started_monotonic": 2191323.569196041,
+          "ended_monotonic": 2191323.569198375
         },
         {
           "name": "read_file",
@@ -1455,8 +1423,8 @@
           },
           "turn": 7,
           "step": 1,
-          "started_monotonic": 2189347.594563625,
-          "ended_monotonic": 2189347.594566125
+          "started_monotonic": 2191326.035151458,
+          "ended_monotonic": 2191326.035153375
         },
         {
           "name": "read_file",
@@ -1465,41 +1433,60 @@
           },
           "turn": 8,
           "step": 1,
-          "started_monotonic": 2189350.090389583,
-          "ended_monotonic": 2189350.090391791
+          "started_monotonic": 2191328.59211375,
+          "ended_monotonic": 2191328.592116625
         }
       ],
       "delivered": [
-        "The `read_file` call succeeded. The actual result is that alpha.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nSo the file is a small plain-text file whose entire content is the greeting \"hello from nextloop\" (likely a test/fixture file from something called \"nextloop\"). No errors, no extra metadata — just that one string returned as the file contents.",
-        "The `read_file` call succeeded. The actual result is that beta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical in content to alpha.txt — same single-line greeting, same \"nextloop\" string. So both files appear to be matching test/fixture files rather than distinct content. No errors or surprises occurred during the read.",
-        "The `read_file` call succeeded. The actual result is that gamma.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to both alpha.txt and beta.txt — all three files so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
-        "The `read_file` call succeeded. The actual result is that delta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, and gamma.txt — all four files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
-        "The `read_file` call succeeded. The actual result is that epsilon.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, and delta.txt — all five files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
-        "The `read_file` call succeeded. The actual result is that zeta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, delta.txt, and epsilon.txt — all six files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
-        "The `read_file` call succeeded. The actual result is that eta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, and zeta.txt — all seven files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
-        "The `read_file` call succeeded. The actual result is that theta.txt contains a single line of text:\n\n```\nhello from nextloop\n```\n\nThis is identical to alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, and eta.txt — all eight files read so far have returned the exact same single-line greeting. No errors occurred; the read completed cleanly with the same \"hello from nextloop\" content.",
-        "# Consolidated Report: Eight-File Read Sequence\n\n## Summary\nAcross the session, I executed eight `read_file` calls, one per request, in this order: alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, eta.txt, and theta.txt. Every call completed successfully with no errors, exceptions, timeouts, or malformed output.\n\n## Findings\nThe actual result of each read was identical. All eight files contain exactly one line of text:\n\n```\nhello from nextloop\n```\n\nThere was no variation in content, formatting, encoding artifacts, or trailing metadata across any of the files. Each tool result was returned in the same form: a \"Contents of [filename]\" header followed by the single greeting line.\n\n## Observations\n1. **Uniformity**: alpha, beta, gamma, delta, epsilon, zeta, eta, and theta are byte-for-byte equivalent in content as far as the reads revealed. The Greek-letter naming pattern (alpha through theta, skipping iota) strongly suggests a generated fixture or test-file set, likely produced by a tool, harness, or demo environment called \"nextloop.\"\n2. **Reliability**: The `read_file` tool behaved deterministically — consistent output format, consistent success, no partial reads.\n3. **No hidden data**: Nothing in any result indicated additional lines, binary content, or truncation; the files appear to be minimal plain-text stubs.\n\n## Conclusion\nThe eight-file sequence was a repetitive verification exercise. The consolidated outcome: eight successful reads, zero failures, and one repeated string — \"hello from nextloop\" — as the sole content of every file. If differentiation between files was expected, it does not exist at the content level; any distinction would have to come from filenames, metadata, or filesystem properties, none of which were surfaced by these reads."
+        "I read alpha.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nThat's the entire contents — no error, no metadata beyond the contents, just that one greeting line.",
+        "I read beta.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nSo beta.txt has identical contents to alpha.txt from the previous request — just that one greeting line, with no errors or additional data.",
+        "I read gamma.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nLike alpha.txt and beta.txt, gamma.txt holds just that same greeting line — nothing more.",
+        "I read delta.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nThis matches alpha.txt, beta.txt, and gamma.txt — all four files contain the same single greeting line.",
+        "I read epsilon.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nSame as the previous four files (alpha through delta) — epsilon.txt contains only that one greeting line.",
+        "I read zeta.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nAs with alpha through epsilon, zeta.txt contains only that same single greeting line.",
+        "I read eta.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nConsistent with all the previous files (alpha through zeta), eta.txt contains only that same single greeting line.",
+        "I read theta.txt using read_file, and here is the actual result:\n\n- **Operation succeeded** — the file was found and read.\n- **Content:** The file contains a single line of plain text: `hello from nextloop`\n\nThis matches every previous file (alpha through eta) — theta.txt contains only that same single greeting line.",
+        "# Consolidated Report: Sequential File Read Operations (alpha.txt through theta.txt)\n\n## Summary\n\nOver the course of this session, I executed eight sequential `read_file` operations against eight distinct text files: alpha.txt, beta.txt, gamma.txt, delta.txt, epsilon.txt, zeta.txt, eta.txt, and theta.txt. This report consolidates the actual results of those eight tool calls.\n\n## Individual Results\n\nEvery single read operation completed successfully. None of the calls produced an error, timeout, permission failure, or \"file not found\" response. In each case, the tool returned the file's contents directly. The specific content returned was identical across all eight files: a single line of plain text reading `hello from nextloop`. No file contained additional lines, metadata, formatting, whitespace anomalies, or hidden content beyond that one greeting line.\n\n## Comparative Observations\n\nThe most striking finding is the uniformity of the dataset. Although the filenames follow the Greek alphabet (alpha, beta, gamma, delta, epsilon, zeta, eta, theta), the file contents do not vary in any way. Each read returned the same 19-character string. This suggests the files were either generated from a single template, copied from one another, or created intentionally as placeholder fixtures with identical payloads.\n\n## Operational Notes\n\nAll reads were independent of one another — no result depended on a prior result, and no file modified or was modified by any operation. The reads were performed strictly sequentially, one per user request, and each response described the actual tool output honestly rather than speculating about file structure.\n\n## Conclusions\n\nEight files were read; eight reads succeeded; eight identical contents were observed. The effective information content of the entire corpus is one line: `hello from nextloop`. No anomalies, discrepancies, or failures were recorded across the full sequence of operations."
       ],
       "events": {
-        "event_count": 167,
+        "event_count": 155,
         "event_types": {
           "input/accepted": 9,
           "turn/start": 9,
-          "step/start": 19,
-          "user/message": 11,
-          "assistant/attempt": 38,
-          "assistant/message": 19,
+          "step/start": 17,
+          "user/message": 9,
+          "assistant/attempt": 34,
+          "assistant/message": 17,
           "tool/call": 8,
           "tool/result": 8,
-          "step/end": 19,
+          "step/end": 17,
           "final/message": 9,
           "turn/end": 9,
           "delivery/committed": 9
         },
+        "model_ttft_ms": [
+          955.604,
+          700.413,
+          903.479,
+          943.506,
+          873.561,
+          865.132,
+          1512.204,
+          847.869,
+          899.883,
+          678.591,
+          939.194,
+          827.881,
+          829.636,
+          840.828,
+          1038.55,
+          742.281,
+          1100.751
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
-      "wall_seconds": 42.287,
+      "wall_seconds": 27.047,
       "passed": true,
       "expected_minimum_tools": 8
     },
@@ -1510,78 +1497,78 @@
           "status": "succeeded",
           "turn": 1,
           "step": 2,
-          "final_message_id": "final_f04fa477ba57402ead498969dbc19be4",
+          "final_message_id": "final_38584c2b16dc49ae8fb5c8b53cf7c4cb",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 2,
           "step": 2,
-          "final_message_id": "final_3048942b7be94584b5b827d91e82ac2d",
+          "final_message_id": "final_118f3db515ea4645a8bdb4f99bf0d18c",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 3,
           "step": 2,
-          "final_message_id": "final_82061e19b2ef4591ae1576a06b00019f",
+          "final_message_id": "final_df1eaee225324eff811f97679db6ef43",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 4,
           "step": 2,
-          "final_message_id": "final_a4c3e360450f4b87983c66d7dec1fd18",
+          "final_message_id": "final_9ce0f15eafc544c68e43712f94d76a7e",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 5,
           "step": 1,
-          "final_message_id": "final_b7b5fbf9ce944624aaf4c77676cfa007",
+          "final_message_id": "final_e9bf08e385a34b3fa38280bd4dca23b6",
           "error": null
         }
       ],
       "turn_timings": [
         {
           "turn": 1,
-          "wall_seconds": 3.579148,
-          "model_seconds": 3.576899,
-          "tool_seconds": 1e-06,
-          "framework_seconds": 0.002248,
-          "framework_ratio": 0.000628
+          "wall_seconds": 2.154107,
+          "model_seconds": 2.15092,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.003185,
+          "framework_ratio": 0.001478
         },
         {
           "turn": 2,
-          "wall_seconds": 1.823095,
-          "model_seconds": 1.821036,
+          "wall_seconds": 1.845963,
+          "model_seconds": 1.842707,
           "tool_seconds": 1e-06,
-          "framework_seconds": 0.002058,
-          "framework_ratio": 0.001129
+          "framework_seconds": 0.003254,
+          "framework_ratio": 0.001763
         },
         {
           "turn": 3,
-          "wall_seconds": 2.620027,
-          "model_seconds": 2.615936,
+          "wall_seconds": 2.215527,
+          "model_seconds": 2.210752,
           "tool_seconds": 2e-06,
-          "framework_seconds": 0.004089,
-          "framework_ratio": 0.001561
+          "framework_seconds": 0.004774,
+          "framework_ratio": 0.002155
         },
         {
           "turn": 4,
-          "wall_seconds": 3.420497,
-          "model_seconds": 3.418032,
+          "wall_seconds": 3.493588,
+          "model_seconds": 3.489229,
           "tool_seconds": 1e-06,
-          "framework_seconds": 0.002464,
-          "framework_ratio": 0.00072
+          "framework_seconds": 0.004357,
+          "framework_ratio": 0.001247
         },
         {
           "turn": 5,
-          "wall_seconds": 4.860945,
-          "model_seconds": 4.859259,
+          "wall_seconds": 3.915913,
+          "model_seconds": 3.912359,
           "tool_seconds": 0.0,
-          "framework_seconds": 0.001686,
-          "framework_ratio": 0.000347
+          "framework_seconds": 0.003554,
+          "framework_ratio": 0.000907
         }
       ],
       "tool_invocations": [
@@ -1592,8 +1579,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189373.526693458,
-          "ended_monotonic": 2189373.526694
+          "started_monotonic": 2191337.452230625,
+          "ended_monotonic": 2191337.452232625
         },
         {
           "name": "calculate",
@@ -1602,8 +1589,8 @@
           },
           "turn": 2,
           "step": 1,
-          "started_monotonic": 2189376.074719583,
-          "ended_monotonic": 2189376.074720416
+          "started_monotonic": 2191339.427758916,
+          "ended_monotonic": 2191339.427759833
         },
         {
           "name": "calculate",
@@ -1612,8 +1599,8 @@
           },
           "turn": 3,
           "step": 1,
-          "started_monotonic": 2189378.116730208,
-          "ended_monotonic": 2189378.116732416
+          "started_monotonic": 2191341.578460625,
+          "ended_monotonic": 2191341.578462416
         },
         {
           "name": "calculate",
@@ -1622,16 +1609,16 @@
           },
           "turn": 4,
           "step": 1,
-          "started_monotonic": 2189380.655345708,
-          "ended_monotonic": 2189380.6553465
+          "started_monotonic": 2191344.015032333,
+          "ended_monotonic": 2191344.015033708
         }
       ],
       "delivered": [
         "The result of 2+2 is **4**.",
         "The result of 40+2 is **42**.",
-        "The result of 2+2 is **4** — identical to the first calculation. Both evaluations agree, confirming the result is consistent.",
-        "The result of 40+2 is **42**.\n\nComparison of all four tool results:\n1. 2+2 → **4**\n2. 40+2 → **42**\n3. 2+2 → **4**\n4. 40+2 → **42**\n\nThe results are fully consistent: each repeated expression produced an identical value (4 and 42 respectively), and the two distinct expressions differ by exactly 38 (42 − 4 = 38), as expected since 40 differs from 2 by 38.",
-        "The calculation history across this conversation consists of four tool invocations involving two distinct arithmetic expressions. The session began with a request to evaluate 2+2, which returned 4 — a straightforward sum confirming basic addition of two equal addends. The second request shifted to a slightly larger expression, 40+2, which returned 42, illustrating how adding 2 to a round two-digit number produces the next integer beyond it.\n\nThe third step deliberately repeated the first expression, 2+2, again yielding 4. This redundancy served a verification purpose: it demonstrated determinism, meaning the calculation tool produces identical outputs for identical inputs, with no state, rounding variance, or hidden randomness influencing the result.\n\nThe fourth and final step repeated 40+2, once again returning 42. Comparing all four results reveals a clean pattern: two unique expressions, each evaluated twice, with perfect internal consistency. The difference between the two distinct outcomes is 38, exactly the gap between 40 and 2, confirming the arithmetic is internally coherent. Overall, the history shows a small but rigorous sequence of checks establishing reliability through repetition."
+        "The result of 2+2 is **4** again — identical to the first result, so they match.",
+        "The result of 40+2 is **42** again. Comparing all four tool results:\n\n1. 2+2 → 4\n2. 40+2 → 42\n3. 2+2 → 4 (repeat of #1)\n4. 40+2 → 42 (repeat of #2)\n\nRepeated expressions returned identical results — the calculations are consistent. The two distinct expressions differ by 38 (42 − 4).",
+        "Across this conversation, the calculate tool was invoked four times in total, covering two distinct arithmetic expressions, each evaluated twice.\n\nThe first call evaluated the expression \"2+2\" and returned 4. The second call evaluated \"40+2\" and returned 42. The third call repeated the first expression, \"2+2,\" and again produced 4, which was compared against the very first result and found to be identical. The fourth and final call repeated \"40+2,\" returning 42 once more, matching the second result exactly.\n\nTaken together, the history shows a small consistency check: each repeated evaluation reproduced its original outcome, so the tool's answers were stable across the session. There were no discrepancies, rounding issues, or unexpected outputs at any point. Numerically, the two unique results are 4 and 42. The difference between them is 38, since 42 minus 4 equals 38, which follows naturally because the second expression adds 38 more than the first. In short, the calculation history consists of four calls, two unique expressions, two unique results (4 and 42), and perfect reproducibility across repeats."
       ],
       "events": {
         "event_count": 83,
@@ -1649,10 +1636,21 @@
           "turn/end": 5,
           "delivery/committed": 5
         },
+        "model_ttft_ms": [
+          1002.822,
+          998.915,
+          818.41,
+          797.09,
+          1121.551,
+          764.684,
+          1361.74,
+          1404.094,
+          1178.734
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
-      "wall_seconds": 16.309,
+      "wall_seconds": 13.631,
       "passed": true,
       "expected_minimum_tools": 4
     },
@@ -1663,63 +1661,63 @@
           "status": "succeeded",
           "turn": 1,
           "step": 2,
-          "final_message_id": "final_90c01f1e681542729cc25ae918bb1ac3",
+          "final_message_id": "final_e3cc1aa3eb9444c783ec3bfe0a4c5eda",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 2,
           "step": 2,
-          "final_message_id": "final_8e56ae581f4941bcbd174089ba087bf8",
+          "final_message_id": "final_49de31a83e1b4f188ba4dad54e854846",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 3,
           "step": 1,
-          "final_message_id": "final_eeea00451bcc41ae821ef1d6c76c2896",
+          "final_message_id": "final_23ebc4c669684e079910edd73ecff8b7",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 4,
           "step": 2,
-          "final_message_id": "final_e46a86a2d8d14aee839c00ac965b29cc",
+          "final_message_id": "final_14262ef68bc244e0b0adc8e5b937b161",
           "error": null
         }
       ],
       "turn_timings": [
         {
           "turn": 1,
-          "wall_seconds": 2.206736,
-          "model_seconds": 2.204828,
-          "tool_seconds": 1e-06,
-          "framework_seconds": 0.001907,
-          "framework_ratio": 0.000864
+          "wall_seconds": 2.194724,
+          "model_seconds": 2.191913,
+          "tool_seconds": 2e-06,
+          "framework_seconds": 0.00281,
+          "framework_ratio": 0.00128
         },
         {
           "turn": 2,
-          "wall_seconds": 12.693132,
-          "model_seconds": 12.690835,
+          "wall_seconds": 10.896145,
+          "model_seconds": 10.893017,
           "tool_seconds": 0.0,
-          "framework_seconds": 0.002296,
-          "framework_ratio": 0.000181
+          "framework_seconds": 0.003129,
+          "framework_ratio": 0.000287
         },
         {
           "turn": 3,
-          "wall_seconds": 7.878481,
-          "model_seconds": 7.875815,
+          "wall_seconds": 6.432598,
+          "model_seconds": 6.430549,
           "tool_seconds": 0.0,
-          "framework_seconds": 0.002666,
-          "framework_ratio": 0.000338
+          "framework_seconds": 0.002049,
+          "framework_ratio": 0.000319
         },
         {
           "turn": 4,
-          "wall_seconds": 14.187587,
-          "model_seconds": 14.182757,
+          "wall_seconds": 10.512729,
+          "model_seconds": 10.509432,
           "tool_seconds": 0.0,
-          "framework_seconds": 0.00483,
-          "framework_ratio": 0.00034
+          "framework_seconds": 0.003297,
+          "framework_ratio": 0.000314
         }
       ],
       "tool_invocations": [
@@ -1730,8 +1728,8 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189389.02758775,
-          "ended_monotonic": 2189389.027588583
+          "started_monotonic": 2191351.221212458,
+          "ended_monotonic": 2191351.221213583
         },
         {
           "name": "read_file",
@@ -1740,15 +1738,15 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189389.02761475,
-          "ended_monotonic": 2189389.027615208
+          "started_monotonic": 2191351.221247208,
+          "ended_monotonic": 2191351.221247708
         }
       ],
       "delivered": [
-        "Both files read successfully:\n\n- **alpha.txt**: `hello from nextloop`\n- **beta.txt**: `hello from nextloop`\n\nBoth files contain the same content.",
-        "**Structured Analysis: alpha.txt vs. beta.txt**\n\n**1. Content Summary**\nBoth files were read successfully via `read_file`. Each contains the single line: `hello from nextloop`.\n\n**2. Comparative Findings**\n- **Equivalence:** The contents are byte-identical in observable output. There is no divergence in text, length, or structure.\n- **Length:** Each file holds one short line (19 characters including spaces), suggesting placeholder, test, or seed data rather than substantive documents.\n- **Naming:** The Greek-letter naming convention (alpha/beta) typically implies a primary/secondary pair or two variants — yet here the variants are indistinguishable.\n\n**3. Interpretation**\nThe identical content likely indicates one of three scenarios: (a) a file-copy or duplication event, (b) synchronized outputs from a repeated process (\"nextloop\" hints at an iterative loop writing the same greeting each cycle), or (c) intentional fixtures for testing read/compare operations.\n\n**4. Limitations**\nWithout metadata (timestamps, sizes, hashes) or directory context, I cannot determine which file was written first, whether they are hard links, or if differences exist beyond the rendered text (e.g., trailing newlines, encoding).\n\n**5. Conclusion**\nThe two files are functionally identical in content. Any meaningful next step — diffing, deduplication, or provenance tracing — would require additional inspection beyond a plain read.",
-        "**Extension: Risks and Mitigations**\n\n**Risk 1 — Silent Data Duplication**\nIdentical contents across logically distinct files (alpha/beta) can mask a copy/paste or sync error, where one file should have held unique data. Downstream jobs reading \"beta\" may unknowingly process alpha's data twice.\n\n*Mitigation:* Enforce a write-time uniqueness check (hash comparison) and add validation that flags byte-identical siblings unless explicitly expected.\n\n**Risk 2 — Loop/Process Misconfiguration**\nThe string \"nextloop\" suggests an iterative process. If every loop iteration writes the same output path or content, a stuck loop could be overwriting genuine results with placeholders.\n\n*Mitigation:* Include iteration IDs or timestamps in written content, monitor file modification cadence, and alert when output content is invariant across N iterations.\n\n**Risk 3 — Placeholder Data in Production**\nTest fixtures (\"hello from ...\") leaking into production pipelines can cause jobs to succeed while processing meaningless input — a silent failure mode worse than a crash.\n\n*Mitigation:* Gate fixture data behind separate directories/environment markers, and schema-validate file contents before consumption.\n\n**Risk 4 — Incomplete Verification**\nPlain reads cannot reveal encoding differences, trailing newlines, permissions, or hard-link relationships. Decisions based on apparent equality may be wrong.\n\n*Mitigation:* Use checksums (e.g., SHA-256) plus metadata comparison (size, mtime, inode) before declaring equivalence.\n\n**Risk 5 — Provenance Loss**\nWithout timestamps or ownership metadata, the authoritative source cannot be identified, complicating rollback or auditing.\n\n*Mitigation:* Adopt append-only logging of file writes (as with event logs) so origin and sequence are reconstructable.\n\n**Overall:** The observed equality is benign in isolation but represents a class of silent-failure risks best addressed with hashing, instrumentation, and environment separation.",
-        "**Final Session Summary**\n\n**1. Objective**\nThe session began with a simple task: read `alpha.txt` and `beta.txt` using the `read_file` tool, then progressively analyze and expand on the results without further tool calls.\n\n**2. Tool Execution**\nBoth files were read in a single parallel tool block. Results showed each file contains the identical one-line string: `hello from nextloop`. No errors or missing-file issues occurred, and no other tools were invoked during the session.\n\n**3. Analysis Delivered**\nA structured analysis compared the two files and found them equivalent in observable content. Key interpretations offered: (a) a duplication/copy event, (b) output from an iterative loop process writing the same greeting, or (c) intentional test fixtures. Limitations were noted — plain reads cannot expose encoding, trailing characters, timestamps, or inode/hard-link relationships, so provenance and true byte-level equality remain unverified.\n\n**4. Risks and Mitigations Extension**\nFive risks were identified with mitigations: silent data duplication (hash checks at write time); loop/process misconfiguration given the \"nextloop\" string (iteration IDs and cadence monitoring); placeholder data leaking into production (environment separation and schema validation); incomplete verification via plain reads (SHA-256 plus metadata comparison); and provenance loss (append-only write logging). The overarching theme: identical files are benign in isolation but exemplify silent-failure risks.\n\n**5. Session Notes**\nA protocol correction instructed that responses be complete and shorter after a prior truncation. Accordingly, later responses were delivered in full but more concisely. Overall, the session fulfilled all requests: two successful file reads, one comparative analysis, and one risk/mitigation extension — all preserved in the append-only event log."
+        "Both files read successfully:\n\n- **alpha.txt**: \"hello from nextloop\"\n- **beta.txt**: \"hello from nextloop\"\n\nBoth files contain identical content.",
+        "**Structured Analysis of File Read Results**\n\n**Overview**\nTwo independent read operations were executed via parallel tool calls, retrieving `alpha.txt` and `beta.txt`. Both operations succeeded without errors.\n\n**Findings**\n- `alpha.txt` returned: \"hello from nextloop\"\n- `beta.txt` returned: \"hello from nextloop\"\n\n**Comparison**\nThe contents are byte-for-byte identical in text. Neither file contains additional lines, metadata, or variation — each is a single-line message.\n\n**Interpretation**\nThe phrase \"hello from nextloop\" suggests a greeting or test string, likely a placeholder used to verify the file-reading pipeline. The duplication across both files may indicate: (1) a test fixture setup where both files were seeded with the same content, (2) a copy or sync operation between files, or (3) simply coincidental test data.\n\n**Limitations**\nOnly content was observed; file size, encoding, timestamps, and permissions were not inspected, so no conclusions can be drawn about file provenance or history.\n\n**Conclusion**\nBoth files exist, are readable, and hold identical single-line content. Further analysis would require metadata or directory context.",
+        "**Extended Analysis: Risks and Mitigations**\n\n**Risk 1 — Ambiguous Data Provenance**\n*Risk:* Identical content in both files makes it impossible to determine whether `beta.txt` was copied from `alpha.txt`, independently generated, or synced by an external process. Acting on assumptions could corrupt downstream workflows.\n*Mitigation:* Record file hashes, timestamps, and inode metadata in future inspections; maintain a manifest when files are created or duplicated.\n\n**Risk 2 — Placeholder Data in Production Paths**\n*Risk:* Test strings like \"hello from nextloop\" in files named generically (`alpha`, `beta`) may indicate fixture data leaking into a live environment, where pipelines expecting real content could silently process garbage.\n*Mitigation:* Enforce naming conventions or directory segregation (e.g., `/fixtures/`) for test data; add schema or content validation at pipeline entry points.\n\n**Risk 3 — Silent Duplication / Drift Blindness**\n*Risk:* If these files are meant to differ, identical content signals a failed write, a sync bug, or a race condition that will go undetected without comparison checks.\n*Mitigation:* Introduce automated diff checks in CI; alert when files expected to diverge remain byte-identical across runs.\n\n**Risk 4 — Truncated or Partial Reads**\n*Risk:* The reads returned single lines; if actual files are larger, truncation or encoding issues could hide content, biasing conclusions.\n*Mitigation:* Verify byte counts against content length; read with explicit offsets or streaming for large files.\n\n**Risk 5 — Overconfident Conclusions from Limited Evidence**\n*Risk:* Prior analysis inferred \"test fixture\" from one string — a hypothesis, not a fact. Decisions built on it carry confirmation-bias risk.\n*Mitigation:* Label inferences explicitly as hypotheses; confirm with directory listings, version history, or owner documentation before acting.\n\n**Residual Risk:** Low overall, given the harmless content — but the process gaps above generalize to any file-handling workflow.",
+        "**Session Summary**\n\n**1. File Reading Task**\nTwo parallel `read_file` calls were executed on `alpha.txt` and `beta.txt`. Both succeeded, and each file contained the identical single-line content: *\"hello from nextloop\"*.\n\n**2. Structured Analysis**\nA comparison of the results found the files byte-for-byte identical in text, with no additional lines or metadata. The content was interpreted as a likely greeting/test string used to verify the file-reading pipeline, with duplication possibly indicating fixture seeding, copying, or sync behavior. Limitations were noted: no file sizes, encodings, timestamps, or permissions were inspected, so no conclusions about provenance were possible.\n\n**3. Risks and Mitigations Extension**\nFive risks were identified with corresponding mitigations:\n- **Ambiguous provenance** — record hashes, timestamps, and manifests.\n- **Placeholder data in production** — segregate fixtures and validate content at pipeline entry.\n- **Silent duplication/drift** — automated diff checks in CI.\n- **Truncated or partial reads** — verify byte counts; use streaming for large files.\n- **Overconfident inference** — label hypotheses explicitly and confirm with context before acting.\n\nResidual risk was assessed as low given the harmless content, though the process gaps generalize to broader file-handling workflows.\n\n**Overall Outcome**\nThe session moved from data retrieval (identical file contents), to interpretation (test-string hypothesis with stated limits), to risk management (provenance, data hygiene, and inference discipline). No further actions were taken, and no pending work remains."
       ],
       "events": {
         "event_count": 65,
@@ -1766,10 +1764,19 @@
           "turn/end": 4,
           "delivery/committed": 4
         },
+        "model_ttft_ms": [
+          994.795,
+          733.732,
+          2033.15,
+          1957.346,
+          1093.362,
+          1855.413,
+          1807.239
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
-      "wall_seconds": 36.969,
+      "wall_seconds": 30.041,
       "passed": true,
       "expected_minimum_tools": 2
     },
@@ -1780,33 +1787,33 @@
           "status": "succeeded",
           "turn": 1,
           "step": 3,
-          "final_message_id": "final_a7e1c5d8fffa4584b48250ad19babfb2",
+          "final_message_id": "final_94e2a3ffb32f41bfb9ae4718758d4011",
           "error": null
         },
         {
           "status": "succeeded",
           "turn": 2,
           "step": 2,
-          "final_message_id": "final_b714e35d0d8747e487e1a3186fe1c23b",
+          "final_message_id": "final_11b3f606b810400ca988f49eb3818ade",
           "error": null
         }
       ],
       "turn_timings": [
         {
           "turn": 1,
-          "wall_seconds": 5.875842,
-          "model_seconds": 5.869754,
-          "tool_seconds": 4e-06,
-          "framework_seconds": 0.006084,
-          "framework_ratio": 0.001035
+          "wall_seconds": 7.399474,
+          "model_seconds": 7.3929,
+          "tool_seconds": 5e-06,
+          "framework_seconds": 0.006569,
+          "framework_ratio": 0.000888
         },
         {
           "turn": 2,
-          "wall_seconds": 9.276114,
-          "model_seconds": 9.271379,
+          "wall_seconds": 5.229587,
+          "model_seconds": 5.223512,
           "tool_seconds": 0.0,
-          "framework_seconds": 0.004735,
-          "framework_ratio": 0.00051
+          "framework_seconds": 0.006075,
+          "framework_ratio": 0.001162
         }
       ],
       "tool_invocations": [
@@ -1817,13 +1824,13 @@
           },
           "turn": 1,
           "step": 1,
-          "started_monotonic": 2189425.928668583,
-          "ended_monotonic": 2189425.928672583
+          "started_monotonic": 2191381.759302666,
+          "ended_monotonic": 2191381.759308083
         }
       ],
       "delivered": [
-        "Read `big.txt`: it's a 20,000-byte file consisting entirely of filler — the character `x` repeated end to end, with no other content or structure. Nothing actionable in it; tool result preserved as event `evt_5dafc2efecbb4d61af1abde30688a478`.",
-        "Page metadata from the actual result:\n\n- **event_id:** `evt_5dafc2efecbb4d61af1abde30688a478`\n- **offset:** 256\n- **total_bytes:** 20000\n- **next_offset:** 640\n\nSo this page returned 512 bytes (256 → 640) of the 20,000-byte result, and the content is, as before, just the `x` filler characters."
+        "Done. `big.txt` is 20,000 bytes, and its entire content is a solid run of the letter `x` (I verified the middle of the file too — no other text or data is hidden in it). Since it's too large to display in one result, it was returned as a truncated preview (event `evt_e0758466fa0346b89ff4bce9d8961818`), with the full content readable via byte-range paging.",
+        "Page metadata from the actual result:\n\n- **event_id**: `evt_e0758466fa0346b89ff4bce9d8961818`\n- **offset**: 256 (the requested start offset)\n- **total_bytes**: 20000 (full size of the committed tool result)\n- **next_offset**: 640\n\nNotably, although a limit of 512 was requested, the page advanced only from 256 to 640 — i.e., 384 bytes were returned, fewer than the requested limit. The page content itself is, as before, a solid run of `x` characters."
       ],
       "events": {
         "event_count": 43,
@@ -1841,6 +1848,13 @@
           "turn/end": 2,
           "delivery/committed": 2
         },
+        "model_ttft_ms": [
+          1617.396,
+          1957.816,
+          1128.653,
+          1020.858,
+          2437.443
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
@@ -1860,7 +1874,7 @@
       ],
       "tool_invocations": [],
       "delivered": [
-        "The provided task background is empty — the message contains only a placeholder (\"[Task summary]\") with no actual content, details, or context.\n\n**Current objective:** Cannot be determined. No task background, data, or goal was included, so there is nothing to summarize or act on. Please provide the actual task background or content, and I can summarize it and restate the objective."
+        "The task background contains no actual content — only placeholder \"x\" characters — so there is nothing to summarize or act on.\n\nPlease provide the real task background or content (the text, file, or instructions you want handled), and I'll review and summarize it concisely."
       ],
       "events": {
         "event_count": 14,
@@ -1877,6 +1891,10 @@
           "turn/end": 1,
           "delivery/committed": 1
         },
+        "model_ttft_ms": [
+          1236.354,
+          1025.945
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
@@ -1890,18 +1908,18 @@
           "status": "succeeded",
           "turn": 1,
           "step": 1,
-          "final_message_id": "final_e1e35c8f7d9546b0b4cbfcec3a7f4568",
+          "final_message_id": "final_b1b194eebfad4d94be4dfe1ea110e32a",
           "error": null
         }
       ],
       "turn_timings": [
         {
           "turn": 1,
-          "wall_seconds": 0.902086,
-          "model_seconds": 0.89919,
+          "wall_seconds": 0.754219,
+          "model_seconds": 0.75139,
           "tool_seconds": 0.0,
-          "framework_seconds": 0.002896,
-          "framework_ratio": 0.00321
+          "framework_seconds": 0.002829,
+          "framework_ratio": 0.00375
         }
       ],
       "tool_invocations": [],
@@ -1939,11 +1957,14 @@
           "delivery/unknown": 1,
           "delivery/committed": 1
         },
+        "model_ttft_ms": [
+          1037.173
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
       "recovered_ids": [
-        "final_50f5702c72d1495fa06a9a739fd880ed"
+        "final_b6fc9d24087140af9647ad19c7b1731e"
       ],
       "provider_calls_during_recovery": 0,
       "passed": true
@@ -1971,7 +1992,7 @@
         }
       ],
       "delivered": [
-        "The protected write completed successfully (value 'approved'), and there's no pending operation in the log to resume. Nothing else was in progress — let me know what specific operation you'd like to continue, and I'll proceed."
+        "The protected write with value 'approved' already completed successfully, and no further operation was specified to resume. There's no pending work on my end — let me know what operation you'd like to proceed with next."
       ],
       "events": {
         "event_count": 26,
@@ -1991,6 +2012,10 @@
           "final/message": 1,
           "delivery/committed": 1
         },
+        "model_ttft_ms": [
+          1185.42,
+          3329.727
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
@@ -2042,6 +2067,9 @@
           "turn/end": 2,
           "reconciliation/result": 1
         },
+        "model_ttft_ms": [
+          929.624
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },
@@ -2081,6 +2109,9 @@
           "step/end": 1,
           "turn/end": 1
         },
+        "model_ttft_ms": [
+          1012.95
+        ],
         "unclosed_steps": [],
         "unexpected_step_ends": []
       },

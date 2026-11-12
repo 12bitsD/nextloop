@@ -320,6 +320,7 @@ class ModelCallTrace:
     retryable: bool | None
     code: str | None
     source_seqs: tuple[int, ...] = ()
+    ttft_ms: float | None = None
 
 
 @dataclass(frozen=True)

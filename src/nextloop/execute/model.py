@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from functools import partial
+from typing import Any
 
 from ..contracts import (
     CandidateRequest,
@@ -65,24 +65,41 @@ class ModelCaller:
                 if reason is not None:
                     return ModelCallResult(events=tuple(events), budget_reason=reason)
             preview = self.preview if purpose == "inference" else None
-            streaming_complete = (
-                getattr(self.provider, "complete_with_preview", None) if preview else None
-            )
+            streaming_complete = getattr(self.provider, "complete_with_preview", None)
             if preview is not None:
                 preview.attempt_started(request, attempt, streaming=callable(streaming_complete))
             started_at = utc_now()
             started = time.monotonic()
+            first_output = None
+
+            def emit(
+                delta: Mapping[str, Any],
+                *,
+                request: CandidateRequest = request,
+                attempt: int = attempt,
+                preview: PreviewChannel | None = preview,
+            ) -> None:
+                nonlocal first_output
+                channel = delta.get("channel")
+                if first_output is None and (
+                    (channel in ("content", "refusal") and delta.get("delta"))
+                    or channel == "tool_call"
+                ):
+                    first_output = time.monotonic()
+                if preview is not None:
+                    preview.delta(request, attempt, delta)
+
             events.append(
                 self._event(request, attempt, "started", purpose=purpose, started_at=started_at)
             )
             try:
-                if preview is not None and callable(streaming_complete):
+                if callable(streaming_complete):
                     response = await await_with_cancel(
                         streaming_complete(
                             request,
                             attempt=attempt,
                             cancel=cancel,
-                            emit=partial(preview.delta, request, attempt),
+                            emit=emit,
                         ),
                         cancel,
                         _CancelledByUser,
@@ -101,7 +118,15 @@ class ModelCaller:
                     if current is not None and current.cancelling():
                         raise
                 events.append(
-                    self._timed_event(request, attempt, "cancelled", purpose, started_at, started)
+                    self._timed_event(
+                        request,
+                        attempt,
+                        "cancelled",
+                        purpose,
+                        started_at,
+                        started,
+                        **_ttft_payload(started, first_output),
+                    )
                 )
                 if preview is not None:
                     preview.attempt_ended(request, attempt, status="cancelled")
@@ -119,6 +144,7 @@ class ModelCaller:
                         retryable=exc.retryable,
                         partial_output=exc.partial_output,
                         code=exc.code,
+                        **_ttft_payload(started, first_output),
                     )
                 )
                 will_retry = (
@@ -155,6 +181,7 @@ class ModelCaller:
                         started_at,
                         started,
                         error=str(error),
+                        **_ttft_payload(started, first_output),
                     )
                 )
                 if preview is not None:
@@ -172,6 +199,7 @@ class ModelCaller:
                     finish_reason=response.finish_reason.value,
                     usage=usage_to_data(response.usage),
                     tool_call_count=len(response.tool_calls),
+                    **_ttft_payload(started, first_output),
                 )
             )
             if preview is not None:
@@ -227,6 +255,12 @@ class ModelCaller:
                 **payload,
             },
         )
+
+
+def _ttft_payload(started: float, first_output: float | None) -> dict[str, float]:
+    if first_output is None:
+        return {}
+    return {"ttft_ms": round((first_output - started) * 1000, 3)}
 
 
 class _CancelledByUser(Exception):

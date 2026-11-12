@@ -42,6 +42,25 @@ from nextloop.events.project import message_to_data
 from nextloop.events.trace import project_traces
 
 
+class StreamingProvider:
+    model_id = "streaming-test-model"
+
+    def __init__(self, error=False):
+        self.error = error
+
+    async def complete(self, request, *, attempt, cancel):
+        raise AssertionError("The streaming capability should be used without a PreviewSink")
+
+    async def complete_with_preview(self, request, *, attempt, cancel, emit):
+        emit({"channel": "reasoning", "delta": "not user-visible output"})
+        await asyncio.sleep(0.005)
+        emit({"channel": "content", "delta": "do"})
+        emit({"channel": "content", "delta": "ne"})
+        if self.error:
+            raise ProviderError("stream failed", partial_output=True)
+        return ModelResponse(content="done")
+
+
 class Collector:
     def __init__(self):
         self.records = []
@@ -159,6 +178,7 @@ async def test_live_history_and_tool_fields():
     assert model.purpose == "inference"
     assert model.timing_source == TimingSource.MEASURED
     assert model.duration_ms >= 0
+    assert model.ttft_ms is None
     assert tool.name == "echo"
     assert tool.arguments == '{"text": "hi"}'
     assert tool.result == "echo:hi"
@@ -175,6 +195,59 @@ async def test_live_history_and_tool_fields():
     assert project_traces(events) == tuple(collector.records)
     assert await store.get_turn("s", 1) == turn
     assert await store.get_turn("s", 99) is None
+    await store.close()
+
+
+async def test_ttft_is_measured_without_preview_and_exported():
+    collector = Collector()
+    store = observed(collector)
+    outcome = await AgentLoop().run(context(store, StreamingProvider(), tools(), FakeDelivery()))
+    await store.flush(1)
+
+    assert outcome.status == TurnStatus.SUCCEEDED
+    model = next(record for record in collector.records if isinstance(record, ModelCallTrace))
+    assert model.ttft_ms is not None
+    assert 0 < model.ttft_ms < model.duration_ms
+    terminal = next(
+        event
+        for event in await store.load_recovery("s")
+        if event.event_type == EventType.ASSISTANT_ATTEMPT and event.payload["status"] == "success"
+    )
+    assert terminal.payload["ttft_ms"] == model.ttft_ms
+    stream = io.StringIO()
+    from nextloop import StdoutExporter
+
+    StdoutExporter(stream).export(model)
+    assert json.loads(stream.getvalue())["data"]["ttft_ms"] == model.ttft_ms
+    await store.close()
+
+
+async def test_ttft_ignores_preview_failures_and_partial_stream_errors():
+    class BrokenSink:
+        def publish(self, event):
+            raise RuntimeError("preview consumer failed")
+
+    collector = Collector()
+    store = observed(collector)
+    outcome = await AgentLoop().run(
+        TurnContext(
+            session_id="s",
+            initial_input="hello",
+            config=config(),
+            store=store,
+            provider=StreamingProvider(error=True),
+            tools=tools(),
+            delivery=FakeDelivery(),
+            preview=BrokenSink(),
+        )
+    )
+    await store.flush(1)
+
+    assert outcome.status == TurnStatus.FAILED
+    model = next(record for record in collector.records if isinstance(record, ModelCallTrace))
+    assert model.status == "error"
+    assert model.ttft_ms is not None
+    assert 0 < model.ttft_ms < model.duration_ms
     await store.close()
 
 

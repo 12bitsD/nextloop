@@ -24,10 +24,12 @@ from nextloop import (
     EventType,
     InMemoryEventStore,
     LoopConfig,
+    ModelCallTrace,
     ToolEffect,
     ToolRegistry,
     ToolSpec,
     TurnContext,
+    project_traces,
     with_result_reads,
 )
 
@@ -121,6 +123,11 @@ async def event_summary(store, session_id):
     return {
         "event_count": len(events),
         "event_types": dict(Counter(event.event_type.value for event in events)),
+        "model_ttft_ms": [
+            trace.ttft_ms
+            for trace in project_traces(events)
+            if isinstance(trace, ModelCallTrace) and trace.ttft_ms is not None
+        ],
         "unclosed_steps": sorted(list(starts - ends)),
         "unexpected_step_ends": sorted(list(ends - starts)),
     }
@@ -522,6 +529,9 @@ async def main():
     total_input = sum(record["usage"]["input_tokens"] or 0 for record in successful)
     total_cached = sum(record["usage"]["cached_input_tokens"] or 0 for record in successful)
     latencies = sorted(record["elapsed_seconds"] for record in successful)
+    trace_ttft = sorted(
+        value for case in cases for value in case.get("events", {}).get("model_ttft_ms", ())
+    )
     summary = {
         "model": "kimi-k2.8-highspeed",
         "case_count": len(cases),
@@ -540,6 +550,11 @@ async def main():
         if latencies
         else 0,
         "timing": timing_summary(cases, records),
+        "trace_ttft": {
+            "samples": len(trace_ttft),
+            "median_ms": trace_ttft[len(trace_ttft) // 2] if trace_ttft else None,
+            "p95_ms": trace_ttft[max(0, int(len(trace_ttft) * 0.95) - 1)] if trace_ttft else None,
+        },
     }
     destination = Path("docs/research/real-eval-2026-11-13/resilience-results.json")
     await asyncio.to_thread(

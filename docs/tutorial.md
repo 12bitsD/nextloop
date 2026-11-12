@@ -171,6 +171,24 @@ The default Harness DeliveryOwner keeps messages in memory. Inject your own Deli
 
 A stable `input_id` makes retries idempotent. Calling `run()` again with the same ID and content after a successful Turn returns the original `TurnOutcome` without repeating Model calls, Tool execution, or Delivery. Reusing that ID with different content is rejected. `Harness` also accepts an optional `PreviewSink` through `preview=`.
 
+## 6. Read model latency and TTFT
+
+Each completed Turn contains its Model calls, including total duration and time to first token (TTFT):
+
+```python
+turn = await harness.get_turn(outcome.turn)
+if turn is not None:
+    for call in turn.model_calls:
+        print(
+            f"{call.purpose}: ttft_ms={call.ttft_ms}, "
+            f"duration_ms={call.duration_ms}"
+        )
+```
+
+`ttft_ms` measures the interval from the Model attempt start to the first content, refusal, or Tool Call callback. It is measured before the best-effort Preview queue, works without a `PreviewSink`, and is not affected by a slow or failing Preview consumer. Trace Exporters and `SQLiteOutbox` carry the same field.
+
+TTFT is `None` for Events written by older versions and for Providers that only implement `complete()` without streaming callbacks. Providers can implement `complete_with_preview()` to expose reliable streaming timing; a `PreviewSink` is only needed when the application also wants transient output deltas.
+
 ## Next steps
 
 - [Harness configuration, Tools, MCP, Skills, and Observability](design/harness.md)

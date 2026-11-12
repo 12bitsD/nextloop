@@ -118,7 +118,7 @@ The minimum preview/page budget is 256 bytes, with 128 bytes reserved for protoc
 
 ## Transient Preview
 
-`TurnContext.preview` accepts one optional synchronous `PreviewSink`. Providers may implement `complete_with_preview`; Providers that only implement `complete` remain compatible and produce a response snapshot rather than synthetic token deltas. Preview events are transient, never enter the EventStore, never execute partial Tool Calls, and never trigger Delivery. The bounded worker queue replaces overflow with a RESET containing the latest transient snapshot. Slow or failing sinks do not change the Turn result, and closing a subscription does not cancel the Turn.
+`TurnContext.preview` accepts one optional synchronous `PreviewSink`. Providers may implement `complete_with_preview`; this capability is also used to measure TTFT when no sink is configured. Providers that only implement `complete` remain compatible and produce a response snapshot rather than synthetic token deltas. Preview events are transient, never enter the EventStore, never execute partial Tool Calls, and never trigger Delivery. The bounded worker queue replaces overflow with a RESET containing the latest transient snapshot. Slow or failing sinks do not change the Turn result or TTFT measurement, and closing a subscription does not cancel the Turn.
 
 ## Observability
 
@@ -135,7 +135,7 @@ Committed Events are projected to immutable `ModelCallTrace`, `ToolCallTrace`, a
 
 The close timeout bounds queue and worker waiting, not arbitrary user code execution. Python cannot forcibly stop a synchronous Exporter already running in a worker thread, so a timed-out synchronous call may still finish and produce late side effects. This residual is reported through `on_error`; it is not a completed flush. Applications that require no side effects after close must use cancellation-aware asynchronous Exporters or wait for their custom calls to finish before closing.
 
-`ModelCallTrace` includes measured Provider timing, `purpose="inference"|"compaction"`, model, output, and usage. `ToolCallTrace` includes arguments, result, outcome, resources, and measured execution timing. `TurnTrace` closes at turn/end rather than delivery and includes final content and aggregate usage. Recovered operations use `timing_source="unknown"` and never invent end times.
+`ModelCallTrace` includes measured Provider timing, `purpose="inference"|"compaction"`, model, output, usage, and optional `ttft_ms`. TTFT is measured with a monotonic clock at the Provider's first content, refusal, or Tool Call callback, before the best-effort Preview queue. It is `None` for older Events and Providers without streaming callbacks. `ToolCallTrace` includes arguments, result, outcome, resources, and measured execution timing. `TurnTrace` closes at turn/end rather than delivery and includes final content and aggregate usage. Recovered operations use `timing_source="unknown"` and never invent end times.
 
 Query a closed Turn or a Session's history without configuring an Exporter:
 
