@@ -110,7 +110,7 @@ nextloop is a library, not an HTTP service or a multi-agent framework. Your appl
 
 ## Direction
 
-Keep the core small and easy to understand. Prefer a few clear concepts over new abstractions. If a capability can live outside AgentLoop, keep it there. These are directions, not promises to integrate specific platforms.
+Keep the core small and easy to understand. Use a few clear concepts and keep optional capabilities in adapters and outer layers.
 
 ### Reliable execution
 
@@ -118,19 +118,19 @@ Make long-running and concurrent work easier to recover and reason about. Improv
 
 ### Composable capabilities
 
-Let applications add long-term Memory, evaluation, and Recursive Self-Improvement (RSI) through small public interfaces. Keep Memory policy, experiment strategy, scoring, and product decisions outside AgentLoop.
+Let applications add long-term Memory, evaluation, and Recursive Self-Improvement (RSI) through small public interfaces. Applications own Memory policy, experiment strategy, scoring, and product decisions.
 
 ### Open observability
 
-Let applications connect OpenTelemetry, Langfuse, and other systems through Adapters. Keep vendor-specific features and dependencies out of the core.
+Let applications connect OpenTelemetry, Langfuse, and other systems through Adapters. Adapters own vendor-specific features and dependencies.
 
 ### Tools in more languages
 
-Make Tools easier to write in languages such as Go and Rust through the existing Worker model. Do not rewrite AgentLoop in each language.
+Make Tools easier to write in languages such as Go and Rust through the existing Worker model. Share one AgentLoop core across languages.
 
 ### Stable core, independent extensions
 
-Keep the public API and Event history coherent while extensions evolve independently. Add core interfaces only when real consumers need them. Release verified improvements, not roadmap volume.
+Keep the public API and Event history coherent while extensions evolve independently. Let real consumer needs guide new core interfaces. Release verified improvements.
 
 ## Documentation
 
