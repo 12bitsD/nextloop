@@ -18,7 +18,8 @@
   <a href="docs/design/harness.md">Configuration</a> ·
   <a href="docs/design/loop-interface.md">API</a> ·
   <a href="docs/design/guarantees.md">Guarantees</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="README.zh-CN.md">中文版</a>
 </p>
 </div>
 

@@ -1,3 +1,4 @@
+include README.zh-CN.md
 recursive-include examples *
 recursive-include docs *.md
 global-exclude *.py[cod]
