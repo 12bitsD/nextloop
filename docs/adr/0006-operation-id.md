@@ -4,21 +4,33 @@ Status: accepted
 
 ## Context
 
-A model can issue the same Tool Call again after an uncertain result. Without a persisted logical operation identity and an explicit effect declaration, the runtime cannot distinguish a new intent from a safe same-operation reconciliation.
+A model may repeat a Tool Call after an uncertain result. The runtime needs a persisted operation ID and an explicit effect declaration to distinguish a new request from reconciliation of the same operation.
 
 ## Decision
 
-- Every admitted assistant Tool Intent receives a new `operation_id` when ASSISTANT_MESSAGE is committed. TOOL_CALL, ToolContext, Tool Result, Trace, recovery, MCP, and stdio preserve that same ID. A new model intent receives a new ID even when `call_id`, Tool name, and arguments repeat.
-- `ToolEffect = READ_ONLY | IDEMPOTENT | NON_IDEMPOTENT`; the default is NON_IDEMPOTENT. IDEMPOTENT means repeated or concurrent execution with the same operation ID has the same external effect as one execution.
-- Declared `resources` continue to control normal conflict checks. A separate `uncertain_resources` projection is used only after uncertain execution: explicit resources win; otherwise NON_IDEMPOTENT uses the Tool name. This default does not serialize normal parallel scheduling.
-- `AgentLoop.resource_locks(session_id, store)` and `release_resource(...)` expose log-derived lock state. Release writes an Event with actor and caller evidence rather than mutating a side table.
-- `AgentLoop.retry_operation(context, operation_id)` is an explicit new Turn. Only READ_ONLY and IDEMPOTENT operations are eligible; NON_IDEMPOTENT is rejected. The caller accepts that the original hanging operation may still run concurrently.
-- Reconciliation executes the original Tool and arguments with the original operation ID. It emits a Reconciliation Result notification linked to the original coordinate, never a second Tool Result at that coordinate. Success releases corresponding locks; another uncertain result retains them. The library never automatically retries.
-- Harness TOML `effect` is explicit configuration. `nextloop check` reports a migration warning when it is absent. MCP annotations are untrusted hints and do not choose the effect.
+### Operation identity
+
+Every admitted assistant Tool Intent receives a new `operation_id` when `ASSISTANT_MESSAGE` is committed. `TOOL_CALL`, ToolContext, Tool Result, Trace, recovery, MCP, and stdio keep that ID. A new model intent gets a new ID even if its `call_id`, Tool name, and arguments repeat.
+
+### Tool effects and resource locks
+
+`ToolEffect` is `READ_ONLY | IDEMPOTENT | NON_IDEMPOTENT`, defaulting to `NON_IDEMPOTENT`. `IDEMPOTENT` means repeated or concurrent execution with the same operation ID has the same external effect as one execution.
+
+Declared `resources` control normal conflict checks. Uncertain execution uses a separate `uncertain_resources` projection: explicit resources win; otherwise `NON_IDEMPOTENT` uses the Tool name. This default does not change normal parallel scheduling.
+
+`AgentLoop.resource_locks(session_id, store)` and `release_resource(...)` expose lock state derived from the log. Release appends an Event with actor and caller evidence; it does not mutate a side table.
+
+### Explicit reconciliation
+
+`AgentLoop.retry_operation(context, operation_id)` starts an explicit new Turn. Only `READ_ONLY` and `IDEMPOTENT` operations are eligible; `NON_IDEMPOTENT` is rejected. The caller accepts that the original hanging operation may still be running.
+
+Reconciliation runs the original Tool and arguments with the original operation ID. It creates a Reconciliation Result linked to the original coordinate, not a second Tool Result at that coordinate. Success releases the corresponding locks; another uncertain result keeps them. The library never retries automatically.
+
+Harness TOML uses explicit `effect` configuration. `nextloop check` warns when it is absent. MCP annotations are untrusted hints and do not choose the effect.
 
 ## Consequences
 
-- Default uncertainty becomes visible for side-effecting Tools that declare no resources; this is an intentional breaking change.
+- Side-effecting Tools without declared resources now expose uncertainty through default Tool-name locks. This is an intentional breaking change.
 - Explicit resource-based parallelism is unchanged.
-- Reconciliation is auditable and does not rewrite old history or create ambiguous duplicate Results.
-- Caller-provided idempotency is a semantic contract, not a hint the library can verify.
+- Reconciliation is auditable and does not rewrite history or create ambiguous duplicate Results.
+- Caller-provided idempotency is a semantic contract; the library cannot verify it.

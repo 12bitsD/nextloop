@@ -55,9 +55,9 @@ Your application provides the model, tools, storage, and delivery method.
   </tr>
 </table>
 
-The example prints `hello from nextloop` after completing a two-Step Tool round trip.
+The example calls a Tool and prints `hello from nextloop`.
 
-Follow [Your first AgentLoop](docs/tutorial.md) to build the same model → Tool → model → Delivery run yourself. The tutorial also shows how to connect a hosted model with `Harness` and `harness.toml`.
+Follow [Your first AgentLoop](docs/tutorial.md) to build the same flow yourself. The tutorial also shows how to connect a hosted model.
 
 ## What nextloop provides
 
@@ -106,9 +106,35 @@ Follow [Your first AgentLoop](docs/tutorial.md) to build the same model → Tool
   </tr>
 </table>
 
-nextloop does not provide an HTTP service or multi-agent orchestration. Your application controls execution, delivery, and recovery decisions. Harness delegates the complete run, approval-resume, reconciliation, pending-input, resource-lock, recovery, and deletion workflow, while Event logs remain the sole execution authority. Long Turns use pure Conversation Projection with cross-Store parity checks.
+nextloop is a library, not an HTTP service or a multi-agent framework. Your application controls when to run, deliver, and recover work. `Harness` gives you one place to perform these operations. The Event log is the source of truth.
+
+## Direction
+
+Keep the core small and easy to understand. Prefer a few clear concepts over new abstractions. If a capability can live outside AgentLoop, keep it there. These are directions, not promises to integrate specific platforms.
+
+### Reliable execution
+
+Make long-running and concurrent work easier to recover and reason about. Improve the runtime when real use and test evidence show a need.
+
+### Composable capabilities
+
+Let applications add long-term Memory, evaluation, and Recursive Self-Improvement (RSI) through small public interfaces. Keep Memory policy, experiment strategy, scoring, and product decisions outside AgentLoop.
+
+### Open observability
+
+Let applications connect OpenTelemetry, Langfuse, and other systems through Adapters. Keep vendor-specific features and dependencies out of the core.
+
+### Tools in more languages
+
+Make Tools easier to write in languages such as Go and Rust through the existing Worker model. Do not rewrite AgentLoop in each language.
+
+### Stable core, independent extensions
+
+Keep the public API and Event history coherent while extensions evolve independently. Add core interfaces only when real consumers need them. Release verified improvements, not roadmap volume.
 
 ## Documentation
+
+Start with the [documentation index](docs/README.md) for current contracts, design decisions, historical plans, and research evidence.
 
 <table role="presentation">
   <tr>

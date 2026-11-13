@@ -1,8 +1,8 @@
 # Your first AgentLoop
 
-This tutorial builds a complete two-step agent run: a model requests a Tool, the Tool returns a result, and the model uses that result to produce a final response.
+This tutorial runs an agent through two steps: the model requests a Tool, then uses the Tool result to answer.
 
-You do not need an API key. A scripted Provider stands in for a hosted model so that the execution is deterministic and easy to inspect.
+You do not need an API key. The example uses a scripted model, so it produces the same result every time.
 
 ## 1. Install nextloop
 
@@ -103,14 +103,14 @@ From a source checkout, you can run the included version instead:
 python examples/basic.py
 ```
 
-## 4. Understand the moving parts
+## 4. Understand the parts
 
-`AgentLoop` coordinates the run, while four adapters keep application decisions in your code:
+`AgentLoop` coordinates the run. Four adapters connect it to your application:
 
-- **ModelProvider** returns model responses. Here, `ScriptedProvider` requests `read` on Step 1 and returns the Tool result as final content on Step 2.
-- **ToolRuntime** validates and executes Tool calls. `ToolRegistry` is the built-in implementation for Python functions.
-- **EventStore** records committed execution facts. This example uses memory; SQLite is available for durable storage.
-- **DeliveryOwner** handles the final response. `StdoutDelivery` prints it, while a real application might send it to a UI, queue, or chat platform.
+- **ModelProvider** returns model responses. In this example, it requests `read` on Step 1 and answers with the Tool result on Step 2.
+- **ToolRuntime** validates and runs Tool calls. `ToolRegistry` runs Python functions.
+- **EventStore** records what happened. This example uses memory; use SQLite to keep the records on disk.
+- **DeliveryOwner** handles the final response. Here, `StdoutDelivery` prints it. Your application could send it to a UI, queue, or chat platform.
 
 The run follows this path:
 
@@ -118,11 +118,11 @@ The run follows this path:
 input → model → Tool Call → Tool Result → model → committed final response → Delivery
 ```
 
-The final response is committed before Delivery runs. Tool calls and results are also recorded in the EventStore, rather than existing only inside a Provider wrapper.
+nextloop records Tool calls and results in the EventStore. It also commits the final response before Delivery sends it.
 
 ## 5. Connect a real model
 
-When you are ready for a hosted model, `Harness` can assemble the same Loop from `harness.toml`:
+`Harness` can create the same Loop from a `harness.toml` file:
 
 ```toml
 schema = "nextloop.harness/v1"
@@ -169,11 +169,11 @@ if __name__ == "__main__":
 
 The default Harness DeliveryOwner keeps messages in memory. Inject your own Delivery adapter when your application needs to send them somewhere else.
 
-A stable `input_id` makes retries idempotent. Calling `run()` again with the same ID and content after a successful Turn returns the original `TurnOutcome` without repeating Model calls, Tool execution, or Delivery. Reusing that ID with different content is rejected. `Harness` also accepts an optional `PreviewSink` through `preview=`.
+Use a stable `input_id` to retry safely. After a successful Turn, calling `run()` again with the same ID and content returns the original `TurnOutcome`. It does not rerun the model, Tools, or Delivery. Reusing the ID with different content is rejected.
 
 ## 6. Read model latency and TTFT
 
-Each completed Turn contains its Model calls, including total duration and time to first token (TTFT):
+A completed Turn records how long each Model call took. This includes time to first token (TTFT), which is the wait for the first Model output:
 
 ```python
 turn = await harness.get_turn(outcome.turn)
@@ -185,16 +185,14 @@ if turn is not None:
         )
 ```
 
-`ttft_ms` measures the interval from the Model attempt start to the first content, refusal, or Tool Call callback. It is measured before the best-effort Preview queue, works without a `PreviewSink`, and is not affected by a slow or failing Preview consumer. Trace Exporters and `SQLiteOutbox` carry the same field.
+TTFT starts when the Model attempt starts and stops at the first content, refusal, or Tool Call callback. It is measured before the Preview queue, so a slow or failing Preview consumer cannot change it. You do not need a `PreviewSink`. Trace Exporters and `SQLiteOutbox` include the same field.
 
-TTFT is `None` for Events written by older versions and for Providers that only implement `complete()` without streaming callbacks. Providers can implement `complete_with_preview()` to expose reliable streaming timing; a `PreviewSink` is only needed when the application also wants transient output deltas.
+TTFT is `None` for older Events and Providers without streaming callbacks. Providers expose these callbacks through `complete_with_preview()`. You only need a `PreviewSink` if you also want to display output while it streams.
 
 ## Next steps
 
-- [Harness configuration, Tools, MCP, Skills, and Observability](design/harness.md)
-- [Public API and adapter contracts](design/loop-interface.md)
+- [Harness configuration](design/harness.md)
+- [Public API and adapters](design/loop-interface.md)
 - [Execution architecture](design/architecture.md)
-- [Guarantees and non-guarantees](design/guarantees.md)
-- [Pending Input, approval resume, reconciliation, and resource locks](design/harness.md#pending-input)
-- [Durable Trace replay with SQLiteOutbox](design/harness.md#durable-outbox)
-- [Recovery and whole-Session deletion](design/harness.md#whole-session-deletion)
+- [Guarantees and limitations](design/guarantees.md)
+- [Documentation index](README.md)

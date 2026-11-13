@@ -1,50 +1,48 @@
 # nextloop discussion and delivery roadmap
 
-Purpose: preserve the accepted direction and remaining decision boundaries without duplicating nika's product roadmap.
-
-Current entry: **1.0.0 verified contracts and release closure**. The executable implementation plan is [development-plan.md](development-plan.md).
+Status: **historical design and release record through 1.0**. It preserves accepted decisions without duplicating nika's roadmap. For current direction, see [Project direction](../../README.md#direction). For the release sequence, see [development-plan.md](development-plan.md).
 
 ## Fixed guardrails
 
 - One embeddable Loop, not a service or multi-agent framework.
 - Append-only Trajectory is authoritative; Conversation and Traces are derived.
-- Whole-batch validation precedes every Tool side effect.
-- TOOL_CALL precedes dispatch, and a writer check follows that commit immediately before execution.
+- Validate the whole batch before any Tool side effect.
+- Commit `TOOL_CALL` before dispatch and check the writer again immediately before execution.
 - Unknown effects stop new dispatch and are never automatically replayed.
-- Every exit has one finalization path; committed finals recover by Delivery only.
-- Pending Input is derived from the Event log; in-memory inboxes do not become a second authority.
+- Every exit uses one finalization path. Committed finals recover through Delivery only.
+- Pending Input comes from the Event log, not the in-memory Inbox.
 - Provider connection configuration stays outside Trajectory.
-- No Feishu, Wiki, concrete product Tools, or Proactive product policy in nextloop.
+- Feishu, Wiki, concrete product Tools, and Proactive product policy stay outside nextloop.
 
-## Topic closure
+## Implemented topics
 
-| Topic | Accepted direction | Current state |
+| Topic | Accepted direction | Evidence state |
 |---|---|---|
-| Execution and ReAct | Turn/Step driver, bounded correction, ordered steer, common finalization | Implemented; normal and terminal behavior covered |
-| Model and Context | Frozen in-memory requests, external Provider configuration, append-only projection, Compaction | Implemented; recorded Adapter contracts and separately identified live smoke |
-| Tool contracts | Admission, parallel/exclusive scheduling, ordered Observations, explicit uncertainty | Implemented; full append and side-effect fault scenarios covered |
-| Durable state | Atomic conditional append, idempotency, writer fencing, crash closers | Implemented with optional same-host timed leases; distributed coordination is not claimed |
-| Pending Input | Log projection by `input_id` and Step-boundary consumption | Implemented with structured steer_result rejection reasons |
-| Observability | Committed-event Trace projection with failure isolation | Implemented with caller-driven durable Outbox, acknowledgement cursors, and export gaps |
-| Schema evolution | Read-only upcasting and versioned real fixtures | Implemented for Event schema 1.0→1.1 |
-| Operation identity and approval | Persistent `operation_id`, effect declarations, approved new-Turn resume | Implemented with explicit reconciliation and approval recovery evidence |
-| Retention | Reentrant whole-Session deletion with tombstones | Implemented for local Event/Trace/Outbox state; third-party copies and external assets excluded |
+| Execution and ReAct | Turn/Step driver, bounded correction, ordered steer, common finalization | Normal and terminal behavior covered |
+| Model and Context | Frozen in-memory requests, external Provider configuration, append-only Projection, Compaction | Recorded Adapter contracts and separately identified live smoke |
+| Tool contracts | Admission, parallel/exclusive scheduling, ordered Observations, explicit uncertainty | Append and side-effect fault scenarios covered |
+| Durable state | Atomic conditional append, idempotency, writer fencing, crash closers | Optional same-host leases; no distributed coordination claim |
+| Pending Input | Log Projection by `input_id` and Step-boundary consumption | Structured `steer_result` rejection reasons |
+| Observability | Trace Projection from committed Events with failure isolation | Caller-driven durable Outbox, cursors, and export gaps |
+| Schema evolution | Read-only upcasting with versioned real fixtures | Event Schema 1.0→1.1 |
+| Operation identity and approval | Persistent `operation_id`, effect declarations, approved new-Turn resume | Explicit reconciliation and approval recovery evidence |
+| Retention | Reentrant whole-Session deletion with tombstones | Local Event/Trace/Outbox state; third-party copies and external assets excluded |
 | Consumer integration | Public versioned Adapters; nika is a consumer, not a dependency | Separate acceptance |
-| Release | Python 3.11–3.14, frozen imports, fault matrix, benchmark, live Provider gate | DeepSeek live acceptance selected by ADR-0011; official OpenAI/Anthropic APIs are not claimed |
+| Release | Python 3.11–3.14, frozen imports, fault matrix, benchmark, live Provider gate | DeepSeek selected by ADR-0011; official OpenAI/Anthropic APIs not claimed |
 
-## Decision order
+## Historical decision order
 
-1. Falsify current guarantees before freezing them.
+1. Test current guarantees before freezing them.
 2. Add operation identity and approval before changing writer ownership.
 3. Add leases before promising coordinated multi-process behavior.
 4. Add persistent export acknowledgement before calling Traces durable.
 5. Add tombstones before promising deletion.
-6. Use the maintainer-selected DeepSeek live evidence for 1.0; keep official Provider evidence as a separate future check.
+6. Use DeepSeek live evidence for 1.0; keep official Provider evidence separate.
 
-The [verification matrix](../design/verification-matrix.md) is the executable checklist. Documentation alone never marks a requirement implemented.
+The [verification matrix](../design/verification-matrix.md) defines the executable checks. Documentation alone never marks a requirement implemented.
 
 ## Integration links
 
-- [nika](https://github.com/12bitsD/nika) independently owns personal-agent behavior, Feishu, AgentWiki, Skills, Prompts, deployment, and Proactive behavior.
-- [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md) records the DSH-aligned decision and deltas.
+- [nika](https://github.com/12bitsD/nika) owns personal-agent behavior, Feishu, AgentWiki, Skills, Prompts, deployment, and Proactive behavior.
+- [ADR-0002](../adr/0002-dsh-aligned-agent-loop.md) records the DSH-aligned decision.
 - [Open-source evaluation](../research/2026-11-06-open-source-agent-loops.md) preserves the earlier candidate comparison.

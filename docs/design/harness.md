@@ -1,6 +1,8 @@
 # Harness and extension interface
 
-`Harness` assembles the existing `AgentLoop`; it does not implement another execution or recovery algorithm. Configuration uses `schema = "nextloop.harness/v1"` and `min_nextloop`. Unknown fields, plaintext credential fields, duplicate Tool names, incompatible versions, invalid paths, and missing Skill dependencies raise `HarnessError` before a model call.
+`Harness` builds an `AgentLoop` from configuration and adapters. It does not add another execution or recovery algorithm.
+
+Configuration uses `schema = "nextloop.harness/v1"` and `min_nextloop`. Before calling a model, Harness raises `HarnessError` for unknown fields, plaintext credentials, duplicate Tool names, incompatible versions, invalid paths, or missing Skill dependencies.
 
 ## Configuration
 
@@ -62,7 +64,15 @@ timeout_seconds = 30
 paths = ["skills"]
 ```
 
-Relative paths are resolved from the configuration file. The API key is read only when a model-backed run starts; `check` never contacts a Provider or executes a Tool. A Python register function receives a `ToolRegistry` and normally registers `ToolSpec` plus a synchronous or asynchronous handler. Stdio namespaces use `namespace__remote_name` to prevent collisions. Harness/Composite Tool names are limited to 64 characters and must match `[A-Za-z][A-Za-z0-9_-]*` for Provider compatibility; invalid names fail before a model request.
+Configuration rules:
+
+- Relative paths start from the configuration file's directory.
+- The API key is read only when a model-backed run starts. `check` never contacts a Provider or runs a Tool.
+- A Python register function receives a `ToolRegistry` and normally adds a `ToolSpec` and its sync or async handler.
+- Stdio Tools use `namespace__remote_name` to avoid name collisions.
+- Tool names can have at most 64 characters and must match `[A-Za-z][A-Za-z0-9_-]*`. Invalid names fail before a model request.
+
+Use Harness to run and manage work:
 
 ```python
 harness = Harness.load("harness.toml")
@@ -76,68 +86,110 @@ recovery = await harness.recover(force=False)
 await harness.close()
 ```
 
-`Harness` also thinly delegates `steer_result()`, `resume()`, `retry_operation()`, `resource_locks()`, `release_resource()`, and `delete_session()`. Execution entries share the same checked Tool/Skill context and reuse a Harness-owned Provider. `resume()` accepts decisions or `reject_all`, optional replacement input, `input_id`, and `preview`; `retry_operation()` preserves the original operation ID. `delete_session()` deletes only EventStore state; an independently constructed SQLiteOutbox retains its separate explicit cleanup contract.
+Harness also delegates `steer_result()`, `resume()`, `retry_operation()`, `release_resource()`, and `delete_session()`. All execution entries use the same checked Tools and Skills and reuse the Harness-owned Provider.
 
-Skills remain instructions only. Their metadata is added to the system prompt, and the read-only `skill_view` Tool loads a body on demand. Loading a Skill never runs adjacent scripts or expands Tool permissions.
+`resume()` accepts approval decisions or `reject_all`, plus optional replacement input, `input_id`, and `preview`. `retry_operation()` keeps the original operation ID. `delete_session()` deletes EventStore state only. A separately constructed `SQLiteOutbox` has its own cleanup operation.
+
+Skills provide instructions only. Their metadata is added to the system prompt, and the read-only `skill_view` Tool loads their bodies when needed. Loading a Skill never runs adjacent scripts or grants more Tool permissions.
 
 ## Adapter injection and ownership
 
-`Harness.load()` and the `Harness` constructor accept optional `provider`, `store`, `delivery`, and `tools` objects. These are the existing four Adapter protocols; no plugin registry is involved. Harness-created dependencies are closed by Harness. Caller-injected dependencies remain caller-owned and are not closed. An ObservingEventStore created around an external Store flushes and closes its own worker without closing that Store.
+`Harness.load()` and the `Harness` constructor accept optional `provider`, `store`, `delivery`, and `tools` adapters. There is no plugin registry.
 
-Exporters may optionally implement `flush()` and `close()`, synchronously or asynchronously. The queue is flushed before Exporter lifecycle calls. Harness closes Exporters created from `[trace]`; runtime-injected Exporters are flushed but not closed. `nextloop.testing.check_event_store(store)` exposes the same basic atomicity, idempotency, fencing, surface, and recovery-read contract used by the built-in Stores.
+- Harness closes dependencies it creates.
+- The caller closes dependencies it injects.
+- An `ObservingEventStore` around an external Store closes its own worker, not the external Store.
+
+Exporters may implement optional sync or async `flush()` and `close()` methods. Harness flushes the queue before these calls. It closes Exporters created from `[trace]`; runtime-injected Exporters are flushed but not closed.
+
+Use `nextloop.testing.check_event_store(store)` to check the same atomicity, idempotency, fencing, Surface, and recovery-read behavior as the built-in Stores.
 
 ## Store leases and Pending limits
 
-`[store]` accepts optional `owner_id` and `lease_seconds`. When `owner_id` is absent, Store construction and writer semantics stay legacy. When configured, same-owner restarts take over immediately, another owner needs expiry or `recover(force=True)`, and active Turns renew through an independent heartbeat. SQLite initialization includes bounded lock backoff for same-host process contention.
+`[store]` accepts optional `owner_id` and `lease_seconds`. Without an owner, writer behavior stays legacy. With an owner:
 
-`loop.max_pending_inputs` bounds the active in-memory inbox (default 100). Pending Input remains recoverable from the Event log; the limit is not a second persistence policy. `steer_result()` reports `session_missing`, `not_writer`, `turn_closed`, `queue_full`, `invalid_input`, or `approval_pending` alongside `accepted`.
+- the same owner takes over immediately after restart;
+- another owner waits for expiry or uses `recover(force=True)`;
+- active Turns renew the lease through an independent heartbeat;
+- SQLite uses bounded lock backoff for same-host process contention.
+
+`loop.max_pending_inputs` limits the in-memory inbox to 100 items by default. It does not limit durable Pending Input, which remains in the Event log. `steer_result()` returns `accepted`, `session_missing`, `not_writer`, `turn_closed`, `queue_full`, `invalid_input`, or `approval_pending`.
 
 ## Tool effects and approval
 
-Each `[[tools]]` entry accepts optional `effect = "read_only" | "idempotent" | "non_idempotent"`. The default is NON_IDEMPOTENT, and `nextloop check` reports a migration warning when it is unset. Explicit `resources` still control normal conflict checks; otherwise only uncertain outcomes use the Tool name as a lock.
+Each `[[tools]]` entry accepts `effect = "read_only" | "idempotent" | "non_idempotent"`. The default is `non_idempotent`, and `nextloop check` warns when it is unset. Declared `resources` control normal conflict checks. Otherwise, only uncertain outcomes use the Tool name as a lock.
 
-Python ToolSpecs can declare `ApprovalPolicy(version, predicate=None, expires_after_seconds=None)`. Any approval-required item suspends the entire validated batch before dispatch. Resume uses explicit per-operation decisions or `reject_all`, writes permission before execution, and preserves original operation IDs and canonical arguments across the new Turn. Stdio workers receive `context.operation_id/effect`; MCP receives namespaced `_meta` fields. MCP annotations do not choose the effect.
+Python ToolSpecs can declare `ApprovalPolicy(version, predicate=None, expires_after_seconds=None)`. If any item needs approval, the whole validated batch stops before dispatch. Resume records each decision, or `reject_all`, before execution. It keeps the original operation IDs and canonical arguments in the new Turn.
+
+Stdio workers receive `context.operation_id` and `context.effect`. MCP receives namespaced `_meta` fields. MCP annotations do not choose the effect.
 
 ## Pending Input
 
-The event log is the sole source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs that have not been consumed by a USER_MESSAGE, ordered by their latest acceptance seq. Reaccepting an ID after consumption reopens Pending; a USER_MESSAGE consumes only that ID. The next Turn loads these inputs from the log and commits their USER_MESSAGE consumption at its first Step boundary; `recover()` itself does not rebuild an in-memory inbox. Callers must provide a stable `input_id` to deduplicate retries or query Pending before retrying.
+The Event log is the source of truth for accepted input. `AgentLoop.pending_inputs(session_id, store)` returns accepted inputs not yet consumed by a `USER_MESSAGE`, ordered by their latest acceptance sequence.
 
 ```python
 pending = await loop.pending_inputs("session-id", store)
 ```
 
-Pending historical inputs appear before the new Turn's initial input. Inputs from cancelled or budget-terminated Turns carry forward by default. Repeated recovery and a crash between recover and run do not duplicate them. Explicit IDs must be non-empty. For an already successful initial input, the same ID with identical content returns the original TurnOutcome without new execution; unfinished or unsuccessful work may start a new Turn. Different content is rejected without consuming or replacing the original Pending input.
+Pending rules:
+
+- Accepting the same ID after consumption reopens it as Pending.
+- A `USER_MESSAGE` consumes only its own ID.
+- The next Turn loads Pending Inputs and commits their consumption at its first Step boundary. `recover()` does not rebuild the inbox.
+- Historical Pending Inputs appear before the new Turn's initial input.
+- Inputs from cancelled or budget-terminated Turns carry forward.
+- Repeated recovery, or a crash between recovery and run, does not duplicate them.
+- Explicit IDs must be non-empty. Use a stable `input_id` to deduplicate retries or query Pending before retrying.
+- After success, the same ID and content return the original `TurnOutcome` without new execution. Unfinished or unsuccessful work may start a new Turn. Different content is rejected without changing the original Pending Input.
 
 ## Budgets and Tool Results
 
-All budget fields default to `None`. Step, model-attempt, and validated Tool-batch limits stop the next side effect. `max_tool_calls = 0` disables Tool dispatch; `output_reserve = 0` and `pacing_step_interval = 0` retain their direct LoopConfig meanings in TOML as well. Model attempts include retries and compaction. Token limits use Provider-reported usage and fail closed when required usage is missing or invalid. `turn_deadline_seconds` reuses cancellation and uncertain Tool semantics. Budgets are Turn-local; recovery closes an interrupted Turn and a later Turn gets a new budget.
+All budget fields default to `None`. Step, Model-attempt, and validated Tool-batch limits stop the next side effect. Budgets are Turn-local: recovery closes an interrupted Turn, and a later Turn gets a fresh budget.
 
-`ToolSpec.result_mode` supports `PREVIEW`, `PAGED`, and `FULL`, with `PREVIEW` as the default. Small results are unchanged. Large previews retain UTF-8-safe head/tail content and an `event_id`; pages are continuous. The durable outcome retains full content while the model Message contains the projection. `read_tool_result` reads committed content from the recovery log by `event_id`, UTF-8 byte offset, and bounded limit. FULL and terminal results are not generically truncated; exceeding the hard limit commits the full result and ends the Turn as failed without final delivery.
+Special cases:
 
-The minimum preview/page budget is 256 bytes, with 128 bytes reserved for protocol metadata. The budget applies to the complete model-visible projection, including metadata. `read_tool_result` returns a `[Tool result page: ...]` header followed by the continuous page body and `next_offset`; it does not return a JSON envelope.
+- `max_tool_calls = 0` disables Tool dispatch.
+- `output_reserve = 0` and `pacing_step_interval = 0` keep their direct `LoopConfig` meanings.
+- Model attempts include retries and Compaction.
+- Token limits use Provider-reported usage and fail closed when required usage is missing or invalid.
+- `turn_deadline_seconds` uses the same cancellation and uncertain Tool semantics as other cancellation paths.
+
+`ToolSpec.result_mode` supports `PREVIEW`, `PAGED`, and `FULL`. The default is `PREVIEW`.
+
+- Small results are unchanged.
+- Large previews keep UTF-8-safe head and tail content plus an `event_id`. Pages are continuous.
+- The durable outcome keeps the full result; the model receives the projected content.
+- `read_tool_result` reads committed content by `event_id`, UTF-8 byte offset, and bounded limit.
+- FULL and terminal results are not generically truncated. Exceeding the hard limit commits the full result, ends the Turn as failed, and skips final Delivery.
+
+A preview or page needs at least 256 bytes, including 128 bytes reserved for metadata. `read_tool_result` returns a `[Tool result page: ...]` header, the page body, and `next_offset`. It does not return a JSON envelope.
 
 ## Transient Preview
 
-`TurnContext.preview` accepts one optional synchronous `PreviewSink`. Providers may implement `complete_with_preview`; this capability is also used to measure TTFT when no sink is configured. Providers that only implement `complete` remain compatible and produce a response snapshot rather than synthetic token deltas. Preview events are transient, never enter the EventStore, never execute partial Tool Calls, and never trigger Delivery. The bounded worker queue replaces overflow with a RESET containing the latest transient snapshot. Slow or failing sinks do not change the Turn result or TTFT measurement, and closing a subscription does not cancel the Turn.
+`TurnContext.preview` accepts one optional synchronous `PreviewSink`. Providers can implement `complete_with_preview` to stream output; Harness also uses this capability to measure TTFT without a sink. Providers with only `complete()` remain compatible and produce a response snapshot.
+
+Preview output is temporary. It never enters the EventStore, runs partial Tool Calls, or triggers Delivery. If the bounded queue overflows, Harness sends a RESET with the latest snapshot. Slow or failing sinks do not change the Turn result or TTFT. Closing a subscription does not cancel the Turn.
 
 ## Observability
 
-Observability is disabled by default. Enable the built-in JSON Lines Exporter with:
+Observability is off by default. Enable JSON Lines output with:
 
 ```toml
 [trace]
 exporter = "stdout"
 ```
 
-Use `module.path:function` for a custom Exporter, or pass `exporter=` to `Harness.load()`. Runtime and TOML Exporters are called in configuration order. A callable may be synchronous or asynchronous; an object may implement `export(trace)` instead.
+Use `module.path:function` for a custom Exporter, or pass `exporter=` to `Harness.load()`. Runtime and TOML Exporters run in configuration order. They can be sync or async functions, or objects with `export(trace)`.
 
-Committed Events are projected to immutable `ModelCallTrace`, `ToolCallTrace`, and `TurnTrace` objects. The underlying Store append succeeds before records enter a bounded asynchronous queue. Exporter errors, slow calls, and queue overflow do not change Turn results; dropped records are counted and reported. `await harness.close()` performs a bounded flush and closes the Store. The queue is not a durable outbox.
+Committed Events become immutable `ModelCallTrace`, `ToolCallTrace`, and `TurnTrace` records. The Store append succeeds before records enter a bounded async queue. Export errors, slow calls, and dropped records do not change Turn results. Drops are counted and reported. `await harness.close()` performs a bounded flush and closes the Store. This queue is not durable.
 
-The close timeout bounds queue and worker waiting, not arbitrary user code execution. Python cannot forcibly stop a synchronous Exporter already running in a worker thread, so a timed-out synchronous call may still finish and produce late side effects. This residual is reported through `on_error`; it is not a completed flush. Applications that require no side effects after close must use cancellation-aware asynchronous Exporters or wait for their custom calls to finish before closing.
+The close timeout limits queue and worker waiting; it cannot stop arbitrary user code. A sync Exporter running in a worker thread may still finish and cause side effects after a timeout. Harness reports this through `on_error`, not as a completed flush. If no side effects are allowed after close, use a cancellation-aware async Exporter or wait for custom calls to finish first.
 
-`ModelCallTrace` includes measured Provider timing, `purpose="inference"|"compaction"`, model, output, usage, and optional `ttft_ms`. TTFT is measured with a monotonic clock at the Provider's first content, refusal, or Tool Call callback, before the best-effort Preview queue. It is `None` for older Events and Providers without streaming callbacks. `ToolCallTrace` includes arguments, result, outcome, resources, and measured execution timing. `TurnTrace` closes at turn/end rather than delivery and includes final content and aggregate usage. Recovered operations use `timing_source="unknown"` and never invent end times.
+`ModelCallTrace` includes Provider timing, `purpose="inference"|"compaction"`, model, output, usage, and optional `ttft_ms`. TTFT uses a monotonic clock at the first content, refusal, or Tool Call callback, before the Preview queue. It is `None` for older Events and Providers without streaming callbacks.
 
-Query a closed Turn or a Session's history without configuring an Exporter:
+`ToolCallTrace` includes arguments, result, outcome, resources, and execution timing. `TurnTrace` closes at `TURN_END`, not Delivery, and includes final content and aggregate usage. Recovered operations use `timing_source="unknown"`; Harness does not invent end times.
+
+Read a closed Turn or Session history without an Exporter:
 
 ```python
 turn = await harness.get_turn(1)
@@ -147,45 +199,53 @@ if turn is not None:
 history = await harness.history(from_turn=1, to_turn=10)
 ```
 
-History reads the complete EventStore log and uses the same TraceProjector as live export. Only new-format Events are supported; missing measured Model/Tool fields produce `timing_source="unknown"`, not estimated durations.
+History reads the full Event log and uses the same Trace Projector as live export. Only new-format Events are supported. Missing Model/Tool timing fields produce `timing_source="unknown"`, not estimated durations.
 
 ### Durable Outbox
 
-The live queue is best-effort. For replay after process restart, construct `SQLiteOutbox(store, path, exporters)` and call `await outbox.export_pending()` from the application. Passing a `session_id` restricts one run; omitting it enumerates `store.session_ids()`. Only Turns with a committed `TURN_END` are exported.
+The live queue is best-effort. To replay after a restart, construct `SQLiteOutbox(store, path, exporters)` and call `await outbox.export_pending()` from the application. Pass a `session_id` for one Session, or omit it to enumerate `store.session_ids()`. Only Turns with a committed `TURN_END` are exported.
 
-Each successful Exporter return advances an independent durable cursor. A crash before that commit can replay; a crash after it cannot. Failed calls persist attempts and become auditable `ExportGap` records at `max_attempts`, allowing later records to proceed. `watermark()`, `gaps()`, and `delete_session()` inspect or clear Outbox-owned state without consuming writer epochs or deleting Events.
+Each successful Exporter return advances its durable cursor. A crash before that commit can replay; a crash after it cannot. Failed calls persist attempts. At `max_attempts`, they become auditable `ExportGap` records so later records can continue. `watermark()`, `gaps()`, and `delete_session()` manage Outbox state without consuming writer epochs or deleting Events.
 
-Concurrent exporters use per-Session owner-token locks. A heartbeat renews only during `export_pending()` at one-third of `lock_timeout_seconds`; stale locks can be reclaimed after a crash. `export_timeout_seconds` bounds cooperative calls, but a timed-out synchronous Exporter thread can still produce late side effects. An asynchronous Exporter that suppresses cancellation can delay cleanup and must be made cancellation-aware by the caller. Neither case is a successful acknowledgement or hard isolation of user code. Delivery is therefore at least once, not exactly once, and exporters should deduplicate using the stable OTel `trace_id` and `span_id` emitted by `StdoutExporter`.
+Concurrent exporters use per-Session owner-token locks. During `export_pending()`, a heartbeat renews at one-third of `lock_timeout_seconds`; expired locks can be reclaimed after a crash.
+
+`export_timeout_seconds` limits cooperative calls, but a timed-out sync Exporter thread can still cause side effects. An async Exporter that ignores cancellation can delay cleanup. Neither case counts as acknowledgement or hard isolation. Delivery is at least once, not exactly once. Exporters should deduplicate with the stable OTel `trace_id` and `span_id` emitted by `StdoutExporter`.
 
 ### Whole-Session deletion
 
-Call `await store.delete_session(session_id)` for Event state and `outbox.delete_session(session_id)` for its separately owned export state. Both are idempotent; repeat both after interruption. EventStore deletion leaves only a deleting/deleted Session-ID tombstone and rejects subsequent reads, writes, and writer ownership operations with `SessionDeletedError`.
+Call `await store.delete_session(session_id)` for Event state and `outbox.delete_session(session_id)` for export state. Both operations are idempotent; repeat both after interruption.
 
-ObservingEventStore also clears projected and queued Trace records without blocking normal Turns on slow Exporters. Outbox write transactions verify their owner token so an in-flight export cannot recreate deleted state. SQLite uses `secure_delete`, WAL checkpoints, and VACUUM for local byte cleanup. Physical cleanup errors are explicit and safe to retry; already dispatched external effects, caller-owned copies, third-party exports, backups, and external assets are outside the deletion guarantee.
+EventStore deletion leaves only a deleting/deleted Session-ID tombstone. Later reads, writes, and writer operations fail with `SessionDeletedError`. `ObservingEventStore` clears projected and queued Trace records without blocking Turns on slow Exporters. Outbox transactions check their owner token so an active export cannot recreate deleted state.
+
+SQLite uses `secure_delete`, WAL checkpoints, and VACUUM for local byte cleanup. Cleanup errors are explicit and safe to retry. External effects, caller-owned copies, third-party exports, backups, and external assets are outside this guarantee.
 
 ## MCP stdio
 
-`driver = "mcp"` starts a standard MCP `2025-06-18` stdio server. The adapter performs initialize, the initialized notification, and paginated `tools/list` until the cursor is exhausted, then keeps a static catalog for the process lifetime. Remote annotations do not grant parallel execution, resources, or approval privileges.
+`driver = "mcp"` starts a standard MCP `2025-06-18` stdio server. The adapter initializes the connection, sends the initialized notification, and reads all `tools/list` pages. The catalog then stays fixed for the process lifetime. Remote annotations do not grant parallel execution, resources, or approval privileges.
 
-MCP calls use ordinary ToolRuntime routing and the existing JSON Schema validation. Text and `structuredContent` are supported; `isError` maps to a normal Tool error. Cancellation uses the original JSON-RPC requestId. Timeout, transport failure, and process crash become uncertain outcomes with local resource locks, never automatic restart or replay. Closing uses stdin EOF followed by bounded process termination, not the private stdio `shutdown` method.
+MCP calls use normal ToolRuntime routing and JSON Schema validation. Text and `structuredContent` are supported; `isError` becomes a normal Tool error. Cancellation uses the original JSON-RPC request ID.
 
-HTTP transports, OAuth, `listChanged`, dynamic catalog revisions, prompts/resources/sampling, and non-text content mapping are outside this version.
+Timeout, transport failure, and process crash become uncertain outcomes with local resource locks. The adapter never restarts or replays the call. Closing uses stdin EOF followed by bounded process termination, not the private stdio `shutdown` method.
+
+This version does not include HTTP transports, OAuth, `listChanged`, dynamic catalog revisions, prompts/resources/sampling, or non-text content mapping.
 
 ## Stdio protocol
 
-The protocol version is `nextloop.stdio/v1`. Messages are one JSON-RPC 2.0 object per line on stdout; logs belong on stderr. Supported methods are `initialize`, `tools/list`, `tools/call`, `notifications/cancelled`, `ping`, and `shutdown`.
+The protocol version is `nextloop.stdio/v1`. Each stdout line contains one JSON-RPC 2.0 object; logs go to stderr. Supported methods are `initialize`, `tools/list`, `tools/call`, `notifications/cancelled`, `ping`, and `shutdown`.
 
-- `initialize` params contain `protocolVersion`; the result must return the same version.
+- `initialize` sends `protocolVersion`, and the result must return the same version.
 - `tools/list` returns `{"tools": [ToolSpec...]}`. Tool fields are `name`, `description`, `parameters`, `mode`, `resources`, and optional `timeout_seconds`.
-- `tools/call` params contain `name`, `arguments`, and non-secret `context` coordinates. Normal Tool failures use a result with `is_error: true`; JSON-RPC `error` is reserved for protocol or transport failures.
-- Results support strictly typed `content`, `structured`, `assets`, `is_error`, `concludes_turn`, and `release_resources`. Inline content is limited to 1MiB; larger results must be returned by the worker as asset references, not inline base64. The driver does not invent assets or manage their lifecycle/GC.
-- A timeout or cancellation sends `notifications/cancelled`, waits the configured grace period, then uses SIGTERM and SIGKILL. The affected call is uncertain and retains declared resource locks.
-- A crash produces `UncertainHanging`; the driver never restarts and replays the old call. New calls remain blocked by normal resource admission or fail as uncertain.
-- Cancellation cleanup runs in a protected task, so repeated caller cancellation cannot interrupt notification, bounded termination, or reader reaping. Stdio writes and best-effort cancel notifications have bounded drain times.
-- `shutdown` is acknowledged before worker exit. `close()` does not drain active calls: process exit makes their effects uncertain and their normal execution paths return locked outcomes. Cancelling `close()` still completes protected process and reader cleanup before cancellation propagates.
-- Newline-delimited frames are read in chunks without the asyncio default 64KiB line limit, with a 16MiB protocol maximum on both send and receive. Python, Rust, and C++ conformance covers concurrent multi-MiB requests within that limit.
+- `tools/call` sends `name`, `arguments`, and non-secret `context` coordinates. Normal Tool failures return `is_error: true`; JSON-RPC `error` is reserved for protocol or transport failures.
+- Results support strictly typed `content`, `structured`, `assets`, `is_error`, `concludes_turn`, and `release_resources`. Inline content is limited to 1MiB. Larger results must use worker-provided asset references, not inline base64. The driver does not invent assets or manage their lifecycle.
+- Timeout or cancellation sends `notifications/cancelled`, waits the configured grace period, then uses SIGTERM and SIGKILL. The call is uncertain and keeps its declared resource locks.
+- A crash produces `UncertainHanging`. The driver never restarts and replays the old call. Resource rules block new calls or return uncertain outcomes.
+- Cancellation cleanup runs in a protected task. Repeated cancellation cannot interrupt notification, bounded termination, or reader cleanup. Stdio writes and best-effort cancellation notifications have bounded drain times.
+- `shutdown` is acknowledged before worker exit. `close()` does not drain active calls: process exit makes their effects uncertain and returns locked outcomes. Cancelling `close()` still completes protected cleanup first.
+- Frames are read in chunks without the asyncio default 64KiB line limit. Send and receive share a 16MiB protocol maximum. Python, Rust, and C++ conformance covers concurrent multi-MiB requests within that limit.
 
-Workers are persistent and reused across calls. `check` performs initialize/list handshakes but no `tools/call`. `lazy` defers startup until runtime use and honors cancellation during the handshake; `eager` starts during Harness assembly/check. Only explicitly declared commands are started. Harness workers inherit the parent environment except for the variable named by `provider.api_key_env`, which is removed to prevent credential exfiltration; the parent Provider retains access.
+Workers are reused across calls. `check` performs initialize/list handshakes but never `tools/call`. `lazy` starts a worker on first use and honors cancellation during the handshake; `eager` starts it during Harness setup or check. Only declared commands are started.
+
+Workers inherit the parent environment except for `provider.api_key_env`, which is removed to prevent credential exposure. The parent Provider keeps access to the key.
 
 ## CLI
 
@@ -198,6 +258,6 @@ nextloop skills view guide harness.toml
 nextloop smoke harness.toml --input "Hello"
 ```
 
-`--json` is accepted before the command. `tools call` is the only inspection command that executes a Tool. `smoke` alone invokes a model and therefore requires the configured environment credential.
+`--json` goes before the command. `tools call` is the only inspection command that runs a Tool. `smoke` is the only command that calls a model, so it requires the configured credential.
 
-The release does not provide remote HTTP workers, FFI, package installation, automatic Skill execution, worker replay, daemon mode, or multi-process writer coordination.
+This release does not provide remote HTTP workers, FFI, package installation, automatic Skill execution, worker replay, daemon mode, or multi-process writer coordination.

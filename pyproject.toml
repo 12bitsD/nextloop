@@ -55,6 +55,7 @@ nextloop = ["py.typed"]
 addopts = "-ra"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+cache_dir = ".local/cache/pytest"
 testpaths = ["tests"]
 markers = [
   "flaky: timing-sensitive stability test excluded from CI and release gates",
@@ -63,6 +64,7 @@ markers = [
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+cache-dir = ".local/cache/ruff"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM"]
@@ -71,3 +73,4 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM"]
 python_version = "3.11"
 strict = true
 packages = ["nextloop"]
+cache_dir = ".local/cache/mypy"

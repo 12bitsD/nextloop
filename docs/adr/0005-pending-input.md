@@ -4,29 +4,38 @@ Status: accepted
 
 ## Context
 
-`steer()` persists INPUT_ACCEPTED before writing the in-memory actor inbox. INPUT_ACCEPTED alone is not part of the model-visible projection. A crash can therefore acknowledge an input that the model never sees. Rebuilding this state in `recover()` would create another writer and another crash window.
+`steer()` commits `INPUT_ACCEPTED` before writing the in-memory Inbox. `INPUT_ACCEPTED` alone is not shown to the model. A crash can therefore happen after an input is accepted but before the model sees it. Rebuilding state inside `recover()` would add another writer and another crash window.
 
 ## Decision
 
-The event log is the sole source of truth. The actor inbox is only a wake-up signal.
+The Event log is the source of truth. The actor Inbox is only a wake-up signal.
 
-- Scan INPUT_ACCEPTED and USER_MESSAGE in seq order and match them by `input_id`.
-- Accepted inputs without a corresponding USER_MESSAGE are Pending Input.
-- Compute Pending Input at the start of each Turn. Recovery never writes the actor inbox.
-- A new Turn commits recovered Pending as USER_MESSAGE at its first Step boundary. This consumption fact is required; injecting Pending only into a Provider request would leave it pending forever.
-- Pending historical inputs appear before the new Turn's initial_input. Inputs accepted during approval suspension appear only after the corresponding Tool results.
+Pending rules:
+
+- Read `INPUT_ACCEPTED` and `USER_MESSAGE` in sequence order and match them by `input_id`.
+- An accepted input without its `USER_MESSAGE` is Pending.
+- Compute Pending at the start of each Turn. Recovery never writes the actor Inbox.
+- A new Turn commits recovered Pending as `USER_MESSAGE` at its first Step boundary. Adding Pending only to a Provider request would leave it pending forever.
+- Historical Pending appears before the new Turn's `initial_input`. Input accepted during approval suspension appears after the corresponding Tool Results.
 - Inputs from cancelled or budget-terminated Turns carry into the next Turn by default.
-- Active execution also uses the log's consumption state, so an input present in both the log and actor inbox is injected once.
-- Pending is queryable with `input_id`, original seq, original Turn, and content. No cleanup event is introduced in this version.
-- `recover()` may be called repeatedly without duplicating Pending. A crash between recover and run has the same projection.
+- Active execution also checks the log, so input present in both the log and Inbox is injected once.
+- Pending queries include `input_id`, original sequence, original Turn, and content.
+- Repeated recovery, or a crash between recovery and run, produces the same Pending Projection without duplication.
 
-`input_id` is the idempotency boundary. A caller retrying initial input or steer must supply the same `input_id`, or query Pending before retrying. An absent or automatically generated ID does not provide cross-crash deduplication. Explicit IDs must be non-empty. For initial input, an already successfully completed retry with identical content is a no-op that returns the original TurnOutcome; failed, cancelled, blocked, interrupted, or still-Pending work may start a new Turn. Identical steer retries do not duplicate accepted input. The same ID with different content is rejected before a new INPUT_ACCEPTED is committed, so the original Pending content is preserved.
+### Idempotency
 
-No cleanup event is introduced. Pending remains visible until the caller consumes it or the protocol later defines an explicit discard fact.
+`input_id` is the deduplication boundary. Callers must reuse the same ID when retrying, or query Pending before trying again. Missing or generated IDs do not deduplicate across crashes. Explicit IDs must be non-empty.
+
+- After successful initial input, the same ID and content return the original `TurnOutcome` without new execution.
+- Failed, cancelled, blocked, interrupted, or still-Pending work may start a new Turn.
+- Identical steer retries do not duplicate accepted input.
+- Reusing any ID with different content is rejected before another `INPUT_ACCEPTED` is committed. The original Pending content is preserved.
+
+This version has no cleanup Event. Pending remains visible until consumed, or until a later protocol defines an explicit discard fact.
 
 ## Consequences
 
-- Accepted inputs are not silently lost after process crashes.
-- No second recovery writer or in-memory Pending copy can diverge from the log.
-- Callers that blindly retry with a new ID may intentionally receive duplicate content; this is not deduplicated.
-- Compaction and approval pairing must preserve Pending ordering and must not split a Tool Intent from its result.
+- Accepted input is not silently lost after a process crash.
+- No recovery writer or in-memory Pending copy can diverge from the log.
+- Retrying with a new ID can intentionally duplicate content; this is not deduplicated.
+- Compaction and approval pairing must preserve Pending order and keep each Tool Intent with its result.

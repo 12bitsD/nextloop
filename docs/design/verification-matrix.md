@@ -1,6 +1,6 @@
 # AgentLoop verification matrix
 
-Status: 1.0.0 release gate. A claim is closed only by the executable evidence named here; test count alone is not evidence.
+Status: 1.0.0 release gate. A claim is verified only by the executable evidence named here. A test count by itself proves nothing.
 
 ## Evidence rules
 
@@ -14,7 +14,7 @@ Status: 1.0.0 release gate. A claim is closed only by the executable evidence na
 
 ## Execution and input
 
-| Claim | Closing evidence |
+| Claim | Evidence |
 |---|---|
 | Text, Tool, multi-Step, mixed, empty, truncated, and malformed responses follow one protocol | `tests/test_loop.py`, `test_provider_terminal.py`, and recorded Provider tests |
 | Whole-batch rejection produces zero Tool side effects | Invalid name, JSON, identity, arguments, required-field, and truncated-tail cases |
@@ -28,9 +28,9 @@ Status: 1.0.0 release gate. A claim is closed only by the executable evidence na
 
 ## Fault injection and recovery
 
-The standard scenario has 13 append calls covering initial input, Step, model attempts/message, TOOL_CALL, steer, Tool Result, final, and Delivery acknowledgement. `tests/test_fault_matrix.py` traverses every call on Memory and SQLite with failure before and after commit: **52 scenarios**.
+The standard scenario has 13 append calls, from initial input through Delivery acknowledgement. `tests/test_fault_matrix.py` injects failure before and after every commit on Memory and SQLite: **52 scenarios**.
 
-Every scenario checks contiguous seq, unique event IDs, Pending preservation, interrupted-Turn closure, Tool Result pairing, resource locks, stable Final Message delivery, repeated recovery, and a subsequent successful Turn without Tool replay.
+Each scenario checks Event order and identity, Pending preservation, Turn closure, Tool Result pairing, resource locks, and stable Final Message delivery. It then repeats recovery and completes a later Turn without replaying the Tool.
 
 Additional boundaries:
 
@@ -59,7 +59,7 @@ Additional boundaries:
 - Surface epoch, append, none, INPUT_ACCEPTED, and correction behavior;
 - full recovery reads and optional corrupt-schema validation.
 
-Memory and SQLite must pass. `UncheckedWriterStore`, `DuplicateEventIdStore`, and `WrongSurfaceStore` must each be rejected. These negative fixtures are permanent public test assets in `nextloop.testing`.
+Memory and SQLite must pass. `UncheckedWriterStore`, `DuplicateEventIdStore`, and `WrongSurfaceStore` must fail. These negative fixtures remain public test assets in `nextloop.testing`.
 
 ## Projection benchmark
 
@@ -71,9 +71,9 @@ Memory and SQLite must pass. `UncheckedWriterStore`, `DuplicateEventIdStore`, an
 - incremental versus whole-history Trace parity;
 - required-content canaries for the summary, assistant output, Tool arguments/result, and final content.
 
-The benchmark reports median timings but does not impose a cross-machine latency threshold. `tests/test_projection_parity.py` runs the full benchmark in the normal suite; CI and Release also run the standalone command to emit measurements.
+The benchmark reports median timings without a cross-machine latency threshold. `tests/test_projection_parity.py` runs it in the normal suite. CI and Release also run the standalone command to print measurements.
 
-Conversation Projection is bounded by the returned Surface and serialized message bytes. Pending calculation scans ordered history once per new Turn. No O(1) Pending or full-history claim is made.
+Conversation Projection depends on the returned Surface and serialized message size. Pending calculation scans ordered history once per new Turn; it is not O(1).
 
 ## Public contracts and packaging
 
@@ -84,7 +84,7 @@ Conversation Projection is bounded by the returned Surface and serialized messag
 
 ## 0.6 operation, approval, and compatibility evidence
 
-| Claim | Closing evidence |
+| Claim | Evidence |
 |---|---|
 | Schema 1.0 loads without rewriting raw bytes | Real 0.5.0-generated SQLite fixture, upcast idempotency, raw-file byte comparison |
 | Schema 1.1 preserves new operation and lineage facts | Real 0.6-generated SQLite fixture with approval, reconciliation, and Compaction |
@@ -98,11 +98,11 @@ Conversation Projection is bounded by the returned Surface and serialized messag
 | Cross-Turn pairing is preserved | origin coordinates, approval Trace, recovered uncertain Results, pre-suspension input after Results, and Compaction source_seqs |
 | Resume uses fresh budgets | Tool, Step, model, and deadline configuration on the resume Turn |
 
-The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch, concurrent reconciliation, repeated-retry lock leakage, unknown-schema bypass, resource/budget approval bypass, finalization divergence, and input/dedup duplication. Every original counterexample has a regression and incremental Risk verification.
+The 0.6 review covered invalid grants, expiry during locks, duplicate dispatch, concurrent reconciliation, lock leakage, unknown schemas, approval bypass, finalization differences, and input duplication. Every original counterexample has a regression and follow-up Risk review.
 
 ## 0.7 lease and input evidence
 
-| Claim | Closing evidence |
+| Claim | Evidence |
 |---|---|
 | No-owner behavior remains compatible | Legacy epoch checks and raw 1.0/1.1 fixture bytes remain unchanged; lease tables are opt-in |
 | Same-owner restart and renewal | Immediate takeover, independent renewal during a long Tool, and expiry rejection |
@@ -119,7 +119,7 @@ The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch,
 
 ## 0.8 durable Outbox evidence
 
-| Claim | Closing evidence |
+| Claim | Evidence |
 |---|---|
 | Only committed closed Turns export | Active Turns are excluded; closed earlier Turns replay without `recover()` |
 | Ack and cursor have distinct crash windows | Ack-before-cursor replays identical content and identity; post-cursor crash does not replay |
@@ -134,7 +134,7 @@ The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch,
 
 ## 0.9 whole-Session deletion evidence
 
-| Claim | Closing evidence |
+| Claim | Evidence |
 |---|---|
 | Deletion is reentrant and cannot recreate a Session | Memory/SQLite repeated deletion, persistent deleting/deleted tombstones, attach/append/writer rejection |
 | Tombstoned reads fail closed | Surface/recovery/renew/has_writer rejection and reopen; consistent read snapshots never turn deleted history into a valid empty Session |
@@ -148,7 +148,7 @@ The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch,
 
 ## 1.0 live Provider and release evidence
 
-| Claim | Closing evidence |
+| Claim | Evidence |
 |---|---|
 | DeepSeek text Turn works end to end | One-step committed Turn, 16 Preview events, input/output usage, and committed Delivery |
 | DeepSeek Tool Turn works end to end | Two Steps, one actual read Tool Call, 22 Preview events, usage, and final Delivery |
@@ -158,8 +158,8 @@ The 0.6 review closed non-boolean grants, lock-delay expiry, duplicate dispatch,
 
 ## Review and external evidence
 
-Standards, Spec, and Risk reviews run independently. Original counterexamples must become regressions, and fixes receive incremental review. The 0.5.0 review closed stale dispatch, Pending consumption, ID conflicts, Compaction identity, export-contract gaps, wrapper duplication, and erased-content test oracles.
+Standards, Spec, and Risk reviews run independently. Every original counterexample must become a regression, and fixes receive follow-up review. The 0.5.0 review covered stale dispatch, Pending consumption, ID conflicts, Compaction identity, export contracts, wrapper duplication, and erased-content checks.
 
-Recorded OpenAI and Anthropic SSE scenarios are Adapter evidence, not official API acceptance. Twelve live Kimi scenarios and live DeepSeek text/Preview/usage and Tool/Delivery smoke are separately identified. Under ADR-0011, the maintainer-selected DeepSeek text, Tool, Preview, usage, Delivery, Outbox, and deletion scenarios close the 1.0 live Provider gate. Official OpenAI and Anthropic API acceptance is not claimed.
+Recorded OpenAI and Anthropic SSE scenarios prove Adapter behavior, not official API acceptance. Live Kimi and DeepSeek scenarios are reported separately. ADR-0011 uses the DeepSeek text, Tool, Preview, usage, Delivery, Outbox, and deletion scenarios as the 1.0 live Provider gate. Official OpenAI and Anthropic API acceptance is not claimed.
 
-Current non-guarantees: distributed writer coordination, exactly-once export, deletion of third-party copies or backups, remote MCP/OAuth, event-level erasure, and external large-asset lifecycle.
+Not guaranteed: distributed writer coordination, exactly-once export, deletion of third-party copies or backups, remote MCP/OAuth, Event-level erasure, and external large-asset lifecycle.

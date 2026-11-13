@@ -1,139 +1,133 @@
 # ContextBuilder design
 
-Status: **M5 in progress**. This document records confirmed context and cache decisions separately from proposals that still need discussion. It does not authorize runtime implementation.
+Status: **historical M5 design note**. This file preserves early context and cache decisions, including Nika-specific proposals. It is not a description of the current nextloop implementation. For current behavior, see [Architecture](architecture.md) and [Harness](harness.md).
 
 ## Purpose
 
-ContextBuilder assembles each provider-facing model request from Session projections and current execution state. Its primary optimization is prompt-cache reuse through an immutable, append-only request prefix, subject to correctness, relevance, and provider capacity limits.
+ContextBuilder builds each Provider request from Session history and current execution state. Its main cache rule is simple: keep earlier content unchanged and append new content, unless Compaction or an explicit revision requires a new prefix.
 
-A Session and its Trajectory can outlive any individual model request. The provider context window is a per-request capacity limit, not a Session-sized store. Prompt caching can reduce cost and latency, but cached tokens still occupy the provider context window.
+A Session can outlive any Model request. The Provider context window limits one request, not the whole Session. Cached tokens still use space in that window.
 
 ## Confirmed decisions
 
-### Append-only provider-visible content
+### Append-only Provider content
 
-Within one compaction boundary and a fixed set of prompt revisions, previously submitted Tool definitions, system content, and conversation messages remain unchanged. New assistant messages, Tool Calls, Tool Results, user input, steer, and WorkingContext versions are appended rather than inserted into or replacing earlier content.
-
-This is a logical provider-visible content-prefix guarantee; canonical serialization and each provider's wire mapping remain M5 implementation-contract work. Compaction creates a new Conversation prefix, while the underlying Trajectory remains append-only and immutable. This prefix rule has two execution-specific exceptions: a committed rejected batch removes or strips its earlier assistant Tool Intent, and Pending Input is folded at the current consumption/approval anchor rather than treated as an already consumed message. The pure projection fold owns those rules.
-
-The intended cache model is:
+Within one Compaction boundary and fixed Prompt revisions, Tool definitions, system content, and earlier messages do not change. New assistant messages, Tool results, user input, steer, and WorkingContext versions are appended.
 
 ```text
 Request N
-= established provider-visible prefix + current appended content
+= established prefix + current content
 
 Request N+1
-= the same established content, unchanged
+= the same prefix, unchanged
 + newly committed assistant / tool / user / WorkingContext content
 ```
 
-Correctness and relevance take precedence over cache hit rate. A required compaction or an accepted revision change may establish a new prefix; routine model calls must not do so accidentally.
+Compaction creates a new Conversation prefix without rewriting Trajectory. There are two execution exceptions: a rejected batch removes or strips its earlier invalid Tool Intent, and Pending Input is inserted at its current consumption or approval anchor. The pure Projection fold owns these rules.
+
+Correctness matters more than cache hit rate. Compaction and accepted revisions can create a new prefix; ordinary Model calls should not create one accidentally.
 
 ### System Prompt, AGENTS.md, and Tools
 
-The top-level request shape is `tools[] + system + messages[]`. The former `stable / context / volatile` System Prompt tiering is removed.
+The request shape is `tools[] + system + messages[]`. The earlier `stable / context / volatile` System Prompt tiers are removed.
 
-System Prompt is a small runtime-owned contract for action, verification, trust, and harness usage. It does not contain the evolving persona, recent tasks, Wiki snapshots, WorkingContext, budget balances, dynamic request IDs, or per-call timestamps. Tool-specific arguments belong in Tool schemas rather than a central Prompt manual.
+System Prompt is a small runtime contract for actions, verification, trust, and Harness use. It does not contain a changing persona, recent tasks, Wiki snapshots, WorkingContext, budget balances, request IDs, or timestamps. Tool arguments belong in Tool schemas.
 
-`AgentWiki/AGENTS.md` maintains the Agent's evolving role, personality, and interaction style. Its snapshot is injected as a separate runtime context message in the first request of a Session, not compiled into System Prompt, and is changed or refreshed only when the user explicitly requests it. Skill metadata is separate from the runtime-owned System Prompt and dynamic at the point of use: a later Skill load may read the current version, with updated context appended rather than rewritten. Wiki entries are likewise read live with `grep → read`, without a required revision record or a default recent-task snapshot.
+`AgentWiki/AGENTS.md` holds the Agent's role, personality, and interaction style. In this historical design, its snapshot is a separate context message in the first Session request and changes only when the user asks. Skill metadata is read at the point of use, and updates are appended. Wiki entries are read live without a default recent-task snapshot.
 
-Tools use a small static catalog with clear semantics. The runtime resolves Session, workspace, credentials, defaults, validation, retries, resource ownership, large-output assets, and error normalization so the model does not repeat those details. There is no universal `execute(action, payload)` Tool and no Tool Search in the baseline. An MCP adapter and allowlist configuration are reserved, but MCP is disabled and contributes no schemas by default.
+The baseline uses a small static Tool Catalog. Runtime owns validation, retries, credentials, resources, and error handling so the model does not repeat those details. There is no universal `execute(action, payload)` Tool or baseline Tool Search. MCP is disabled unless explicitly configured.
 
-[Whole-batch validation](agent-loop.md#tool-call-validation) rejects all calls in a model response if any call format or schema check fails. ContextBuilder must not turn invalid raw response facts into apparently valid Tool history by guessing arguments or identities. Provider-valid error feedback and correction requests remain a T2 contract; saved model output alone does not authorize dispatch or another request.
+[Whole-batch validation](agent-loop.md#tool-call-validation) rejects the entire response if any Tool Call is invalid. ContextBuilder must not repair raw invalid output by guessing IDs or arguments. Saved model output alone never authorizes dispatch.
 
-### WorkingContext is append-versioned
+### WorkingContext versions
 
-WorkingContext is a short, user-level self-reminder maintained by the Agent. A Session has at most one active WorkingContext at a time; Run and Session are lifetime scopes, not two parallel reminder slots.
+WorkingContext is a short, user-level reminder maintained by the Agent. A Session has at most one active version.
 
-- `set_working_context(content, scope="turn" | "session")` appends a new active version. The newest version supersedes the previous active version, including across scopes. Identical content (by hash) and rapid consecutive updates without a phase change are damped (`WorkingContext unchanged`) without appending a message, preventing reminder spam from polluting the prompt prefix.
-- `clear_working_context()` clears the current active version. Clearing an already empty context returns `WorkingContext is already empty` without appending a message.
-- No `reason` field is required. Tool Results are short success or error text, not a lifecycle-state schema. Revisions remain internal to Runtime and Trajectory.
-- Active messages use `[WorkingContext · turn]` or `[WorkingContext · session]` followed by the reminder. Clear and Turn expiry append `[WorkingContext cleared · scope]` or `[WorkingContext expired · scope]`; old bytes are never rewritten.
-- Content is trimmed and nonempty. 2 KiB is a soft readability guideline, not a rejection limit; the Agent may keep more when the task needs it. Long-term knowledge, large plans, and hidden reasoning still do not belong here.
-- After a valid set or clear, Runtime commits the Tool Result and state event, appends the corresponding user-level message, then appends pending steer before the next model call. Actual user input therefore follows the Agent's self-reminder.
-- Turn-scoped context expires at Turn finalization. Recovery from an interrupted Turn appends the missing expiry before a new Turn. Session-scoped context expires only through replacement or an explicit clear.
-- Compaction preserves only the latest active WorkingContext, immediately after the latest task summary and before subsequent messages. Older versions and clear/expiry markers are omitted; if no active context exists, none is injected.
-- The user-level role provides salience, not user authorization. WorkingContext cannot override system rules, actual user instructions, or Tool permissions.
+- `set_working_context(content, scope="turn" | "session")` appends a new version. The newest version replaces the active one across scopes. Identical or rapidly repeated updates can be damped without adding another message.
+- `clear_working_context()` clears the active version. Clearing an empty context returns a short notice without appending a message.
+- Messages use `[WorkingContext · turn]` or `[WorkingContext · session]`. Clear and expiry markers are appended; old bytes are not rewritten.
+- Content is trimmed and nonempty. 2 KiB is a readability guideline, not a hard limit. Long-term knowledge, large plans, and hidden reasoning do not belong here.
+- Turn-scoped reminders expire during finalization. Recovery adds a missing expiry before a new Turn. Session-scoped reminders end only through replacement or explicit clearing.
+- Compaction keeps only the latest active reminder, immediately after the task summary. Older versions and clear/expiry markers are omitted.
+- The user-level role adds salience, not authorization. WorkingContext cannot override system rules, user instructions, or Tool permissions.
 
-This supersedes both the earlier replace/remove design and the later revision/status-heavy Tool Result and message-envelope proposal.
+This replaces the earlier replace/remove and revision-heavy designs.
 
-### Revision and Provider cache planning
+### Revisions and Provider caches
 
-Stable content changes only at explicit boundaries: model and Provider are fixed per Run; System Prompt and project `AGENTS.md` are fixed per Run; Tool Catalog is fixed per Turn; `AgentWiki/AGENTS.md` changes only after an explicit user request, with the new version appended in a later Turn. Already submitted content is never replaced.
+Stable content changes only at explicit boundaries: model and Provider are fixed per Run; System Prompt and project `AGENTS.md` are fixed per Run; Tool Catalog is fixed per Turn; `AgentWiki/AGENTS.md` changes only after a user request. Updated Skills, WorkingContext, and steer are appended instead of editing old requests.
 
-Wiki entries are read live, Skills are read at the point of use, and updated Skill indexes, WorkingContext versions, and steer are appended without rewriting earlier content. Dynamic behavior therefore never requires editing an earlier request.
+An exact-byte retry is allowed only when no assistant output or new input has arrived. Model, parameters, Tools, system content, messages, and serialized bytes must match. Partial output follows the interruption rules; new steer creates a new logical request.
 
-A retry may resend the exact provider-facing request only when no assistant output has been received and no new input has arrived. Model, parameters, Tool definitions, system content, messages, and serialized bytes must all match. Partial assistant output follows the M4 unknown/interrupted rules; newly arrived steer is appended as a new logical request; invalid parameters or schemas are corrected rather than blindly retried. Retry stays within the same Run.
+OpenAI and Kimi use implicit caching with stable prefixes, name-sorted Tools, canonical key ordering, and Provider-default TTL. Anthropic uses explicit breakpoints only after committed immutable content. Adapters own Provider-specific cache markers.
 
-OpenAI and Kimi use implicit caching with stable prefixes, name-sorted Tool definitions, canonical key ordering, and provider-default TTL. Anthropic uses explicit breakpoints only after committed immutable content: stable system, fixed `AGENTS.md` bootstrap, or a complete recent Conversation group. Adapters handle provider-specific marker support instead of assuming identical `cache_control` behavior.
+Cache hits affect cost and latency, never correctness. Cached tokens still use context space. The outer Runtime may record revisions, Event ranges, cache plans, and serialization versions for observability without adding them to the model request. Provider connection configuration is not part of core Trajectory.
 
-Cache hits affect cost and latency only, never correctness. Cached tokens still occupy the context window, and `cache_read/cache_write` may be recorded for observability. The outer Runtime may record model route and parameters, System Prompt/Tool/AGENTS/Skill-index revisions, Conversation event range, cache plan, and serialization version without injecting them into the model; Provider connection configuration is not part of the Loop's core Trajectory. Ordinary Wiki entries do not require a revision record.
-
-Compaction preserves System Prompt and `AGENTS.md` bytes while creating a new Conversation cache boundary. Explicit model, Tool, or System Prompt changes also create a new boundary; updated Skill context is appended to preserve the old prefix where possible.
+Compaction preserves System Prompt and `AGENTS.md` while starting a new Conversation cache boundary. Explicit model, Tool, or System Prompt changes also start a new boundary.
 
 ### Content access and task performance
 
-There is no fixed total prefix cap or per-section rejection for System Prompt, `AGENTS.md`, Tool schemas, Skill indexes, or WorkingContext. Size is a diagnostic signal, not an optimization target. The Agent must be able to access information needed for the task and may revise these surfaces in a later reviewed improvement workflow.
+There is no fixed total cap for System Prompt, `AGENTS.md`, Tool schemas, Skill indexes, or WorkingContext. Size is a diagnostic signal, not a target by itself.
 
-Limits are retained only where they address a concrete execution problem. Large Tool Results are stored as assets with a useful preview, preserving full evidence for later grep/read instead of dropping it. Wiki and other paged reads limit only one response, never total access; the Agent can continue fetching when the task requires it. Multimodal content uses assets and Provider-specific handling rather than inline base64 text.
+Limits should solve concrete execution problems. Large Tool Results are stored as assets with useful previews so the Agent can grep or read the full evidence later. Paged reads limit one response, not total access. Multimodal content uses assets and Provider-specific handling instead of inline base64.
 
-Provider capacity remains a hard correctness constraint. If fixed content alone cannot fit, Runtime reports the problem rather than silently discarding task-relevant information; the Agent or user may choose a larger model, remove unnecessary content, or change the task approach. Conversation uses remaining space and enters normal compaction at 75%.
+Provider capacity is a hard limit. If fixed content cannot fit, Runtime reports the problem instead of silently dropping task information. The Agent or user can choose a larger model, remove content, or change the approach.
 
-Runtime records section sizes, cache usage, request/output sizes, and read patterns for later task-performance review. These measurements inform whether content is irrelevant, Tool definitions are unclear, or a different presentation would work better; they are not hardcoded budget ceilings.
+Runtime may record section sizes, cache usage, request sizes, and read patterns to guide later review. These measurements are not hardcoded budget ceilings.
 
 ### Usage and preflight
 
-Every safe model boundary builds a complete candidate after committing completed Tool Results, WorkingContext, and steer. Input occupancy includes System Prompt, `AGENTS.md`, Tool schemas, Skill indexes, Conversation, Tool Calls and Results, current input, and multimodal content. Cached tokens still count.
+Before a safe Model boundary, build the complete candidate after committing Tool Results, WorkingContext, and steer. Input includes System Prompt, `AGENTS.md`, Tool schemas, Skill indexes, Conversation, Tool Calls and Results, current input, and multimodal content. Cached tokens count too.
 
-Usage is resolved in this order:
+Estimate usage in this order:
 
-1. Provider-reported usage from a previous response may anchor an incremental estimate only while model route, parameters, priced prefix, and serialization remain identical. Any relevant revision change invalidates the anchor.
-2. A Provider `count_tokens` endpoint, when available, evaluates the full candidate after prefix changes or when the anchor is unavailable.
-3. A full local estimate covers system, tools, messages, Tool Calls, and multimodal content with a versioned estimator and Provider-specific or conservative image handling.
+1. Previous Provider usage can anchor an incremental estimate only while the route, parameters, priced prefix, and serialization are unchanged.
+2. A Provider `count_tokens` endpoint, when available, evaluates the full candidate after prefix changes or when no anchor exists.
+3. A full local estimate covers system, Tools, messages, Tool Calls, and multimodal content with a versioned estimator and conservative image handling.
 
-Missing usage is never treated as zero, and an oversized request is not sent merely to learn its usage. Compaction-summary usage is recorded separately and never anchors the main Conversation.
+Missing usage is not zero. Do not send an oversized request just to learn its usage. Compaction usage is recorded separately and never anchors the main Conversation.
 
-Preflight computes `I` for complete input and `O` for the active profile's output reserve, including reasoning and Tool Calls. It enters Compacting when `I >= 75%` of the model window or when `I + O` exceeds the Provider's allowed capacity. Providers with separate input and output limits apply those limits independently instead of summing them.
+Preflight computes input `I` and output reserve `O`, including reasoning and Tool Calls. It starts Compaction when `I >= 75%` of the model window or `I + O` exceeds capacity. Providers with separate input and output limits apply them independently.
 
-After compaction, Runtime rebuilds and rechecks the candidate. No-progress compaction and a second Provider overflow are terminal. If fixed content alone cannot fit, Runtime reports the configuration problem rather than silently dropping task information; the Agent or user may select a larger model, remove content, or explicitly reduce the output reserve. An exact-byte retry may reuse the previous preflight result; any new input or revision requires a fresh check.
+After Compaction, rebuild and recheck the candidate. A summary that does not reduce size, or a second Provider overflow, is terminal. Exact-byte retries may reuse the previous preflight; new input or revisions require a fresh check.
 
 ### Compaction prompt and process
 
-The dedicated [https://github.com/12bitsD/nika/blob/main/docs/design/compaction-prompt.md](https://github.com/12bitsD/nika/blob/main/docs/design/compaction-prompt.md) replaces the normal task System Prompt for the summary request. The request is dedicated Compaction System Prompt + `AGENTS.md` + current Conversation + summarize instruction, with no Tool definitions or execution. It reconstructs current task state by future action value rather than preserving a fixed schema or complete Tool transcripts.
+The dedicated [Compaction Prompt](https://github.com/12bitsD/nika/blob/main/docs/design/compaction-prompt.md) replaces the normal task System Prompt for the summary request. The request contains the Compaction Prompt, `AGENTS.md`, current Conversation, and the summarize instruction. It has no Tool definitions or execution. It summarizes information needed for future actions rather than preserving every Tool transcript.
 
-Compaction starts on user `/compact`, the 75% input threshold, or a preflight capacity violation as defined above. `/compact` runs immediately while Idle and otherwise at the next safe model boundary. A failed or unusable summary is not committed; the previous projection remains and the failure is reported. Provider overflow permits one compaction, not an unbounded sequence. A fresh compaction that still cannot produce an admissible request ends with the error.
+`/compact` runs immediately while idle or at the next safe Model boundary. The 75% threshold and capacity violations use the same process. An unusable summary is not committed. Provider overflow permits one Compaction, not an unbounded sequence.
 
-The next request is normal System Prompt + `AGENTS.md` + the new task summary + the latest active WorkingContext, if any + subsequent messages. Validation requires a nonempty result whose canonical UTF-8 representation, together with the retained WorkingContext, is strictly smaller than the replaced Conversation slice (excluding unchanged System Prompt, bootstrap messages, and Tool definitions). It also requires unchanged normal System Prompt and `AGENTS.md`, valid request structure, and successful `I + O` preflight. Runtime state remains in Session, and old Trajectory is never rewritten.
+The next request contains the normal System Prompt, `AGENTS.md`, the new task summary, the latest active WorkingContext if present, and later messages. The summary and retained WorkingContext must be smaller than the replaced Conversation slice. System Prompt and `AGENTS.md` must be unchanged, and the new candidate must pass preflight. Old Trajectory is never rewritten.
 
-### Proactive is a separate mechanism
+### Proactive behavior
 
-The value of proactive behavior is accepted: the Bot should reduce the user's context-management burden and release cognitive bandwidth by organizing task context, verifying facts within existing authorization, and surfacing only meaningful decisions and state changes.
+Proactive behavior is a separate design topic. WorkingContext and ContextBuilder alone do not implement task-phase detection, update triggers, user-facing summaries, or interruption policy.
 
-That behavior is not implemented by WorkingContext or ContextBuilder alone. Task-phase detection, update triggers, user-facing distillation, and interruption policy require a separate design topic after the M5 context baseline is closed.
+### Step pacing
 
-### Step pacing watermark (Replaces `lite/pro/promax` budget profiles)
+The earlier `lite/pro/promax` profiles and `configure_budget` Tool are removed. They spend a Model Step and Tool Call to change a soft counter that does not stop execution.
 
-Separate `lite/pro/promax` budget profiles and a `configure_budget` Tool are removed by Occam's Razor: spending a model Step and Tool Call to reconfigure a soft counter that never halts execution is pure overhead.
+Instead, at each multiple of `pacing_step_interval` (default 15 Steps), Runtime appends a one-line pacing hint to the latest Tool Result:
 
-Instead, Runtime applies a zero-configuration **Step Pacing Watermark**: whenever an active Turn reaches a multiple of `pacing_step_interval` (default 15 Steps), Runtime appends a concise one-line pacing hint (`[Runtime: Step 15 reached; verify progress, converge, or ask the user if blocked]`) to the latest Tool Result. Per-request and per-Tool timeouts remain separate hard guards.
+```text
+[Runtime: Step 15 reached; verify progress, converge, or ask the user if blocked]
+```
 
-## Remaining M5 decision
+Request and Tool timeouts remain separate hard limits.
 
-### Tool schemas and descriptions
+## Historical M5 decision
 
-Finalize each Tool's schema and description. The runtime-owned System Prompt and first static Tool Catalog are selected in [https://github.com/12bitsD/nika/blob/main/docs/design/system-prompt.md](https://github.com/12bitsD/nika/blob/main/docs/design/system-prompt.md). The top-level `tools[] + system + messages[]` shape, independent `AGENTS.md` bootstrap, removal of System Prompt tiers, absence of baseline Tool Search, and soft budget behavior are accepted.
+The remaining Tool schema and description work refers to the historical [System Prompt design](https://github.com/12bitsD/nika/blob/main/docs/design/system-prompt.md). The `tools[] + system + messages[]` shape, separate `AGENTS.md` bootstrap, lack of baseline Tool Search, and soft budget behavior were accepted in that design.
 
-## Verification requirements for the eventual implementation
+## Historical verification notes
 
-- Budget changes apply only after commit, affect the next operation, and leave in-flight work unchanged.
-- Run-scoped changes do not alter Session defaults, and Session-scoped changes do not alter the current Run.
-- Tool Results contain `cap/used/remaining` and an efficiency hint, and over-budget execution continues with guidance rather than forced termination.
-
-- Two ordinary model calls preserve all earlier provider-visible content and append only new committed events.
-- WorkingContext set, replacement, clear, Run expiry, and compaction follow the append-versioned contract without rewriting old events.
-- Tool Calls and Tool Results remain complete and correctly paired across every request and compaction boundary.
-- Equivalent inputs produce canonical, explainable request bytes; accepted revision changes are explicit and measurable.
-- Cache misses caused by compaction or revision changes are distinguishable from accidental serialization drift.
-- A retry with no assistant output and no new input preserves the exact provider-facing request; steer and partial-output cases follow their separate contracts.
-- Compaction uses the dedicated Compaction System Prompt with `AGENTS.md`, produces a nonempty and smaller task summary, preserves runtime state in Session, and keeps the latest active WorkingContext.
-- The 75% trigger, provider-capacity admission check, compaction failure, and provider-overflow recovery are exercised at their exact boundaries.
+- Budget changes apply only after commit and leave active work unchanged. Run-scoped changes do not alter Session defaults, and Session-scoped changes do not alter the current Run.
+- Tool Results contain `cap/used/remaining` and an efficiency hint. Over-budget work continues with guidance rather than forced termination.
+- Ordinary Model calls preserve earlier Provider content and append only new committed Events.
+- WorkingContext set, replacement, clear, Run expiry, and Compaction never rewrite old Events.
+- Tool Calls and Tool Results stay complete and paired across requests and Compaction.
+- Equivalent inputs produce canonical, explainable request bytes. Revision changes are explicit and measurable.
+- Cache misses from Compaction or revisions are distinguishable from serialization drift.
+- Retries without output or new input preserve exact request bytes.
+- Compaction uses the dedicated Prompt, produces a smaller nonempty summary, and keeps the latest active WorkingContext.
+- The 75% trigger, capacity checks, Compaction failure, and Provider overflow are tested at their exact boundaries.

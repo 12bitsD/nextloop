@@ -4,24 +4,26 @@ Status: accepted
 
 ## Context
 
-nextloop 0.5.0 writes Event schema 1.0. The 0.6 operation identity, approval, and Compaction lineage work adds payload fields without changing the Event envelope. Compatibility must not rewrite history, silently accept a future schema, or compare upcast payloads as if they were original bytes.
+nextloop 0.5.0 writes Event Schema 1.0. Version 0.6 adds operation identity, approval, and Compaction lineage fields without changing the Event envelope. Compatibility must not rewrite history, accept unknown future versions, or confuse upcast data with original stored bytes.
 
 ## Decision
 
-New Events are written as schema 1.1. Stores accept 1.0 history and upcast it only while loading. Unknown schema versions fail closed with `InvariantViolation`; older readers that only understand 1.0 therefore cannot read a 1.1 Session.
+New Events use Schema 1.1. Stores read 1.0 history and upcast it only during loading. Unknown versions fail with `InvariantViolation`. Readers that only support 1.0 cannot read a 1.1 Session.
 
-- Upcasting is a pure, deterministic, idempotent function. No Store UPDATE or rewrite is part of loading.
-- The original stored payload and event ID remain authoritative for idempotent append comparison. Comparing a draft with an upcast representation is not equivalent to comparing original bytes and is rejected when they differ.
-- A schema-1.0 TOOL_CALL without `operation_id` receives a deterministic ID derived from `session_id`, `turn`, `step`, and `call_id`. The same coordinates in ASSISTANT_MESSAGE Tool Calls receive the same ID; identical call IDs in different Steps receive different IDs.
-- A schema-1.0 COMPACTION without lineage receives `source_seqs=None`. No exact source range is fabricated.
-- Projection, Trace, and Recovery consume upcast Events; idempotent append uses the stored, non-upcast representation.
-- The reserved single-key payload `{"_nextloop_erased": True}` denotes erased content for future retention work. Reusing that event ID raises `PayloadErasedError` without comparing payload content. No content hash is retained for low-entropy PII, and event-level erasure itself is outside 0.6.
-- Every released schema has a real Store fixture produced by that release. The 1.0 fixture contains normal multi-Step Tool Calls with a repeated call ID, Compaction, and an interrupted Tool Call. New readers must preserve raw fixture bytes while loading and upcasting.
+Rules:
+
+- Upcasting is pure, deterministic, and idempotent. Loading never runs an UPDATE or rewrites Events.
+- Idempotent append compares the original stored payload and Event ID, not the upcast representation. Different original content is rejected.
+- A 1.0 `TOOL_CALL` without `operation_id` gets a deterministic ID from `session_id`, `turn`, `step`, and `call_id`. The matching call in `ASSISTANT_MESSAGE` gets the same ID. The same call ID in another Step gets a different ID.
+- A 1.0 `COMPACTION` without lineage gets `source_seqs=None`. No source range is invented.
+- Projection, Trace, and Recovery use upcast Events. Idempotent append uses the stored, non-upcast representation.
+- The reserved payload `{"_nextloop_erased": True}` marks erased content for future retention work. Reusing that Event ID raises `PayloadErasedError` without comparing content. No low-entropy PII hash is retained, and Event-level erasure is outside 0.6.
+- Each released schema has a real Store fixture from that release. The 1.0 fixture covers repeated call IDs, Compaction, and an interrupted Tool Call. Reading and upcasting must not change fixture bytes.
 
 ## Consequences
 
 - Old 1.0 logs remain readable without a migration write or downtime.
-- New 1.1 logs are intentionally not readable by 0.5.0 and earlier.
+- Versions 0.5.0 and earlier intentionally cannot read 1.1 logs.
 - Read-time compatibility does not weaken append idempotency or future-version checks.
-- Operation identity for legacy calls is deterministic and coordinate-scoped. New operation IDs introduced in 0.6 are persisted facts, not regenerated during recovery.
-- Payload erasure has a fail-closed identity rule without prematurely implementing deletion or retaining PII hashes.
+- Legacy operation IDs are deterministic and coordinate-scoped. New operation IDs introduced in 0.6 are persisted facts, not regenerated during recovery.
+- Erased payloads fail closed by identity without implementing deletion early or retaining PII hashes.

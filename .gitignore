@@ -12,6 +12,9 @@ dist/
 .coverage
 htmlcov/
 .wheel-check/
+.wheel-venv/
+.release-venv/
+.local/
 .live-check/
 *.sqlite3-shm
 *.sqlite3-wal

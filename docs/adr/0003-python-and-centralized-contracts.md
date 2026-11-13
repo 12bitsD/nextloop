@@ -4,28 +4,26 @@
 - Date: 2026-11-06
 - Scope: implementation language, dependencies, package layout, and `contracts.py` discipline
 
-## Decision
-
-### Language and dependencies
+## Language and dependencies
 
 - Python 3.11+ with native `asyncio`; CI covers 3.11, 3.12, 3.13, and 3.14.
 - Standard-library `dataclasses`, `typing`, and `sqlite3`.
 - `httpx` for Provider HTTP/SSE and `jsonschema` for Tool argument validation.
 - `pytest` and `pytest-asyncio` for tests; `ruff` and `mypy` for static checks.
 
-### Centralized `src/nextloop/contracts.py`
+## Public contracts in one file
 
-All public schemas and protocols live in `src/nextloop/contracts.py`:
+`src/nextloop/contracts.py` contains the public data types and Protocols:
 
-- 4D event coordinates and `SurfaceOp` envelopes;
+- Event coordinates and `SurfaceOp`;
 - messages, requests, responses, Tool specs, and validation results;
-- the closed five-variant `ToolOutcome` ADT;
+- the five closed `ToolOutcome` variants;
 - `LoopConfig`, Turn/Recovery outcomes, errors, and versions;
-- the four Adapter Protocols: `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`.
+- `EventStore`, `ModelProvider`, `ToolRuntime`, and `DeliveryOwner`.
 
-`src/nextloop/__init__.py` explicitly re-exports the supported public surface. Provider-private wire types and consumer-owned product schemas remain outside this file.
+`src/nextloop/__init__.py` explicitly re-exports the supported public names. Provider-private wire types and consumer-owned product schemas stay outside this file.
 
-### Final package layout
+## Package layout
 
 ```text
 src/nextloop/
@@ -49,8 +47,8 @@ src/nextloop/
   __init__.py          # explicit public exports
 ```
 
-`events/` contains pure functions with no I/O. `execute/` owns asynchronous side effects and normalized failures. `driver.py` only composes these mechanisms and owns finalization.
+`events/` contains pure functions with no I/O. `execute/` owns asynchronous side effects and normalized failures. `driver.py` composes these mechanisms and owns finalization.
 
 ## No generic handler layer
 
-There is no EventBus, middleware chain, per-state class hierarchy, or handler registry for Session events. `ToolRegistry` is a concrete ToolRuntime implementation, not a lifecycle hook system. Tool execution and batch scheduling are separate modules because registration/validation and concurrency/truncation are different responsibilities.
+There is no EventBus, middleware chain, per-state class hierarchy, or Session handler registry. `ToolRegistry` is a concrete `ToolRuntime`, not a lifecycle hook system. Registration/validation and batch scheduling remain separate because they have different responsibilities.

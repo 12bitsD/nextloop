@@ -21,49 +21,53 @@ flowchart LR
     Store -->|committed events| Traces[Trace Projection]
 ```
 
-The Loop coordinates execution; the Store owns ordering and writer fencing. `events/` contains pure folds and projections. Providers, Tools, Delivery, and persistence are adapters. Preview events are transient and do not enter the EventStore.
+`AgentLoop` coordinates the work. `EventStore` orders Events and checks which writer may append them. Providers, Tools, Delivery, and storage connect through adapters. Pure functions in `events/` build Conversation and Trace views from the Event log. Preview output is temporary and never enters that log.
 
-## Invariants
+## Rules the runtime must preserve
 
-- Event append checks `writer_epoch` and `expected_seq` atomically. With an optional owner lease, it also validates owner identity and expiry in the same transaction. Legacy attach behavior is unchanged when no owner is configured.
-- TOOL_CALL is committed before Tool dispatch. A second `check_writer()` runs after that commit and immediately before `ToolRuntime.execute()`.
-- Recovery does not replay a dispatched Tool. Missing results become explicit skipped or uncertain outcomes.
-- FINAL_MESSAGE and TURN_END are durable before Delivery. Delivery is at least once and owners deduplicate by `final_message_id`.
-- Pending Input is derived from INPUT_ACCEPTED and USER_MESSAGE by `input_id`. A later Step boundary commits its consumption; the in-memory inbox is only a wake-up signal.
-- Trace records are projections of committed Events. Export failures cannot change Turn outcomes.
+- Every append checks `writer_epoch` and `expected_seq` together. If an owner lease is configured, the same transaction also checks the owner and expiry. Stores without an owner keep the legacy behavior.
+- A `TOOL_CALL` is committed before a Tool runs. `check_writer()` runs again immediately before `ToolRuntime.execute()`.
+- Recovery never replays a dispatched Tool. A missing result becomes an explicit skipped or uncertain outcome.
+- `FINAL_MESSAGE` and `TURN_END` are committed before Delivery. Delivery may happen more than once, so owners deduplicate by `final_message_id`.
+- Pending Input comes from `INPUT_ACCEPTED` and `USER_MESSAGE` Events with the same `input_id`. A later Step boundary records its consumption. The in-memory inbox only wakes the Loop.
+- Traces are derived from committed Events. An export failure cannot change a Turn result.
 
-Owner leases are optional. Same-owner restarts take over immediately; different owners require expiry or explicit force. Heartbeat renewal is independent of appends, and the Store clock decides expiry. SQLite promises same-host multi-process contention only, not distributed coordination. Durable Trace export is implemented by the caller-driven `SQLiteOutbox`. Reentrant whole-Session deletion uses fail-closed tombstones, local Trace/Outbox cleanup, and SQLite byte purging; third-party exports and external assets remain outside that guarantee.
+### Ownership, export, and deletion
 
-## Complexity boundaries
+Owner leases are optional. The same owner can take over after a restart. A different owner must wait for expiry or use an explicit force. Heartbeats renew leases independently of Event appends, and the Store clock decides expiry. SQLite supports same-host process contention, not distributed coordination.
 
-Conversation projection loads the current Surface once per Turn and uses the pure projection fold for each model request. Rejected batches, approval-result anchors, Pending inputs, and WorkingContext are collected in one facts pass before messages are built. Surface storage advances by append without repeatedly copying the event tuple, and Compaction snapshots the committed Surface before awaiting a summary so concurrent steer cannot alter its source range. An incremental message-cache prototype was not retained because its 100-Step improvement did not meet the required 50% threshold on both Store backends.
+`SQLiteOutbox` lets callers export Traces durably. Whole-Session deletion uses tombstones to block further access, removes local Trace/Outbox state, and purges SQLite bytes. It does not delete third-party exports or external assets.
 
-Pending Input requires an ordered log scan. A new Turn performs that scan once; it is not an O(1) operation. Canonical request bytes are cached per immutable `CandidateRequest`, and the Memory Store maintains an event-ID index without copying the historical ID set on each append. Trace replay is linear in processed events and payload size. Incremental and whole-history Trace projection use the same fold.
+## Performance boundaries
 
-Run the 10,505-event parity benchmark with:
+- Conversation Projection loads the current Surface once per Turn and folds new facts for each Model request. Rejected batches, approval anchors, Pending Inputs, and WorkingContext are collected before messages are built.
+- Appending to the Surface does not repeatedly copy the Event tuple. Compaction snapshots the committed Surface before waiting for a summary, so new steering cannot change its source range.
+- Pending Input requires an ordered log scan once per Turn; it is not an O(1) lookup.
+- Canonical bytes are cached for each immutable `CandidateRequest`. The Memory Store indexes Event IDs without copying the full ID set on every append.
+- Trace replay is linear in the number of Events and their payload size. Incremental and whole-history Trace Projection use the same fold.
+- An experimental message cache was not retained because its 100-Step improvement did not reach the required 50% on both Store backends.
+
+Run the 10,505-event parity benchmark:
 
 ```bash
 .venv/bin/python tests/projection_benchmark.py
 ```
 
-The benchmark checks Memory/SQLite Conversation Projection parity, Model/Tool Trace payload parity, and incremental/whole-history Trace parity. Explicit canaries require the Compaction summary, assistant output, Tool arguments/results, and final content to survive projection; identical erased outputs do not pass. `tests/turn_projection_benchmark.py` measures complete 100/400-Step Turns on Memory and SQLite. Timings are measurements, not a cross-machine latency guarantee.
+It checks that Memory and SQLite produce the same Conversation and Model/Tool Trace data, and that incremental and whole-history Traces match. Canary content verifies that summaries, assistant output, Tool arguments and results, and final content survive Projection. `tests/turn_projection_benchmark.py` measures complete 100/400-Step Turns on both Stores. These timings describe the test environment, not a latency guarantee for other machines.
 
-## Frozen import contract
+## Import contract
 
-The root `nextloop` package keeps its existing convenience re-exports. `tests/test_import_contract.py` snapshots all 101 names and rejects accidental additions, removals, and duplicate entries.
+The root `nextloop` package keeps its convenience re-exports. `tests/test_import_contract.py` snapshots all 101 names and rejects accidental changes or duplicates.
 
-Core integration paths:
+Stable integration paths:
 
-- `nextloop.contracts`: public DTOs, errors, enums, and adapter Protocols.
+- `nextloop.contracts`: public data types, errors, enums, and adapter Protocols.
 - `nextloop.loop`: `AgentLoop`.
-- `nextloop.events`: pure Conversation, response/outcome, recovery, and Trace folds.
-
-Optional implementation and integration paths:
-
+- `nextloop.events`: pure Conversation, response, outcome, recovery, and Trace functions.
 - `nextloop.adapters`: Memory, SQLite, OpenAI-compatible, Anthropic, and observing Stores.
 - `nextloop.execute`: built-in Tool execution and runtime implementations.
-- `nextloop.harness`: TOML assembly and dependency ownership.
+- `nextloop.harness`: TOML setup and dependency ownership.
 - `nextloop.skills`: directory-backed Skill discovery and loading.
-- `nextloop.testing`: Store conformance, deliberately broken Stores, and fault-injection adapters.
+- `nextloop.testing`: Store conformance, broken Stores, and fault injection.
 
-No physical `nextloop.core` or `nextloop.extras` package is introduced. A future package split must preserve these paths and root re-exports through compatibility shims. Modules outside this contract, including `driver.py`, `_sse.py`, and stdio transport internals, may change without being treated as stable integration paths.
+There is no physical `nextloop.core` or `nextloop.extras` package. A future package split must preserve these paths and the root re-exports through compatibility shims. Internal modules such as `driver.py`, `_sse.py`, and stdio transport internals may change without becoming stable integration paths.
