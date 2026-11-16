@@ -172,6 +172,8 @@ Preview output is temporary. It never enters the EventStore, runs partial Tool C
 
 ## Observability
 
+For a minimal custom Exporter and an offline Outbox example, see [Custom Trace Exporters](exporters.md).
+
 Observability is off by default. Enable JSON Lines output with:
 
 ```toml

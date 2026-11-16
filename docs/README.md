@@ -7,6 +7,7 @@ New to nextloop? Start with the [tutorial](tutorial.md). Use the current guides 
 - [Tutorial](tutorial.md) — run your first AgentLoop and connect a hosted model.
 - [Architecture](design/architecture.md) — see how the main parts work together.
 - [Harness configuration](design/harness.md) — configure models, storage, Tools, and exports.
+- [Custom Trace Exporters](design/exporters.md) — send execution records to your own observability system.
 - [Public API and adapters](design/loop-interface.md) — connect your own implementations.
 - [Guarantees](design/guarantees.md) — learn what nextloop does and does not promise.
 - [Verification matrix](design/verification-matrix.md) — see how those promises are tested.

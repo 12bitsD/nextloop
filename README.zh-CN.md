@@ -143,6 +143,7 @@ nextloop 是一个 Python 库，不是 HTTP 服务或多 Agent 框架。你的�
       <strong>快速上手</strong><br>
       <a href="docs/tutorial.md">第一个 AgentLoop</a><br>
       <a href="docs/design/harness.md">Harness 配置</a><br>
+      <a href="docs/design/exporters.md">自定义观测导出</a><br>
       <a href="docs/design/loop-interface.md">公共 API 与 Adapter</a>
     </td>
     <td width="40%" valign="top">

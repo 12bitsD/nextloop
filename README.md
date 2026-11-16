@@ -143,6 +143,7 @@ Start with the [documentation index](docs/README.md) for current contracts, desi
       <strong>Get started</strong><br>
       <a href="docs/tutorial.md">Your first AgentLoop</a><br>
       <a href="docs/design/harness.md">Harness configuration</a><br>
+      <a href="docs/design/exporters.md">Custom Trace Exporters</a><br>
       <a href="docs/design/loop-interface.md">Public API and adapters</a>
     </td>
     <td width="40%" valign="top">
