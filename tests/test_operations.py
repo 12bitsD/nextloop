@@ -33,10 +33,12 @@ async def test_operation_id_is_unique_per_intent_and_preserved_end_to_end():
     provider = FakeProvider(
         [
             ModelResponse(
-                tool_calls=(call("write", "shared"),), finish_reason=FinishReason.TOOL_CALLS
+                tool_calls=(call("write", "shared"),),
+                finish_reason=FinishReason.TOOL_CALLS,
             ),
             ModelResponse(
-                tool_calls=(call("write", "shared"),), finish_reason=FinishReason.TOOL_CALLS
+                tool_calls=(call("write", "shared"),),
+                finish_reason=FinishReason.TOOL_CALLS,
             ),
             ModelResponse(content="done"),
         ]
@@ -57,8 +59,12 @@ async def test_operation_id_is_unique_per_intent_and_preserved_end_to_end():
     assert len(assistant_operations) == 2
     assert len({operation_id for _, operation_id in assistant_operations}) == 2
     operations_by_step = dict(assistant_operations)
-    tool_calls = [event for event in events if event.event_type == EventType.TOOL_CALL]
-    results = [event for event in events if event.event_type == EventType.TOOL_RESULT]
+    tool_calls = [
+        event for event in events if event.event_type == EventType.TOOL_CALL
+    ]
+    results = [
+        event for event in events if event.event_type == EventType.TOOL_RESULT
+    ]
     assert len(contexts) == 2
     for event in [*tool_calls, *results]:
         assert event.payload["operation_id"] == operations_by_step[event.step]
@@ -76,15 +82,27 @@ async def test_operation_id_is_unique_per_intent_and_preserved_end_to_end():
         (ToolEffect.READ_ONLY, frozenset()),
     ],
 )
-async def test_default_uncertain_resources_depend_on_effect(effect, expected_locks):
+async def test_default_uncertain_resources_depend_on_effect(
+    effect, expected_locks
+):
     tools = ToolRegistry()
     kwargs = {} if effect is None else {"effect": effect}
     tools.register(
-        ToolSpec("write", "Write without declared resources", {"type": "object"}, **kwargs),
+        ToolSpec(
+            "write",
+            "Write without declared resources",
+            {"type": "object"},
+            **kwargs,
+        ),
         lambda arguments, ctx: (_ for _ in ()).throw(InjectedCrash("crash")),
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     with pytest.raises(InjectedCrash):
@@ -94,8 +112,12 @@ async def test_default_uncertain_resources_depend_on_effect(effect, expected_loc
 
     assert recovered.active_resource_locks == expected_locks
     events = await store.load_recovery("s")
-    tool_call = next(event for event in events if event.event_type == EventType.TOOL_CALL)
-    result = next(event for event in events if event.event_type == EventType.TOOL_RESULT)
+    tool_call = next(
+        event for event in events if event.event_type == EventType.TOOL_CALL
+    )
+    result = next(
+        event for event in events if event.event_type == EventType.TOOL_RESULT
+    )
     assert result.payload["operation_id"] == tool_call.payload["operation_id"]
 
 
@@ -103,11 +125,18 @@ async def test_default_uncertain_resources_depend_on_effect(effect, expected_loc
 async def test_resource_lock_query_and_release_are_log_derived():
     tools = ToolRegistry()
     tools.register(
-        ToolSpec("write", "Write without declared resources", {"type": "object"}),
+        ToolSpec(
+            "write", "Write without declared resources", {"type": "object"}
+        ),
         lambda arguments, ctx: (_ for _ in ()).throw(InjectedCrash("crash")),
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -117,7 +146,11 @@ async def test_resource_lock_query_and_release_are_log_derived():
     assert await loop.resource_locks("s", store) == frozenset({"write"})
 
     released = await loop.release_resource(
-        "s", store, "write", actor="operator", evidence="verified external write"
+        "s",
+        store,
+        "write",
+        actor="operator",
+        evidence="verified external write",
     )
 
     assert released is True
@@ -151,7 +184,12 @@ async def test_new_loop_enforces_recovered_resource_lock_from_log():
         context(
             store,
             FakeProvider(
-                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+                [
+                    ModelResponse(
+                        tool_calls=(call("write"),),
+                        finish_reason=FinishReason.TOOL_CALLS,
+                    )
+                ]
             ),
             tools,
             FakeDelivery(),
@@ -163,7 +201,12 @@ async def test_new_loop_enforces_recovered_resource_lock_from_log():
         context(
             store,
             FakeProvider(
-                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+                [
+                    ModelResponse(
+                        tool_calls=(call("write"),),
+                        finish_reason=FinishReason.TOOL_CALLS,
+                    )
+                ]
             ),
             tools,
             FakeDelivery(),
@@ -187,7 +230,12 @@ async def test_release_resource_rejects_active_turn_without_fencing_writer():
         context(
             store,
             FakeProvider(
-                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+                [
+                    ModelResponse(
+                        tool_calls=(call("write"),),
+                        finish_reason=FinishReason.TOOL_CALLS,
+                    )
+                ]
             ),
             tools,
             FakeDelivery(),
@@ -202,23 +250,30 @@ async def test_release_resource_rejects_active_turn_without_fencing_writer():
         return ModelResponse(content="done")
 
     running = asyncio.create_task(
-        loop.run(context(store, FakeProvider([respond]), registry(), FakeDelivery()))
+        loop.run(
+            context(store, FakeProvider([respond]), registry(), FakeDelivery())
+        )
     )
     await started.wait()
 
     with pytest.raises(RuntimeError, match="active Turn"):
-        await loop.release_resource("s", store, "workspace", actor="operator", evidence="verified")
+        await loop.release_resource(
+            "s", store, "workspace", actor="operator", evidence="verified"
+        )
     resume.set()
     outcome = await running
 
     assert outcome.status == "succeeded"
     assert not any(
-        event.event_type == EventType.RESOURCE_RELEASED for event in await store.load_recovery("s")
+        event.event_type == EventType.RESOURCE_RELEASED
+        for event in await store.load_recovery("s")
     )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("effect", [ToolEffect.READ_ONLY, ToolEffect.IDEMPOTENT])
+@pytest.mark.parametrize(
+    "effect", [ToolEffect.READ_ONLY, ToolEffect.IDEMPOTENT]
+)
 async def test_retry_operation_reuses_identity_and_releases_locks(effect):
     tools = ToolRegistry()
     operation_ids = []
@@ -231,12 +286,21 @@ async def test_retry_operation_reuses_identity_and_releases_locks(effect):
 
     tools.register(
         ToolSpec(
-            "write", "Retry a write", {"type": "object"}, resources=("workspace",), effect=effect
+            "write",
+            "Retry a write",
+            {"type": "object"},
+            resources=("workspace",),
+            effect=effect,
         ),
         write,
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -245,7 +309,9 @@ async def test_retry_operation_reuses_identity_and_releases_locks(effect):
     await loop.recover("s", store, FakeDelivery())
     events = await store.load_recovery("s")
     operation_id = next(
-        event.payload["operation_id"] for event in events if event.event_type == EventType.TOOL_CALL
+        event.payload["operation_id"]
+        for event in events
+        if event.event_type == EventType.TOOL_CALL
     )
 
     outcome = await loop.retry_operation(
@@ -266,16 +332,25 @@ async def test_retry_operation_reuses_identity_and_releases_locks(effect):
     assert operation_ids[0] == operation_id
     assert await loop.resource_locks("s", store) == frozenset()
     events = await store.load_recovery("s")
-    assert sum(event.event_type == EventType.TOOL_RESULT for event in events) == 1
+    assert (
+        sum(event.event_type == EventType.TOOL_RESULT for event in events) == 1
+    )
     reconciliation = next(
-        event for event in events if event.event_type == EventType.RECONCILIATION_RESULT
+        event
+        for event in events
+        if event.event_type == EventType.RECONCILIATION_RESULT
     )
     assert reconciliation.payload["operation_id"] == operation_id
-    assert (reconciliation.payload["origin_turn"], reconciliation.payload["origin_step"]) == (1, 1)
+    assert (
+        reconciliation.payload["origin_turn"],
+        reconciliation.payload["origin_step"],
+    ) == (1, 1)
     assert reconciliation.payload["outcome"]["kind"] == "completed"
     assert reconciliation.payload["message"]["role"] == "user"
 
-    next_provider = FakeProvider([ModelResponse(content="after reconciliation")])
+    next_provider = FakeProvider(
+        [ModelResponse(content="after reconciliation")]
+    )
     after = await loop.run(
         context(
             store,
@@ -287,16 +362,26 @@ async def test_retry_operation_reuses_identity_and_releases_locks(effect):
         )
     )
     assert after.status == "succeeded"
-    assert any("reconciled" in message.content for message in next_provider.requests[0].messages)
+    assert any(
+        "reconciled" in message.content
+        for message in next_provider.requests[0].messages
+    )
 
 
 @pytest.mark.asyncio
 async def test_retry_operation_rejects_non_idempotent_effect():
     tools = registry(
-        write_handler=lambda arguments, ctx: (_ for _ in ()).throw(InjectedCrash("crash"))
+        write_handler=lambda arguments, ctx: (_ for _ in ()).throw(
+            InjectedCrash("crash")
+        )
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -305,12 +390,15 @@ async def test_retry_operation_rejects_non_idempotent_effect():
     await loop.recover("s", store, FakeDelivery())
     events = await store.load_recovery("s")
     operation_id = next(
-        event.payload["operation_id"] for event in events if event.event_type == EventType.TOOL_CALL
+        event.payload["operation_id"]
+        for event in events
+        if event.event_type == EventType.TOOL_CALL
     )
 
     with pytest.raises(InvariantViolation, match="NON_IDEMPOTENT"):
         await loop.retry_operation(
-            context(store, FakeProvider([]), tools, FakeDelivery()), operation_id
+            context(store, FakeProvider([]), tools, FakeDelivery()),
+            operation_id,
         )
 
     assert await store.load_recovery("s") == events
@@ -338,7 +426,12 @@ async def test_retry_operation_uncertain_result_retains_locks():
         write,
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -366,7 +459,7 @@ async def test_retry_operation_uncertain_result_retains_locks():
 
 
 @pytest.mark.asyncio
-async def test_retry_operation_crash_recovers_reconciliation_without_duplicate_result():
+async def test_retry_crash_recovers_reconciliation_without_duplicate_result():
     tools = ToolRegistry()
     tools.register(
         ToolSpec(
@@ -379,7 +472,12 @@ async def test_retry_operation_crash_recovers_reconciliation_without_duplicate_r
         lambda arguments, ctx: (_ for _ in ()).throw(InjectedCrash("crash")),
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -394,19 +492,30 @@ async def test_retry_operation_crash_recovers_reconciliation_without_duplicate_r
 
     with pytest.raises(InjectedCrash):
         await loop.retry_operation(
-            context(store, FakeProvider([]), tools, FakeDelivery()), operation_id
+            context(store, FakeProvider([]), tools, FakeDelivery()),
+            operation_id,
         )
     recovered = await loop.recover("s", store, FakeDelivery())
 
     assert recovered.interrupted_turns == (2,)
     assert recovered.active_resource_locks == frozenset({"workspace"})
     events = await store.load_recovery("s")
-    assert sum(event.event_type == EventType.TOOL_RESULT for event in events) == 1
+    assert (
+        sum(event.event_type == EventType.TOOL_RESULT for event in events) == 1
+    )
     reconciliation = next(
-        event for event in events if event.event_type == EventType.RECONCILIATION_RESULT
+        event
+        for event in events
+        if event.event_type == EventType.RECONCILIATION_RESULT
     )
     assert reconciliation.payload["recovered"] is True
     assert reconciliation.payload["outcome"]["kind"] == "uncertain_hanging"
     await loop.recover("s", store, FakeDelivery())
     events = await store.load_recovery("s")
-    assert sum(event.event_type == EventType.RECONCILIATION_RESULT for event in events) == 1
+    assert (
+        sum(
+            event.event_type == EventType.RECONCILIATION_RESULT
+            for event in events
+        )
+        == 1
+    )

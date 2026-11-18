@@ -116,7 +116,12 @@ async def test_failed_sqlite_batch_is_atomic_and_preserves_error(tmp_path):
             1,
             [
                 NewEvent(EventType.TURN_START, turn=1, step=0),
-                NewEvent(EventType.STEP_START, turn=1, step=1, payload={"bad": object()}),
+                NewEvent(
+                    EventType.STEP_START,
+                    turn=1,
+                    step=1,
+                    payload={"bad": object()},
+                ),
             ],
         )
 
@@ -126,20 +131,26 @@ async def test_failed_sqlite_batch_is_atomic_and_preserves_error(tmp_path):
 
 @pytest.mark.asyncio
 async def test_owned_openai_client_is_shared_and_closed_once(monkeypatch):
-    chunk = {"choices": [{"delta": {"content": "done"}, "finish_reason": "stop"}]}
+    chunk = {
+        "choices": [{"delta": {"content": "done"}, "finish_reason": "stop"}]
+    }
     body = f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n"
     created = []
     real_client = httpx.AsyncClient
 
     def factory(**kwargs):
-        kwargs["transport"] = httpx.MockTransport(lambda request: httpx.Response(200, text=body))
+        kwargs["transport"] = httpx.MockTransport(
+            lambda request: httpx.Response(200, text=body)
+        )
         client = real_client(**kwargs)
         created.append(client)
         return client
 
     monkeypatch.setattr("nextloop.adapters.openai.httpx.AsyncClient", factory)
     provider = OpenAIProvider(
-        model_id="test-model", base_url="https://provider.test/v1", api_key="secret"
+        model_id="test-model",
+        base_url="https://provider.test/v1",
+        api_key="secret",
     )
 
     await asyncio.gather(
@@ -176,7 +187,9 @@ async def test_external_client_remains_caller_owned():
 async def test_leased_wrappers_pass_store_conformance(wrapper):
     base = InMemoryEventStore(owner_id="owner", lease_seconds=10)
     store = (
-        ObservingEventStore(base, []) if wrapper == "observing" else FaultInjectingEventStore(base)
+        ObservingEventStore(base, [])
+        if wrapper == "observing"
+        else FaultInjectingEventStore(base)
     )
 
     await check_event_store(store)
@@ -210,7 +223,9 @@ async def test_external_sqlite_write_lock_does_not_block_event_loop(tmp_path):
 async def test_checked_attach_wrapper_rejection_does_not_advance_epoch(wrapper):
     base = InMemoryEventStore()
     store = (
-        ObservingEventStore(base, []) if wrapper == "observing" else FaultInjectingEventStore(base)
+        ObservingEventStore(base, [])
+        if wrapper == "observing"
+        else FaultInjectingEventStore(base)
     )
 
     def reject(history):

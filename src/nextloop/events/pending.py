@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..contracts import Event, EventType, InvariantViolation, PendingInput, TurnOutcome, TurnStatus
+from ..contracts import (
+    Event,
+    EventType,
+    InvariantViolation,
+    PendingInput,
+    TurnOutcome,
+    TurnStatus,
+)
 from .codec import fold_projection_facts
 
 
@@ -10,6 +17,7 @@ def pending_inputs(events: Sequence[Event]) -> tuple[PendingInput, ...]:
     return fold_projection_facts(events).pending
 
 
+# bits:explain(BCS003): event projection; split risks parity; keep hot path
 def completed_input_outcome(
     events: Sequence[Event], session_id: str, input_id: str, content: str
 ) -> TurnOutcome | None:
@@ -21,14 +29,18 @@ def completed_input_outcome(
             and event.payload.get("content", "") != content
         ):
             raise InvariantViolation("input_id reused with different content")
-        if event.event_type == EventType.USER_MESSAGE and event.payload.get("input_id") == input_id:
+        if (
+            event.event_type == EventType.USER_MESSAGE
+            and event.payload.get("input_id") == input_id
+        ):
             consumed_turns.append(event.turn)
     for accepted_turn in reversed(consumed_turns):
         end = next(
             (
                 event
                 for event in events
-                if event.turn == accepted_turn and event.event_type == EventType.TURN_END
+                if event.turn == accepted_turn
+                and event.event_type == EventType.TURN_END
             ),
             None,
         )
@@ -47,10 +59,14 @@ def completed_input_outcome(
                 event
                 for event in events
                 if event.turn == accepted_turn
-                and event.event_type in (EventType.DELIVERY_COMMITTED, EventType.DELIVERY_UNKNOWN)
+                and event.event_type
+                in (EventType.DELIVERY_COMMITTED, EventType.DELIVERY_UNKNOWN)
                 and event.payload.get("final_message_id") == final_message_id
             ]
-            if deliveries and deliveries[-1].event_type == EventType.DELIVERY_UNKNOWN:
+            if (
+                deliveries
+                and deliveries[-1].event_type == EventType.DELIVERY_UNKNOWN
+            ):
                 status = TurnStatus.DELIVERY_UNKNOWN
                 error = deliveries[-1].payload.get("error")
         return TurnOutcome(

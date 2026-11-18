@@ -37,7 +37,11 @@ def parse_version(value: str) -> tuple[int, int, int, int, int]:
 
 
 def is_positive_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value > 0
+    )
 
 
 def new_id(prefix: str) -> str:
@@ -89,7 +93,9 @@ class ProviderError(NextloopError):
         self,
         message: str,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         retryable: bool = False,
+        # bits:allow(BCS004): established API/test-double signature
         partial_output: bool = False,
         code: str | None = None,
     ) -> None:
@@ -168,7 +174,9 @@ class FinishReason(StrEnum):
 
 class ToolExecutionMode(StrEnum):
     PARALLEL = "parallel"  # Side-effect-free read; runs in bounded pool
-    EXCLUSIVE = "exclusive"  # Mutating barrier; failure truncates remaining batch
+    EXCLUSIVE = (
+        "exclusive"  # Mutating barrier; failure truncates remaining batch
+    )
 
 
 class ToolEffect(StrEnum):
@@ -249,7 +257,11 @@ class ValidationIssue:
     message: str
 
     def to_dict(self) -> dict[str, str]:
-        return {"call_id": self.call_id, "name": self.name, "message": self.message}
+        return {
+            "call_id": self.call_id,
+            "name": self.name,
+            "message": self.message,
+        }
 
 
 @dataclass(frozen=True)
@@ -285,10 +297,19 @@ class TimingSource(StrEnum):
 ModelCallPurpose = Literal["inference", "compaction"]
 ModelCallStatus = Literal["success", "error", "cancelled"]
 ToolOutcomeKind = Literal[
-    "completed", "skipped", "cancelled", "uncertain_settled", "uncertain_hanging"
+    "completed",
+    "skipped",
+    "cancelled",
+    "uncertain_settled",
+    "uncertain_hanging",
 ]
 TurnTraceStatus = Literal[
-    "succeeded", "failed", "cancelled", "blocked", "interrupted", "approval_pending"
+    "succeeded",
+    "failed",
+    "cancelled",
+    "blocked",
+    "interrupted",
+    "approval_pending",
 ]
 
 
@@ -373,6 +394,7 @@ class TurnTrace:
     tool_calls: tuple[ToolCallTrace, ...] = ()
 
 
+# bits:allow(BCS011): type alias, not mutable runtime state
 TraceRecord = ModelCallTrace | ToolCallTrace | TurnTrace
 
 
@@ -380,6 +402,7 @@ class TraceExporter(Protocol):
     def export(self, trace: TraceRecord) -> Any: ...
 
 
+# bits:allow(BCS011): type alias, not mutable runtime state
 TraceExporterInput = TraceExporter | Callable[[TraceRecord], Any]
 
 
@@ -425,7 +448,11 @@ def canonical_message_data(message: Message) -> dict[str, Any]:
         "role": message.role,
         "content": message.content,
         "tool_calls": [
-            {"call_id": call.call_id, "name": call.name, "arguments": call.arguments}
+            {
+                "call_id": call.call_id,
+                "name": call.name,
+                "arguments": call.arguments,
+            }
             for call in message.tool_calls
         ],
         "tool_call_id": message.tool_call_id,
@@ -450,10 +477,16 @@ class CandidateRequest:
             return self._canonical_bytes_cache
         data = {
             "tools": [
-                {"name": t.name, "description": t.description, "parameters": dict(t.parameters)}
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": dict(t.parameters),
+                }
                 for t in self.tools
             ],
-            "messages": [canonical_message_data(message) for message in self.messages],
+            "messages": [
+                canonical_message_data(message) for message in self.messages
+            ],
         }
         canonical = json.dumps(
             data, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -497,7 +530,10 @@ class UncertainHanging:
     resource_locks: tuple[str, ...] = ()
 
 
-ToolOutcome = Completed | Skipped | Cancelled | UncertainSettled | UncertainHanging
+# bits:allow(BCS011): type alias, not mutable runtime state
+ToolOutcome = (
+    Completed | Skipped | Cancelled | UncertainSettled | UncertainHanging
+)
 
 
 @dataclass(frozen=True)
@@ -675,13 +711,24 @@ class EventStore(Protocol):
     async def session_ids(self) -> Sequence[str]: ...
     async def delete_session(self, session_id: str) -> None: ...
     async def attach_writer(
-        self, session_id: str, *, force: bool = False
+        self,
+        session_id: str,
+        *,
+        force: bool = False,  # bits:allow(BCS004): established API
     ) -> tuple[int, int, int]: ...
-    async def check_writer(self, session_id: str, writer_epoch: int) -> None: ...
-    async def renew_writer(self, session_id: str, writer_epoch: int) -> None: ...
+    async def check_writer(
+        self, session_id: str, writer_epoch: int
+    ) -> None: ...
+    async def renew_writer(
+        self, session_id: str, writer_epoch: int
+    ) -> None: ...
     async def has_writer(self, session_id: str) -> bool: ...
     async def append(
-        self, session_id: str, writer_epoch: int, expected_seq: int, events: Sequence[NewEvent]
+        self,
+        session_id: str,
+        writer_epoch: int,
+        expected_seq: int,
+        events: Sequence[NewEvent],
     ) -> Sequence[Event]: ...
     async def load_surface(self, session_id: str) -> Sequence[Event]: ...
     async def load_recovery(self, session_id: str) -> Sequence[Event]: ...

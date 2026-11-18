@@ -40,11 +40,15 @@ async def test_every_terminal_status_closes_steer(scenario, expected):
             self.steer_task = None
 
         async def append(self, session_id, writer_epoch, expected_seq, events):
-            committed = await super().append(session_id, writer_epoch, expected_seq, events)
+            committed = await super().append(
+                session_id, writer_epoch, expected_seq, events
+            )
             if self.steer_task is None and any(
                 event.event_type == EventType.TURN_END for event in committed
             ):
-                self.steer_task = asyncio.create_task(loop.steer_result("s", "late"))
+                self.steer_task = asyncio.create_task(
+                    loop.steer_result("s", "late")
+                )
             return committed
 
     store = SteerOnTurnEnd()
@@ -53,11 +57,16 @@ async def test_every_terminal_status_closes_steer(scenario, expected):
     tools = (
         approval_tools([])
         if scenario == "approval_pending"
-        else registry(write_handler=lambda arguments, ctx: UncertainHanging("unknown"))
+        else registry(
+            write_handler=lambda arguments, ctx: UncertainHanging("unknown")
+        )
     )
     if scenario in ("blocked", "approval_pending"):
         responses = [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
         ]
     elif scenario == "failed":
         responses = [ProviderError("terminal")]
@@ -66,11 +75,15 @@ async def test_every_terminal_status_closes_steer(scenario, expected):
     else:
         responses = [ModelResponse(content="done")]
 
-    outcome = await loop.run(context(store, FakeProvider(responses), tools, delivery))
+    outcome = await loop.run(
+        context(store, FakeProvider(responses), tools, delivery)
+    )
 
     assert outcome.status == expected
     assert store.steer_task is not None
-    assert (await asyncio.wait_for(store.steer_task, timeout=1)).status == SteerStatus.TURN_CLOSED
+    assert (
+        await asyncio.wait_for(store.steer_task, timeout=1)
+    ).status == SteerStatus.TURN_CLOSED
 
 
 @pytest.mark.asyncio
@@ -91,7 +104,13 @@ async def test_repeated_caller_cancellation_finishes_frame_cleanup():
     baseline = set(asyncio.all_tasks())
     running = asyncio.create_task(
         loop.run(
-            context(store, FakeProvider([respond]), registry(), FakeDelivery(), preview=Sink())
+            context(
+                store,
+                FakeProvider([respond]),
+                registry(),
+                FakeDelivery(),
+                preview=Sink(),
+            )
         )
     )
     await started.wait()
@@ -101,11 +120,15 @@ async def test_repeated_caller_cancellation_finishes_frame_cleanup():
     with pytest.raises(asyncio.CancelledError):
         await running
     assert set(asyncio.all_tasks()) == baseline
-    assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+    assert (
+        await loop.steer_result("s", "closed")
+    ).status == SteerStatus.TURN_CLOSED
 
 
 @pytest.mark.asyncio
-async def test_preview_close_failure_still_removes_active_execution(monkeypatch):
+async def test_preview_close_failure_still_removes_active_execution(
+    monkeypatch,
+):
     class BrokenPreview(PreviewChannel):
         async def close(self):
             raise RuntimeError("preview close failed")
@@ -129,7 +152,9 @@ async def test_preview_close_failure_still_removes_active_execution(monkeypatch)
             )
         )
 
-    assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+    assert (
+        await loop.steer_result("s", "closed")
+    ).status == SteerStatus.TURN_CLOSED
 
 
 @pytest.mark.asyncio
@@ -160,7 +185,9 @@ async def test_pre_commit_steer_continues_successful_candidate():
     store = InMemoryEventStore()
 
     async def first(**kwargs):
-        assert (await loop.steer_result("s", "continue")).status == SteerStatus.ACCEPTED
+        assert (
+            await loop.steer_result("s", "continue")
+        ).status == SteerStatus.ACCEPTED
         return ModelResponse(content="first candidate")
 
     outcome = await loop.run(
@@ -174,7 +201,9 @@ async def test_pre_commit_steer_continues_successful_candidate():
 
     assert outcome.status == TurnStatus.SUCCEEDED
     assert outcome.step == 2
-    assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+    assert (
+        await loop.steer_result("s", "closed")
+    ).status == SteerStatus.TURN_CLOSED
     assert await loop.pending_inputs("s", store) == ()
 
 
@@ -185,15 +214,23 @@ async def test_pre_commit_steer_continues_successful_candidate():
         ("failed", TurnStatus.FAILED, SteerStatus.TURN_CLOSED),
         ("cancelled", TurnStatus.CANCELLED, SteerStatus.TURN_CLOSED),
         ("blocked", TurnStatus.BLOCKED, SteerStatus.TURN_CLOSED),
-        ("approval_pending", TurnStatus.APPROVAL_PENDING, SteerStatus.APPROVAL_PENDING),
+        (
+            "approval_pending",
+            TurnStatus.APPROVAL_PENDING,
+            SteerStatus.APPROVAL_PENDING,
+        ),
     ],
 )
-async def test_pre_commit_steer_preserves_pending_for_next_turn(scenario, expected, after_status):
+async def test_pre_commit_steer_preserves_pending_for_next_turn(
+    scenario, expected, after_status
+):
     loop = AgentLoop()
     store = InMemoryEventStore()
 
     async def inject():
-        assert (await loop.steer_result("s", "pre-terminal")).status == SteerStatus.ACCEPTED
+        assert (
+            await loop.steer_result("s", "pre-terminal")
+        ).status == SteerStatus.ACCEPTED
 
     tools = approval_tools([]) if scenario == "approval_pending" else registry()
     if scenario == "blocked":
@@ -204,13 +241,19 @@ async def test_pre_commit_steer_preserves_pending_for_next_turn(scenario, expect
 
         tools = registry(write_handler=write)
         responses = [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
         ]
     elif scenario == "approval_pending":
 
         async def respond(**kwargs):
             await inject()
-            return ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)
+            return ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
 
         responses = [respond]
     elif scenario == "failed":
@@ -228,8 +271,12 @@ async def test_pre_commit_steer_preserves_pending_for_next_turn(scenario, expect
 
         responses = [respond]
 
-    outcome = await loop.run(context(store, FakeProvider(responses), tools, FakeDelivery()))
+    outcome = await loop.run(
+        context(store, FakeProvider(responses), tools, FakeDelivery())
+    )
 
     assert outcome.status == expected
     assert (await loop.steer_result("s", "after")).status == after_status
-    assert [item.content for item in await loop.pending_inputs("s", store)] == ["pre-terminal"]
+    assert [item.content for item in await loop.pending_inputs("s", store)] == [
+        "pre-terminal"
+    ]

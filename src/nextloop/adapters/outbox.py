@@ -18,7 +18,11 @@ from ..contracts import (
     utc_now,
 )
 from ..events.trace import project_traces
-from ._sqlite import execute_with_busy_retry, purge_deleted_bytes, write_transaction
+from ._sqlite import (
+    execute_with_busy_retry,
+    purge_deleted_bytes,
+    write_transaction,
+)
 from .observing import export_trace
 
 
@@ -33,14 +37,20 @@ class SQLiteOutbox:
         export_timeout_seconds: float = 30.0,
         lock_timeout_seconds: float = 60.0,
     ) -> None:
-        if max_attempts < 1 or export_timeout_seconds <= 0 or lock_timeout_seconds <= 0:
+        if (
+            max_attempts < 1
+            or export_timeout_seconds <= 0
+            or lock_timeout_seconds <= 0
+        ):
             raise ValueError("max_attempts and timeout values must be positive")
         self._store = store
         self._exporters = tuple(exporters)
         self.max_attempts = max_attempts
         self.export_timeout_seconds = export_timeout_seconds
         self.lock_timeout_seconds = lock_timeout_seconds
-        self._connection = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        self._connection = sqlite3.connect(
+            path, check_same_thread=False, isolation_level=None
+        )
         self._connection.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         self._export_lock = asyncio.Lock()
@@ -77,13 +87,18 @@ class SQLiteOutbox:
                 """
             )
             lock_columns = {
-                row["name"] for row in self._connection.execute("PRAGMA table_info(outbox_locks)")
+                row["name"]
+                for row in self._connection.execute(
+                    "PRAGMA table_info(outbox_locks)"
+                )
             }
             if "owner_token" not in lock_columns:
                 self._begin_immediate(self._connection)
                 lock_columns = {
                     row["name"]
-                    for row in self._connection.execute("PRAGMA table_info(outbox_locks)")
+                    for row in self._connection.execute(
+                        "PRAGMA table_info(outbox_locks)"
+                    )
                 }
                 if "owner_token" not in lock_columns:
                     self._connection.execute(
@@ -109,17 +124,22 @@ class SQLiteOutbox:
     def watermark(self, session_id: str) -> int:
         with self._lock:
             row = self._connection.execute(
-                "SELECT last_seq FROM outbox_cursor WHERE session_id = ?", (session_id,)
+                "SELECT last_seq FROM outbox_cursor WHERE session_id = ?",
+                (session_id,),
             ).fetchone()
             return int(row["last_seq"]) if row else 0
 
     def gaps(self, session_id: str | None = None) -> tuple[ExportGap, ...]:
         with self._lock:
             if session_id is None:
-                rows = self._connection.execute("SELECT * FROM outbox_gaps ORDER BY id").fetchall()
+                rows = self._connection.execute(
+                    "SELECT * FROM outbox_gaps ORDER BY id"
+                ).fetchall()
             else:
                 rows = self._connection.execute(
-                    "SELECT * FROM outbox_gaps WHERE session_id = ? ORDER BY id", (session_id,)
+                    "SELECT * FROM outbox_gaps "
+                    "WHERE session_id = ? ORDER BY id",
+                    (session_id,),
                 ).fetchall()
             return tuple(
                 ExportGap(
@@ -139,12 +159,15 @@ class SQLiteOutbox:
     async def _acquire(self, session_id: str) -> None:
         deadline = time.monotonic() + 5.0
         while True:
+            # bits:allow(BCS007): Python has no brace blocks
             try:
                 await asyncio.to_thread(self._try_acquire, session_id)
                 return
             except sqlite3.IntegrityError as err:
                 if time.monotonic() >= deadline:
-                    raise TimeoutError(f"Timed out acquiring export lock for {session_id}") from err
+                    raise TimeoutError(
+                        f"Timed out acquiring export lock for {session_id}"
+                    ) from err
                 await asyncio.sleep(0.01)
 
     def _try_acquire(self, session_id: str) -> None:
@@ -175,7 +198,9 @@ class SQLiteOutbox:
                 (time.time(), session_id, self._lock_owner),
             )
             if cursor.rowcount != 1:
-                raise WriterLeaseError(f"Export lock is not owned by this Outbox: {session_id}")
+                raise WriterLeaseError(
+                    f"Export lock is not owned by this Outbox: {session_id}"
+                )
 
     async def _keep_lock(self, session_id: str) -> None:
         while True:
@@ -186,27 +211,41 @@ class SQLiteOutbox:
         with self._lock:
             self._connection.execute("PRAGMA secure_delete=ON")
             with self._connection:
-                for table in ("outbox_cursor", "outbox_attempts", "outbox_gaps", "outbox_locks"):
+                for table in (
+                    "outbox_cursor",
+                    "outbox_attempts",
+                    "outbox_gaps",
+                    "outbox_locks",
+                ):
+                    # bits:allow(BCS007): Python has no brace blocks
                     self._connection.execute(
-                        f"DELETE FROM {table} WHERE session_id = ?", (session_id,)
+                        f"DELETE FROM {table} WHERE session_id = ?",
+                        (session_id,),
                     )
             purge_deleted_bytes(self._connection)
 
     async def _call_exporters(self, record: TraceRecord) -> None:
         for exporter in self._exporters:
             await asyncio.wait_for(
-                export_trace(exporter, record), timeout=self.export_timeout_seconds
+                export_trace(exporter, record),
+                timeout=self.export_timeout_seconds,
             )
 
-    async def _export_record(self, record: TraceRecord, heartbeat: asyncio.Task[None]) -> None:
+    async def _export_record(
+        self, record: TraceRecord, heartbeat: asyncio.Task[None]
+    ) -> None:
         export_task = asyncio.create_task(self._call_exporters(record))
         try:
-            await asyncio.wait((export_task, heartbeat), return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(
+                (export_task, heartbeat), return_when=asyncio.FIRST_COMPLETED
+            )
             if heartbeat.done():
                 try:
                     await heartbeat
                 except Exception as exc:
-                    raise WriterLeaseError("Export lock renewal failed") from exc
+                    raise WriterLeaseError(
+                        "Export lock renewal failed"
+                    ) from exc
             await export_task
         finally:
             if not export_task.done():
@@ -214,16 +253,24 @@ class SQLiteOutbox:
                 with contextlib.suppress(asyncio.CancelledError):
                     await export_task
 
-    async def export_pending(self, session_id: str | None = None) -> ExportReport:
+    async def export_pending(
+        self, session_id: str | None = None
+    ) -> ExportReport:
         async with self._export_lock:
             return await self._export_pending(session_id)
 
+    # bits:explain(BCS003): transaction state; split risks atomicity; keep I/O
     async def _export_pending(self, session_id: str | None) -> ExportReport:
-        sessions = (session_id,) if session_id is not None else await self._store.session_ids()
+        sessions = (
+            (session_id,)
+            if session_id is not None
+            else await self._store.session_ids()
+        )
         exported = 0
         gaps = []
         pending_sessions = []
         for session in sessions:
+            # bits:allow(BCS007): Python has no brace blocks
             cursor = await asyncio.to_thread(self.watermark, session)
             last_seq = (
                 None
@@ -236,34 +283,56 @@ class SQLiteOutbox:
             if not events:
                 continue
             tail_seq = events[-1].seq
-            closed_turns = {event.turn for event in events if event.event_type.value == "turn/end"}
+            closed_turns = {
+                event.turn
+                for event in events
+                if event.event_type.value == "turn/end"
+            }
             open_turns = {
-                event.turn for event in events if event.event_type.value == "turn/start"
+                event.turn
+                for event in events
+                if event.event_type.value == "turn/start"
             } - closed_turns
             first_open_seq = min(
                 (
                     event.seq
                     for event in events
-                    if event.turn in open_turns and event.event_type.value == "turn/start"
+                    if event.turn in open_turns
+                    and event.event_type.value == "turn/start"
                 ),
                 default=tail_seq + 1,
             )
             continuous_tail = first_open_seq - 1
-            records = [record for record in project_traces(events) if record.turn in closed_turns]
+            records = [
+                record
+                for record in project_traces(events)
+                if record.turn in closed_turns
+            ]
             await self._acquire(session)
             heartbeat = asyncio.create_task(self._keep_lock(session))
             try:
                 cursor = await asyncio.to_thread(self.watermark, session)
-                pending = [record for record in records if max(record.source_seqs) > cursor]
+                pending = [
+                    record
+                    for record in records
+                    if max(record.source_seqs) > cursor
+                ]
                 if not pending:
                     if continuous_tail > cursor:
-                        await asyncio.to_thread(self._advance, session, continuous_tail)
+                        await asyncio.to_thread(
+                            self._advance, session, continuous_tail
+                        )
                     continue
                 pending_sessions.append(session)
                 completed = True
                 for record in pending:
                     last_seq = max(record.source_seqs)
-                    attempts = await asyncio.to_thread(self._attempts, session, last_seq) + 1
+                    attempts = (
+                        await asyncio.to_thread(
+                            self._attempts, session, last_seq
+                        )
+                        + 1
+                    )
                     try:
                         await self._export_record(record, heartbeat)
                     except WriterLeaseError:
@@ -280,14 +349,18 @@ class SQLiteOutbox:
                             gaps.append(gap)
                             cursor = last_seq
                             continue
-                        await asyncio.to_thread(self._set_attempts, session, last_seq, attempts)
+                        await asyncio.to_thread(
+                            self._set_attempts, session, last_seq, attempts
+                        )
                         completed = False
                         break
                     await asyncio.to_thread(self._advance, session, last_seq)
                     exported += 1
                     cursor = last_seq
                 if completed and continuous_tail > cursor:
-                    await asyncio.to_thread(self._advance, session, continuous_tail)
+                    await asyncio.to_thread(
+                        self._advance, session, continuous_tail
+                    )
             finally:
                 heartbeat.cancel()
                 try:
@@ -296,7 +369,9 @@ class SQLiteOutbox:
                 finally:
                     await self._release(session)
         return ExportReport(
-            session_ids=tuple(pending_sessions), exported=exported, gaps=tuple(gaps)
+            session_ids=tuple(pending_sessions),
+            exported=exported,
+            gaps=tuple(gaps),
         )
 
     def _attempts(self, session_id: str, seq: int) -> int:
@@ -327,7 +402,9 @@ class SQLiteOutbox:
             (session_id, self._lock_owner),
         ).fetchone()
         if row is None:
-            raise WriterLeaseError(f"Export lock is not owned by this Outbox: {session_id}")
+            raise WriterLeaseError(
+                f"Export lock is not owned by this Outbox: {session_id}"
+            )
 
     def _commit_cursor_locked(self, session_id: str, seq: int) -> None:
         self._connection.execute(
@@ -341,7 +418,9 @@ class SQLiteOutbox:
             (session_id, seq),
         )
 
-    def _record_gap(self, session_id: str, from_seq: int, to_seq: int, reason: str) -> ExportGap:
+    def _record_gap(
+        self, session_id: str, from_seq: int, to_seq: int, reason: str
+    ) -> ExportGap:
         created_at = utc_now()
         with self._lock, write_transaction(self._connection):
             self._check_lock_owner_locked(session_id)

@@ -23,7 +23,9 @@ from nextloop.testing import (
 
 @pytest.mark.asyncio
 async def test_store_fault_after_commit_preserves_the_committed_event():
-    store = FaultInjectingEventStore(InMemoryEventStore(), fail_at=1, after_commit=True)
+    store = FaultInjectingEventStore(
+        InMemoryEventStore(), fail_at=1, after_commit=True
+    )
     epoch, _, _ = await store.attach_writer("s")
     draft = NewEvent(EventType.TURN_START, turn=1, step=0)
 
@@ -39,7 +41,9 @@ async def test_store_fault_after_commit_preserves_the_committed_event():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("after_execute", [False, True])
-async def test_tool_fault_around_execution_recovers_uncertain_without_replay(after_execute):
+async def test_tool_fault_around_execution_recovers_uncertain_without_replay(
+    after_execute,
+):
     invoked = []
 
     def write(arguments, ctx):
@@ -51,7 +55,12 @@ async def test_tool_fault_around_execution_recovers_uncertain_without_replay(aft
     )
     store = InMemoryEventStore()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
 
     with pytest.raises(InjectedCrash):
@@ -59,7 +68,8 @@ async def test_tool_fault_around_execution_recovers_uncertain_without_replay(aft
 
     assert len(invoked) == int(after_execute)
     assert not any(
-        event.event_type == EventType.TOOL_RESULT for event in await store.load_recovery("s")
+        event.event_type == EventType.TOOL_RESULT
+        for event in await store.load_recovery("s")
     )
     recovered = await AgentLoop().recover("s", store, FakeDelivery())
     assert recovered.active_resource_locks == frozenset({"workspace"})
@@ -74,7 +84,9 @@ async def test_parallel_fault_recovers_all_started_calls_without_replay():
         invoked.append(arguments)
         return Completed("finished")
 
-    tools = FaultInjectingToolRuntime(registry(read_handler=read), fail_at=2, after_execute=True)
+    tools = FaultInjectingToolRuntime(
+        registry(read_handler=read), fail_at=2, after_execute=True
+    )
     provider = FakeProvider(
         [
             ModelResponse(
@@ -96,16 +108,23 @@ async def test_parallel_fault_recovers_all_started_calls_without_replay():
         if event.event_type == EventType.TOOL_RESULT
     ]
     assert len(results) == 2
-    assert all(event.payload["outcome"]["kind"] == "uncertain_hanging" for event in results)
+    assert all(
+        event.payload["outcome"]["kind"] == "uncertain_hanging"
+        for event in results
+    )
     assert len(invoked) == 2
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("after_delivery", [False, True])
-async def test_delivery_fault_around_send_recovers_the_same_final_message(after_delivery):
+async def test_delivery_fault_around_send_recovers_the_same_final_message(
+    after_delivery,
+):
     store = InMemoryEventStore()
     sent = FakeDelivery()
-    delivery = FaultInjectingDeliveryOwner(sent, fail_at=1, after_delivery=after_delivery)
+    delivery = FaultInjectingDeliveryOwner(
+        sent, fail_at=1, after_delivery=after_delivery
+    )
 
     with pytest.raises(InjectedCrash):
         await AgentLoop().run(
@@ -126,6 +145,6 @@ async def test_delivery_fault_around_send_recovers_the_same_final_message(after_
     recovered_delivery = FakeDelivery()
     recovered = await AgentLoop().recover("s", store, recovered_delivery)
     assert recovered.delivered_final_ids == (final.payload["final_message_id"],)
-    assert [message.final_message_id for message in recovered_delivery.messages] == [
-        final.payload["final_message_id"]
-    ]
+    assert [
+        message.final_message_id for message in recovered_delivery.messages
+    ] == [final.payload["final_message_id"]]

@@ -27,7 +27,11 @@ def budget_reason(events, expected):
 @pytest.mark.asyncio
 async def test_step_budget_stops_before_next_step():
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS
+            )
+        ]
     )
     store = InMemoryEventStore()
 
@@ -52,7 +56,10 @@ async def test_step_budget_stops_before_next_step():
 @pytest.mark.asyncio
 async def test_model_budget_counts_physical_retry_attempts():
     provider = FakeProvider(
-        [ProviderError("temporary", retryable=True), ModelResponse(content="unreachable")]
+        [
+            ProviderError("temporary", retryable=True),
+            ModelResponse(content="unreachable"),
+        ]
     )
     store = InMemoryEventStore()
 
@@ -70,7 +77,8 @@ async def test_model_budget_counts_physical_retry_attempts():
     assert outcome.error == "max_model_calls=1"
     assert len(provider.requests) == 1
     assert not any(
-        item.event_type == EventType.FINAL_MESSAGE for item in await store.load_recovery("s")
+        item.event_type == EventType.FINAL_MESSAGE
+        for item in await store.load_recovery("s")
     )
 
 
@@ -87,7 +95,9 @@ async def test_tool_budget_rejects_entire_batch_before_dispatch():
         context(
             store,
             provider,
-            registry(read_handler=lambda arguments, ctx: invoked.append(arguments)),
+            registry(
+                read_handler=lambda arguments, ctx: invoked.append(arguments)
+            ),
             FakeDelivery(),
             config=config(max_tool_calls=1),
         )
@@ -106,7 +116,12 @@ async def test_token_budget_preserves_attempt_but_blocks_final():
     delivery = FakeDelivery()
     store = InMemoryEventStore()
     provider = FakeProvider(
-        [ModelResponse(content="over", usage=ModelUsage(input_tokens=6, output_tokens=1))]
+        [
+            ModelResponse(
+                content="over",
+                usage=ModelUsage(input_tokens=6, output_tokens=1),
+            )
+        ]
     )
 
     outcome = await AgentLoop().run(
@@ -124,10 +139,13 @@ async def test_token_budget_preserves_attempt_but_blocks_final():
     assert delivery.messages == []
     events = await store.load_recovery("s")
     assert any(
-        item.event_type == EventType.ASSISTANT_ATTEMPT and item.payload["status"] == "success"
+        item.event_type == EventType.ASSISTANT_ATTEMPT
+        and item.payload["status"] == "success"
         for item in events
     )
-    assert not any(item.event_type == EventType.FINAL_MESSAGE for item in events)
+    assert not any(
+        item.event_type == EventType.FINAL_MESSAGE for item in events
+    )
 
 
 @pytest.mark.asyncio
@@ -189,7 +207,12 @@ async def test_deadline_preserves_uncertain_tool_resource_lock():
         context(
             store,
             FakeProvider(
-                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+                [
+                    ModelResponse(
+                        tool_calls=(call("write"),),
+                        finish_reason=FinishReason.TOOL_CALLS,
+                    )
+                ]
             ),
             registry(write_handler=slow),
             FakeDelivery(),

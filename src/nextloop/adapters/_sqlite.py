@@ -15,7 +15,9 @@ R = TypeVar("R")
 def offload(function: Callable[P, R]) -> Callable[P, Coroutine[Any, Any, R]]:
     @wraps(function)
     async def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
-        return await asyncio.to_thread(_call_with_busy_timeout, function, args, kwargs)
+        return await asyncio.to_thread(
+            _call_with_busy_timeout, function, args, kwargs
+        )
 
     return wrapped
 
@@ -36,7 +38,11 @@ def _call_with_busy_timeout(
 
 
 @contextmanager
-def write_transaction(connection: sqlite3.Connection, *, immediate: bool = True) -> Iterator[None]:
+def write_transaction(
+    connection: sqlite3.Connection,
+    *,
+    immediate: bool = True,  # bits:allow(BCS004): established API
+) -> Iterator[None]:
     try:
         connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
         yield
@@ -50,7 +56,9 @@ def write_transaction(connection: sqlite3.Connection, *, immediate: bool = True)
         raise
 
 
-def execute_with_busy_retry(connection: sqlite3.Connection, statement: str) -> None:
+def execute_with_busy_retry(
+    connection: sqlite3.Connection, statement: str
+) -> None:
     deadline = time.monotonic() + 5.0
     while True:
         try:

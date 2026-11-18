@@ -50,7 +50,9 @@ async def test_persistent_worker_and_asset_safe_result() -> None:
     pid = driver.pid
     second = await call(driver, "echo", {"text": "two"})
     assert isinstance(first, Completed) and first.content == "one"
-    assert isinstance(second, Completed) and second.structured == {"echo": "two"}
+    assert isinstance(second, Completed) and second.structured == {
+        "echo": "two"
+    }
     assert driver.pid == pid
     await driver.close()
 
@@ -72,7 +74,9 @@ async def test_cancellation_and_crash_are_uncertain() -> None:
     driver = StdioDriver(config())
     await driver.start()
     cancel = asyncio.Event()
-    operation = asyncio.create_task(call(driver, "wait", {"seconds": 10}, cancel))
+    operation = asyncio.create_task(
+        call(driver, "wait", {"seconds": 10}, cancel)
+    )
     await asyncio.sleep(0.05)
     cancel.set()
     outcome = await operation

@@ -60,15 +60,23 @@ def test_store_lease_and_pending_limit_config(tmp_path: Path) -> None:
         ("unknown = true", "unknown field"),
         ('min_nextloop = "1.1.1"', "requires nextloop"),
         ('min_nextloop = "0.3"', "full x.y.z"),
-        ('[provider.default_parameters]\nACCESS_TOKEN = "literal"', "plaintext credentials"),
+        (
+            '[provider.default_parameters]\nACCESS_TOKEN = "literal"',
+            "plaintext credentials",
+        ),
         (
             '[provider.default_parameters.headers]\nAuthorization = "literal"',
             "plaintext credentials",
         ),
-        ('[provider.default_parameters]\nclient_secret = "literal"', "plaintext credentials"),
+        (
+            '[provider.default_parameters]\nclient_secret = "literal"',
+            "plaintext credentials",
+        ),
     ],
 )
-def test_invalid_config_fails_before_execution(tmp_path: Path, fragment: str, message: str) -> None:
+def test_invalid_config_fails_before_execution(
+    tmp_path: Path, fragment: str, message: str
+) -> None:
     path = tmp_path / "harness.toml"
     if fragment.startswith("min_nextloop"):
         text = BASE.replace('min_nextloop = "0.3.0rc1"', fragment)
@@ -81,9 +89,13 @@ def test_invalid_config_fails_before_execution(tmp_path: Path, fragment: str, me
 
 def test_missing_tool_target_and_invalid_skill_path(tmp_path: Path) -> None:
     with pytest.raises(HarnessError, match="target"):
-        load_harness_spec(write_config(tmp_path, '[[tools]]\ndriver = "python"\n'))
+        load_harness_spec(
+            write_config(tmp_path, '[[tools]]\ndriver = "python"\n')
+        )
     with pytest.raises(HarnessError, match="does not exist"):
-        load_harness_spec(write_config(tmp_path, '[skills]\npaths = ["missing"]\n'))
+        load_harness_spec(
+            write_config(tmp_path, '[skills]\npaths = ["missing"]\n')
+        )
 
 
 def test_python_registration_and_batch_rejection(
@@ -104,14 +116,22 @@ def test_python_registration_and_batch_rejection(
         [
             load_harness_spec(
                 write_config(
-                    tmp_path, '[[tools]]\ndriver = "python"\ntarget = "registered_tools:register"\n'
+                    tmp_path,
+                    '[[tools]]\ndriver = "python"\ntarget = "registered_tools:register"\n',
                 )
             ).tools[0]
         ]
     )
     call = ToolCall("1", "add", '{"value": 2}')
     outcome = asyncio.run(
-        runtime.execute(call, {"value": 2}, session_id="s", turn=1, step=1, cancel=asyncio.Event())
+        runtime.execute(
+            call,
+            {"value": 2},
+            session_id="s",
+            turn=1,
+            step=1,
+            cancel=asyncio.Event(),
+        )
     )
     assert isinstance(outcome, Completed) and outcome.structured == 3
     _, issues = runtime.validate([ToolCall("2", "add", '{"value": "bad"}')])
@@ -135,7 +155,9 @@ async def test_harness_skill_dependencies(tmp_path: Path) -> None:
         "---\nname: needs-tool\ndescription: test\nrequires_tools: [absent]\n---\nBody\n",
         encoding="utf-8",
     )
-    harness = Harness.load(write_config(tmp_path, '[skills]\npaths = ["skill"]\n'))
+    harness = Harness.load(
+        write_config(tmp_path, '[skills]\npaths = ["skill"]\n')
+    )
     with pytest.raises(Exception, match="missing required Tool"):
         await harness.check()
     await harness.close()
@@ -200,13 +222,18 @@ def test_invalid_python_tool_schema_has_target_and_name(
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     config = write_config(
-        tmp_path, '[[tools]]\ndriver = "python"\ntarget = "bad_schema:register"\n'
+        tmp_path,
+        '[[tools]]\ndriver = "python"\ntarget = "bad_schema:register"\n',
     )
-    with pytest.raises(HarnessError, match="bad_schema:register.*broken.*invalid JSON Schema"):
+    with pytest.raises(
+        HarnessError, match="bad_schema:register.*broken.*invalid JSON Schema"
+    ):
         Harness.load(config)
 
 
-async def test_invalid_stdio_tool_schema_has_worker_and_name(tmp_path: Path) -> None:
+async def test_invalid_stdio_tool_schema_has_worker_and_name(
+    tmp_path: Path,
+) -> None:
     worker = tmp_path / "bad_worker.py"
     worker.write_text(
         "import json, sys\n"
@@ -220,7 +247,8 @@ async def test_invalid_stdio_tool_schema_has_worker_and_name(tmp_path: Path) -> 
         encoding="utf-8",
     )
     config = write_config(
-        tmp_path, f'[[tools]]\ndriver = "stdio"\ncommand = ["{sys.executable}", "{worker}"]\n'
+        tmp_path,
+        f'[[tools]]\ndriver = "stdio"\ncommand = ["{sys.executable}", "{worker}"]\n',
     )
     harness = Harness.load(config)
     with pytest.raises(HarnessError, match="stdio worker.*broken"):
@@ -232,7 +260,8 @@ async def test_invalid_stdio_tool_schema_has_worker_and_name(tmp_path: Path) -> 
 def test_composite_rejects_provider_incompatible_tool_names(name: str) -> None:
     registry = ToolRegistry()
     registry.register(
-        ToolSpec(name, "Invalid", {"type": "object"}), lambda arguments, context: None
+        ToolSpec(name, "Invalid", {"type": "object"}),
+        lambda arguments, context: None,
     )
     with pytest.raises(HarnessError, match="invalid name"):
         CompositeToolRuntime([registry])
@@ -241,11 +270,16 @@ def test_composite_rejects_provider_incompatible_tool_names(name: str) -> None:
 def test_composite_accepts_namespaced_and_64_character_names() -> None:
     registry = ToolRegistry()
     for name in ("worker__echo", "a" * 64):
+        # bits:allow(BCS007): Python has no brace blocks
         registry.register(
-            ToolSpec(name, "Valid", {"type": "object"}), lambda arguments, context: None
+            ToolSpec(name, "Valid", {"type": "object"}),
+            lambda arguments, context: None,
         )
     runtime = CompositeToolRuntime([registry])
-    assert {spec.name for spec in runtime.catalog()} == {"worker__echo", "a" * 64}
+    assert {spec.name for spec in runtime.catalog()} == {
+        "worker__echo",
+        "a" * 64,
+    }
 
 
 async def test_all_runtime_validation_entry_points_match() -> None:
@@ -263,9 +297,16 @@ async def test_all_runtime_validation_entry_points_match() -> None:
     )
     registry.register(spec, lambda arguments, context: None)
     composite = CompositeToolRuntime([registry])
-    stdio = StdioDriver(ToolConfig(driver="stdio", command=(sys.executable, "-c", "")))
+    stdio = StdioDriver(
+        ToolConfig(driver="stdio", command=(sys.executable, "-c", ""))
+    )
     stdio._specs = (spec,)
-    calls = [ToolCall("1", "consistent", '{"value":"bad"}'), ToolCall("2", "missing", "{}")]
+    calls = [
+        ToolCall("1", "consistent", '{"value":"bad"}'),
+        ToolCall("2", "missing", "{}"),
+    ]
     expected = [issue.to_dict() for issue in registry.validate(calls)[1]]
-    assert [issue.to_dict() for issue in composite.validate(calls)[1]] == expected
+    assert [
+        issue.to_dict() for issue in composite.validate(calls)[1]
+    ] == expected
     assert [issue.to_dict() for issue in stdio.validate(calls)[1]] == expected

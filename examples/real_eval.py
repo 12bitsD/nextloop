@@ -34,15 +34,21 @@ class RecordingProvider(OpenAIProvider):
         self._request_hashes = []
 
     async def complete(self, request, *, attempt, cancel):
-        return await self._record_completion(request, attempt=attempt, cancel=cancel)
+        return await self._record_completion(
+            request, attempt=attempt, cancel=cancel
+        )
 
     async def complete_with_preview(self, request, *, attempt, cancel, emit):
-        return await self._record_completion(request, attempt=attempt, cancel=cancel, emit=emit)
+        return await self._record_completion(
+            request, attempt=attempt, cancel=cancel, emit=emit
+        )
 
     async def _record_completion(self, request, *, attempt, cancel, emit=None):
         message_hashes = [
             hashlib.sha256(
-                json.dumps(message_to_data(message), ensure_ascii=False, sort_keys=True).encode()
+                json.dumps(
+                    message_to_data(message), ensure_ascii=False, sort_keys=True
+                ).encode()
             ).hexdigest()
             for message in request.messages
         ]
@@ -51,7 +57,9 @@ class RecordingProvider(OpenAIProvider):
                 next(
                     (
                         index
-                        for index, pair in enumerate(zip(message_hashes, previous, strict=False))
+                        for index, pair in enumerate(
+                            zip(message_hashes, previous, strict=False)
+                        )
                         if pair[0] != pair[1]
                     ),
                     min(len(message_hashes), len(previous)),
@@ -70,13 +78,18 @@ class RecordingProvider(OpenAIProvider):
             "attempt": attempt,
             "message_count": len(message_hashes),
             "shared_prefix_messages": shared_prefix,
-            "request_sha256": hashlib.sha256("".join(message_hashes).encode()).hexdigest(),
+            "request_sha256": hashlib.sha256(
+                "".join(message_hashes).encode()
+            ).hexdigest(),
             "started_monotonic": started,
         }
 
         def record_output(delta):
             nonlocal first_output
-            if first_output is None and delta.get("channel") in ("content", "tool_call"):
+            if first_output is None and delta.get("channel") in (
+                "content",
+                "tool_call",
+            ):
                 first_output = time.monotonic()
             if emit is not None:
                 emit(delta)
@@ -86,7 +99,9 @@ class RecordingProvider(OpenAIProvider):
                 self.fail_once_cases.remove(self.case_id)
                 from nextloop import ProviderError
 
-                raise ProviderError("Injected transient provider failure", retryable=True)
+                raise ProviderError(
+                    "Injected transient provider failure", retryable=True
+                )
             response = await self._complete(
                 request, attempt=attempt, cancel=cancel, emit=record_output
             )
@@ -132,8 +147,12 @@ class RecordingDelivery:
         self.messages.append(message)
 
 
+# bits:allow(BCS011): read-only case table or explicit provider
 CASES = [
-    ("basic-read", ["Read README.md using read_file.", "Summarize the Tool result."]),
+    (
+        "basic-read",
+        ["Read README.md using read_file.", "Summarize the Tool result."],
+    ),
     (
         "read-two",
         [
@@ -261,7 +280,10 @@ def build_tools(invocations):
             },
         ),
         record(
-            "write_file", lambda arguments: f"Wrote {arguments['path']}: {arguments['content']}"
+            "write_file",
+            lambda arguments: (
+                f"Wrote {arguments['path']}: {arguments['content']}"
+            ),
         ),
     )
     tools.register(
@@ -275,7 +297,9 @@ def build_tools(invocations):
                 "additionalProperties": False,
             },
         ),
-        record("search_files", lambda arguments: ["a.txt", "b.txt", "nextloop.md"]),
+        record(
+            "search_files", lambda arguments: ["a.txt", "b.txt", "nextloop.md"]
+        ),
     )
     tools.register(
         ToolSpec(
@@ -288,7 +312,12 @@ def build_tools(invocations):
                 "additionalProperties": False,
             },
         ),
-        record("calculate", lambda arguments: "42" if arguments["expression"] == "40+2" else "4"),
+        record(
+            "calculate",
+            lambda arguments: (
+                "42" if arguments["expression"] == "40+2" else "4"
+            ),
+        ),
     )
     tools.register(
         ToolSpec(
@@ -301,10 +330,17 @@ def build_tools(invocations):
                 "additionalProperties": False,
             },
         ),
-        record("get_weather", lambda arguments: f"Weather in {arguments['city']}: sunny, 22C"),
+        record(
+            "get_weather",
+            lambda arguments: f"Weather in {arguments['city']}: sunny, 22C",
+        ),
     )
     tools.register(
-        ToolSpec("get_time", "Get current time", {"type": "object", "additionalProperties": False}),
+        ToolSpec(
+            "get_time",
+            "Get current time",
+            {"type": "object", "additionalProperties": False},
+        ),
         record("get_time", lambda arguments: "2026-11-13T00:00:00Z"),
     )
     tools.register(
@@ -358,12 +394,16 @@ def measure_turn(provider, invocations, case_id, turn, started, ended):
         "model_seconds": round(model, 6),
         "tool_seconds": round(tool, 6),
         "framework_seconds": round(max(0.0, wall - occupied), 6),
-        "framework_ratio": round(max(0.0, wall - occupied) / wall, 6) if wall else 0,
+        "framework_ratio": round(max(0.0, wall - occupied) / wall, 6)
+        if wall
+        else 0,
     }
 
 
 def timing_summary(cases, provider_records):
-    turns = [timing for case in cases for timing in case.get("turn_timings", ())]
+    turns = [
+        timing for case in cases for timing in case.get("turn_timings", ())
+    ]
     ttft = sorted(
         record["ttft_seconds"]
         for record in provider_records
@@ -380,7 +420,9 @@ def timing_summary(cases, provider_records):
         "framework_ratio": round(framework / wall, 6) if wall else 0,
         "ttft_samples": len(ttft),
         "median_ttft_seconds": ttft[len(ttft) // 2] if ttft else None,
-        "p95_ttft_seconds": ttft[max(0, int(len(ttft) * 0.95) - 1)] if ttft else None,
+        "p95_ttft_seconds": ttft[max(0, int(len(ttft) * 0.95) - 1)]
+        if ttft
+        else None,
     }
 
 
@@ -388,13 +430,16 @@ async def evaluate_case(provider, case_id, prompts, *, config=None, store=None):
     provider.case_id = case_id
     invocations = []
     delivery = RecordingDelivery()
-    store = store or InMemoryEventStore()
-    tools = with_result_reads(build_tools(invocations), store, page_bytes=512)
+    event_store = store or InMemoryEventStore()
+    tools = with_result_reads(
+        build_tools(invocations), event_store, page_bytes=512
+    )
     loop = AgentLoop()
     outcomes = []
     turn_timings = []
     try:
         for prompt in prompts:
+            # bits:allow(BCS007): Python has no brace blocks
             started = time.monotonic()
             outcome = await loop.run(
                 TurnContext(
@@ -409,7 +454,7 @@ async def evaluate_case(provider, case_id, prompts, *, config=None, store=None):
                         tool_result_bytes=512,
                         tool_result_full_max_bytes=2048,
                     ),
-                    store=store,
+                    store=event_store,
                     provider=provider,
                     tools=tools,
                     delivery=delivery,
@@ -417,7 +462,12 @@ async def evaluate_case(provider, case_id, prompts, *, config=None, store=None):
             )
             turn_timings.append(
                 measure_turn(
-                    provider, invocations, case_id, outcome.turn, started, time.monotonic()
+                    provider,
+                    invocations,
+                    case_id,
+                    outcome.turn,
+                    started,
+                    time.monotonic(),
                 )
             )
             outcomes.append(
@@ -443,6 +493,7 @@ async def evaluate_case(provider, case_id, prompts, *, config=None, store=None):
 async def main():
     import os
 
+    # bits:allow(BCS011): read-only case table or explicit provider
     provider = RecordingProvider(
         model_id="kimi-k2.8-highspeed",
         base_url="https://free-tokens.msh.team/v1",
@@ -452,6 +503,7 @@ async def main():
     )
     cases = []
     for case_id, prompts in CASES:
+        # bits:allow(BCS007): Python has no brace blocks
         result = await evaluate_case(provider, case_id, prompts)
         cases.append(result)
         print(
@@ -466,9 +518,15 @@ async def main():
         )
     await provider.close()
     usage_records = provider.records
-    total_input = sum(record["usage"]["input_tokens"] or 0 for record in usage_records)
-    total_cached = sum(record["usage"]["cached_input_tokens"] or 0 for record in usage_records)
-    total_output = sum(record["usage"]["output_tokens"] or 0 for record in usage_records)
+    total_input = sum(
+        record["usage"]["input_tokens"] or 0 for record in usage_records
+    )
+    total_cached = sum(
+        record["usage"]["cached_input_tokens"] or 0 for record in usage_records
+    )
+    total_output = sum(
+        record["usage"]["output_tokens"] or 0 for record in usage_records
+    )
     total_elapsed = sum(record["elapsed_seconds"] for record in usage_records)
     summary = {
         "model": "kimi-k2.8-highspeed",
@@ -477,7 +535,9 @@ async def main():
         "tool_call_count": sum(len(case["tool_invocations"]) for case in cases),
         "input_tokens": total_input,
         "cached_input_tokens": total_cached,
-        "cache_ratio": round(total_cached / total_input, 4) if total_input else 0,
+        "cache_ratio": round(total_cached / total_input, 4)
+        if total_input
+        else 0,
         "output_tokens": total_output,
         "total_elapsed_seconds": round(total_elapsed, 3),
         "cached_call_seconds": round(
@@ -498,14 +558,23 @@ async def main():
         ),
         "timing": timing_summary(cases, usage_records),
     }
-    output = {"summary": summary, "provider_calls": usage_records, "cases": cases}
+    output = {
+        "summary": summary,
+        "provider_calls": usage_records,
+        "cases": cases,
+    }
     destination = Path("docs/research/real-eval-2026-11-13/results.json")
     destination.parent.mkdir(parents=True, exist_ok=True)
     await asyncio.to_thread(
-        destination.write_text, json.dumps(output, ensure_ascii=False, indent=2) + "\n"
+        destination.write_text,
+        json.dumps(output, ensure_ascii=False, indent=2) + "\n",
     )
     print(
-        json.dumps({"summary": summary, "results": str(destination)}, ensure_ascii=False, indent=2)
+        json.dumps(
+            {"summary": summary, "results": str(destination)},
+            ensure_ascii=False,
+            indent=2,
+        )
     )
 
 

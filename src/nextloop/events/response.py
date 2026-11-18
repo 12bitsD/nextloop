@@ -36,7 +36,13 @@ class ResponseDecision:
 
 
 def _assistant_event(
-    response: ModelResponse, *, turn: int, step: int, attempt: int, visible: bool
+    response: ModelResponse,
+    *,
+    turn: int,
+    step: int,
+    attempt: int,
+    # bits:allow(BCS004): established API/test-double signature
+    visible: bool,
 ) -> NewEvent:
     content = response.content or response.refusal or ""
     message = Message(
@@ -67,7 +73,9 @@ def _correction(feedback: str, *, turn: int, step: int) -> NewEvent:
         surface_op=SurfaceOp.APPEND,
         payload={
             "message": message_to_data(
-                Message(role="user", content="[Protocol correction]\n" + feedback)
+                Message(
+                    role="user", content="[Protocol correction]\n" + feedback
+                )
             ),
             "protocol_correction": True,
         },
@@ -84,7 +92,9 @@ def _correct_or_fail(
     corrections: int,
     max_corrections: int,
 ) -> ResponseDecision:
-    assistant = _assistant_event(response, turn=turn, step=step, attempt=attempt, visible=False)
+    assistant = _assistant_event(
+        response, turn=turn, step=step, attempt=attempt, visible=False
+    )
     if corrections >= max_corrections:
         return ResponseDecision(
             action=ResponseAction.FAILED,
@@ -97,6 +107,7 @@ def _correct_or_fail(
     )
 
 
+# bits:explain(BCS003): event projection; split risks parity; keep hot path
 def decide_response(
     response: ModelResponse,
     *,
@@ -110,14 +121,29 @@ def decide_response(
         return ResponseDecision(
             action=ResponseAction.CANCELLED,
             events=(
-                _assistant_event(response, turn=turn, step=step, attempt=attempt, visible=False),
+                _assistant_event(
+                    response,
+                    turn=turn,
+                    step=step,
+                    attempt=attempt,
+                    visible=False,
+                ),
             ),
         )
-    if response.finish_reason in (FinishReason.ERROR, FinishReason.CONTENT_FILTER):
+    if response.finish_reason in (
+        FinishReason.ERROR,
+        FinishReason.CONTENT_FILTER,
+    ):
         return ResponseDecision(
             action=ResponseAction.FAILED,
             events=(
-                _assistant_event(response, turn=turn, step=step, attempt=attempt, visible=False),
+                _assistant_event(
+                    response,
+                    turn=turn,
+                    step=step,
+                    attempt=attempt,
+                    visible=False,
+                ),
             ),
             error=f"Provider terminal response: {response.finish_reason.value}",
         )
@@ -143,7 +169,10 @@ def decide_response(
             corrections=corrections,
             max_corrections=max_corrections,
         )
-    if response.finish_reason == FinishReason.TOOL_CALLS and not response.tool_calls:
+    if (
+        response.finish_reason == FinishReason.TOOL_CALLS
+        and not response.tool_calls
+    ):
         return _correct_or_fail(
             response,
             "The Tool-call finish reason supplied no Tool Calls. Return a valid response.",
@@ -169,18 +198,34 @@ def decide_response(
         return ResponseDecision(
             action=ResponseAction.FINAL_CANDIDATE,
             events=(
-                _assistant_event(response, turn=turn, step=step, attempt=attempt, visible=True),
+                _assistant_event(
+                    response,
+                    turn=turn,
+                    step=step,
+                    attempt=attempt,
+                    visible=True,
+                ),
             ),
             final_content=final_content,
         )
     calls = tuple(
-        ToolCall(call.call_id, call.name, call.arguments, operation_id=new_id("op"))
+        ToolCall(
+            call.call_id, call.name, call.arguments, operation_id=new_id("op")
+        )
         for call in response.tool_calls
     )
-    response = replace(response, tool_calls=calls)
+    updated_response = replace(response, tool_calls=calls)
     return ResponseDecision(
         action=ResponseAction.RUN_TOOLS,
-        events=(_assistant_event(response, turn=turn, step=step, attempt=attempt, visible=True),),
+        events=(
+            _assistant_event(
+                updated_response,
+                turn=turn,
+                step=step,
+                attempt=attempt,
+                visible=True,
+            ),
+        ),
         calls=calls,
     )
 
@@ -213,7 +258,8 @@ def reject_batch(
             rejection,
             _correction(
                 "The complete Tool batch was rejected and no Tool executed. "
-                "Correct every error without guessing IDs or arguments: " + details,
+                "Correct every error without guessing IDs or arguments: "
+                + details,
                 turn=turn,
                 step=step,
             ),

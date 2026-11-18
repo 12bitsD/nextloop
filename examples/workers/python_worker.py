@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 PROTOCOL = "nextloop.stdio/v1"
+# bits:allow(BCS011): immutable Worker Tool catalog shared by requests
 TOOLS = [
     {
         "name": "echo",
@@ -54,43 +55,65 @@ TOOLS = [
 ]
 
 
+async def handle_tool_call(
+    request_id: Any, params: dict[str, Any]
+) -> dict[str, Any]:
+    name = params.get("name")
+    arguments = params.get("arguments", {})
+    if name == "echo":
+        result = {
+            "content": arguments["text"],
+            "structured": {"echo": arguments["text"]},
+        }
+    elif name == "wait":
+        await asyncio.sleep(float(arguments["seconds"]))
+        result = {"content": "done"}
+    elif name == "asset":
+        result = {
+            "content": "Asset available",
+            "assets": [arguments["path"]],
+        }
+    elif name == "context":
+        result = {
+            "content": "context",
+            "structured": params.get("context", {}),
+        }
+    elif name == "crash":
+        os._exit(17)
+    else:
+        return error(request_id, -32601, f"Unknown Tool: {name}")
+    return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+
 async def handle(request: dict[str, Any]) -> dict[str, Any] | None:
     method = request.get("method")
     request_id = request.get("id")
     if method == "notifications/cancelled":
         return None
+    if method == "tools/call":
+        return await handle_tool_call(request_id, request.get("params", {}))
     if method == "ping":
         result: dict[str, Any] = {}
     elif method == "initialize":
-        result = {"protocolVersion": PROTOCOL, "serverInfo": {"name": "python-worker"}}
+        result = {
+            "protocolVersion": PROTOCOL,
+            "serverInfo": {"name": "python-worker"},
+        }
     elif method == "tools/list":
         result = {"tools": TOOLS}
     elif method == "shutdown":
         result = {}
-    elif method == "tools/call":
-        params = request.get("params", {})
-        name = params.get("name")
-        arguments = params.get("arguments", {})
-        if name == "echo":
-            result = {"content": arguments["text"], "structured": {"echo": arguments["text"]}}
-        elif name == "wait":
-            await asyncio.sleep(float(arguments["seconds"]))
-            result = {"content": "done"}
-        elif name == "asset":
-            result = {"content": "Asset available", "assets": [arguments["path"]]}
-        elif name == "context":
-            result = {"content": "context", "structured": params.get("context", {})}
-        elif name == "crash":
-            os._exit(17)
-        else:
-            return error(request_id, -32601, f"Unknown Tool: {name}")
     else:
         return error(request_id, -32601, f"Unknown method: {method}")
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
 def error(request_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+    return {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": {"code": code, "message": message},
+    }
 
 
 async def read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
@@ -117,7 +140,9 @@ async def read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
 async def main() -> None:
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader()
-    await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+    await loop.connect_read_pipe(
+        lambda: asyncio.StreamReaderProtocol(reader), sys.stdin
+    )
     pending: set[asyncio.Task[None]] = set()
     shutdown = asyncio.Event()
     buffer = bytearray()
@@ -131,9 +156,12 @@ async def main() -> None:
             shutdown.set()
 
     while not shutdown.is_set():
+        # bits:allow(BCS007): Python has no brace blocks
         reading = asyncio.create_task(read_frame(reader, buffer))
         stopping = asyncio.create_task(shutdown.wait())
-        done, _ = await asyncio.wait({reading, stopping}, return_when=asyncio.FIRST_COMPLETED)
+        done, _ = await asyncio.wait(
+            {reading, stopping}, return_when=asyncio.FIRST_COMPLETED
+        )
         if stopping in done:
             reading.cancel()
             await asyncio.gather(reading, return_exceptions=True)

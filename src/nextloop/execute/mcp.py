@@ -30,9 +30,13 @@ MCP_CATALOG_TIMEOUT_SECONDS = 30.0
 
 
 class McpStdioRuntime(StdioTransport):
-    def __init__(self, config: ToolConfig, *, sensitive_env: Sequence[str] = ()) -> None:
+    def __init__(
+        self, config: ToolConfig, *, sensitive_env: Sequence[str] = ()
+    ) -> None:
         if config.driver != "mcp" or not config.command:
-            raise ValueError("McpStdioRuntime requires an mcp ToolConfig with a command")
+            raise ValueError(
+                "McpStdioRuntime requires an mcp ToolConfig with a command"
+            )
         super().__init__(config, sensitive_env=sensitive_env)
         self._initialized = False
 
@@ -47,24 +51,34 @@ class McpStdioRuntime(StdioTransport):
                     {
                         "protocolVersion": MCP_PROTOCOL_VERSION,
                         "capabilities": {},
-                        "clientInfo": {"name": "nextloop", "version": API_VERSION},
+                        "clientInfo": {
+                            "name": "nextloop",
+                            "version": API_VERSION,
+                        },
                     },
                     request_timeout=10.0,
                 )
                 if response.get("protocolVersion") != MCP_PROTOCOL_VERSION:
-                    raise StdioProtocolError("MCP server returned an unsupported protocol version")
+                    raise StdioProtocolError(
+                        "MCP server returned an unsupported protocol version"
+                    )
                 capabilities = response.get("capabilities")
                 if not isinstance(capabilities, Mapping) or not isinstance(
                     capabilities.get("tools"), dict
                 ):
-                    raise StdioProtocolError("MCP server does not support Tools")
-                await self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+                    raise StdioProtocolError(
+                        "MCP server does not support Tools"
+                    )
+                await self._send(
+                    {"jsonrpc": "2.0", "method": "notifications/initialized"}
+                )
                 self._specs = await self._load_catalog()
                 self._initialized = True
             except BaseException:
                 await wait_for_cleanup(asyncio.create_task(self._terminate()))
                 raise
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     async def _load_catalog(self) -> tuple[ToolSpec, ...]:
         deadline = time.monotonic() + MCP_CATALOG_TIMEOUT_SECONDS
         tools = []
@@ -72,24 +86,37 @@ class McpStdioRuntime(StdioTransport):
         seen_cursors: set[str] = set()
         catalog_bytes = 0
         for _ in range(MCP_MAX_CATALOG_PAGES):
+            # bits:allow(BCS007): Python has no brace blocks
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise StdioProtocolError("MCP catalog initialization deadline exceeded")
-            listed = await self._request("tools/list", cursor, request_timeout=min(10.0, remaining))
+                raise StdioProtocolError(
+                    "MCP catalog initialization deadline exceeded"
+                )
+            listed = await self._request(
+                "tools/list", cursor, request_timeout=min(10.0, remaining)
+            )
             raw_tools = listed.get("tools")
             if not isinstance(raw_tools, list):
-                raise StdioProtocolError("MCP tools/list result.tools must be an array")
-            catalog_bytes += len(json.dumps(raw_tools, ensure_ascii=False).encode("utf-8"))
+                raise StdioProtocolError(
+                    "MCP tools/list result.tools must be an array"
+                )
+            catalog_bytes += len(
+                json.dumps(raw_tools, ensure_ascii=False).encode("utf-8")
+            )
             if catalog_bytes > MCP_MAX_CATALOG_BYTES:
                 raise StdioProtocolError("MCP catalog byte limit exceeded")
             tools.extend(raw_tools)
             if len(tools) > MCP_MAX_CATALOG_TOOLS:
-                raise StdioProtocolError("MCP catalog Tool count limit exceeded")
+                raise StdioProtocolError(
+                    "MCP catalog Tool count limit exceeded"
+                )
             next_cursor = listed.get("nextCursor")
             if next_cursor is None:
                 break
             if not isinstance(next_cursor, str) or next_cursor in seen_cursors:
-                raise StdioProtocolError("MCP tools/list returned a repeated cursor")
+                raise StdioProtocolError(
+                    "MCP tools/list returned a repeated cursor"
+                )
             seen_cursors.add(next_cursor)
             cursor = {"cursor": next_cursor}
         else:
@@ -97,12 +124,19 @@ class McpStdioRuntime(StdioTransport):
         specs = []
         remote_names: dict[str, str] = {}
         for item in tools:
-            if not isinstance(item, dict) or not isinstance(item.get("name"), str):
-                raise StdioProtocolError("MCP Tool specification must have a name")
+            # bits:allow(BCS007): Python has no brace blocks
+            if not isinstance(item, dict) or not isinstance(
+                item.get("name"), str
+            ):
+                raise StdioProtocolError(
+                    "MCP Tool specification must have a name"
+                )
             remote_name = item["name"]
             parameters = item.get("inputSchema", {"type": "object"})
             if not isinstance(parameters, dict):
-                raise StdioProtocolError(f"MCP Tool {remote_name} inputSchema must be an object")
+                raise StdioProtocolError(
+                    f"MCP Tool {remote_name} inputSchema must be an object"
+                )
             try:
                 jsonschema.Draft202012Validator.check_schema(parameters)
             except jsonschema.SchemaError as exc:
@@ -110,7 +144,9 @@ class McpStdioRuntime(StdioTransport):
                     f"MCP Tool {remote_name} has invalid inputSchema: {exc.message}"
                 ) from exc
             name = (
-                f"{self.config.namespace}__{remote_name}" if self.config.namespace else remote_name
+                f"{self.config.namespace}__{remote_name}"
+                if self.config.namespace
+                else remote_name
             )
             if name in remote_names:
                 raise StdioProtocolError(f"Duplicate MCP Tool name: {name}")
@@ -122,7 +158,9 @@ class McpStdioRuntime(StdioTransport):
                     mode=ToolExecutionMode.EXCLUSIVE,
                     resources=self.config.resources,
                     timeout_seconds=self.config.timeout_seconds,
-                    effect=ToolEffect(self.config.effect or ToolEffect.NON_IDEMPOTENT),
+                    effect=ToolEffect(
+                        self.config.effect or ToolEffect.NON_IDEMPOTENT
+                    ),
                 )
             )
             remote_names[name] = remote_name
@@ -139,7 +177,9 @@ class McpStdioRuntime(StdioTransport):
         step: int,
         cancel: asyncio.Event,
     ) -> ToolOutcome:
-        return await self._execute_with_cancel(call, arguments, session_id, turn, step, cancel)
+        return await self._execute_with_cancel(
+            call, arguments, session_id, turn, step, cancel
+        )
 
     def _unknown_tool(self, call: ToolCall) -> ToolOutcome:
         return Completed(f"Unknown MCP Tool: {call.name}", is_error=True)
@@ -164,9 +204,13 @@ class McpStdioRuntime(StdioTransport):
             },
         }
 
-    def _response_outcome(self, response: Mapping[str, Any], call: ToolCall) -> ToolOutcome:
+    def _response_outcome(
+        self, response: Mapping[str, Any], call: ToolCall
+    ) -> ToolOutcome:
         if "error" in response:
-            return Completed(f"MCP tools/call error: {response['error']}", is_error=True)
+            return Completed(
+                f"MCP tools/call error: {response['error']}", is_error=True
+            )
         result = response.get("result")
         if not isinstance(result, dict):
             raise StdioProtocolError("MCP tools/call result must be an object")
@@ -177,7 +221,10 @@ class McpStdioRuntime(StdioTransport):
             {
                 "jsonrpc": "2.0",
                 "method": "notifications/cancelled",
-                "params": {"requestId": request_id, "reason": "nextloop cancelled"},
+                "params": {
+                    "requestId": request_id,
+                    "reason": "nextloop cancelled",
+                },
             },
             send_timeout=0.05,
         )
@@ -204,13 +251,19 @@ class McpStdioRuntime(StdioTransport):
     def _outcome(response: Mapping[str, Any]) -> ToolOutcome:
         content = response.get("content", [])
         if not isinstance(content, list):
-            return Completed("MCP Tool result content must be an array", is_error=True)
+            return Completed(
+                "MCP Tool result content must be an array", is_error=True
+            )
         text = []
         for block in content:
             if not isinstance(block, dict) or block.get("type") != "text":
-                return Completed("Unsupported MCP Tool content block", is_error=True)
+                return Completed(
+                    "Unsupported MCP Tool content block", is_error=True
+                )
             if not isinstance(block.get("text"), str):
-                return Completed("Invalid MCP text content block", is_error=True)
+                return Completed(
+                    "Invalid MCP text content block", is_error=True
+                )
             text.append(block["text"])
         return Completed(
             "".join(text),

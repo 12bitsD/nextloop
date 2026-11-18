@@ -25,6 +25,7 @@ class SkillRegistry:
         self._specs: dict[str, SkillSpec] = {}
         files = []
         for raw_path in paths:
+            # bits:allow(BCS007): Python has no brace blocks
             path = Path(raw_path).expanduser().resolve()
             if path.is_file():
                 if path.name != "SKILL.md":
@@ -35,6 +36,7 @@ class SkillRegistry:
             else:
                 raise SkillError(f"{path}: Skill path does not exist")
         for path in files:
+            # bits:allow(BCS007): Python has no brace blocks
             spec = self._read_spec(path)
             if spec.name in self._specs:
                 previous = self._specs[spec.name].path
@@ -42,9 +44,13 @@ class SkillRegistry:
                     f"{path}: duplicate Skill name '{spec.name}' (already defined in {previous})"
                 )
             if available_tools is not None:
-                missing = sorted(set(spec.requires_tools) - set(available_tools))
+                missing = sorted(
+                    set(spec.requires_tools) - set(available_tools)
+                )
                 if missing:
-                    raise SkillError(f"{path}: missing required Tool(s): {', '.join(missing)}")
+                    raise SkillError(
+                        f"{path}: missing required Tool(s): {', '.join(missing)}"
+                    )
             self._documents[spec.name] = path
             self._specs[spec.name] = spec
 
@@ -63,20 +69,28 @@ class SkillRegistry:
         return SkillDocument(spec=self._specs[name], body=body)
 
     @staticmethod
+    # bits:explain(BCS003): config dispatch; split risks defaults; keep API
     def _read_spec(path: Path) -> SkillSpec:
         try:
             with path.open(encoding="utf-8") as source:
                 header_lines = []
                 for index, line in enumerate(source):
+                    # bits:allow(BCS007): Python has no brace blocks
                     if index > 100:
-                        raise SkillError(f"{path}: frontmatter exceeds 100 lines")
+                        raise SkillError(
+                            f"{path}: frontmatter exceeds 100 lines"
+                        )
                     header_lines.append(line)
                     if index > 0 and line.strip() == "---":
                         break
                 else:
-                    raise SkillError(f"{path}: frontmatter is not closed with ---")
+                    raise SkillError(
+                        f"{path}: frontmatter is not closed with ---"
+                    )
         except OSError as exc:
-            raise SkillError(f"{path}: cannot read Skill metadata: {exc}") from exc
+            raise SkillError(
+                f"{path}: cannot read Skill metadata: {exc}"
+            ) from exc
         header = "".join(header_lines)
         metadata, _ = _split_frontmatter(header, path)
         if metadata is None:
@@ -87,7 +101,9 @@ class SkillRegistry:
         if not name:
             raise SkillError(f"{path}: frontmatter field 'name' is required")
         if not description:
-            raise SkillError(f"{path}: frontmatter field 'description' is required")
+            raise SkillError(
+                f"{path}: frontmatter field 'description' is required"
+            )
         requires_tools = _parse_tool_list(fields.get("requires_tools", ""))
         min_nextloop = fields.get("min_nextloop") or None
         if min_nextloop is not None:
@@ -101,11 +117,15 @@ class SkillRegistry:
         )
 
 
-def skill_view(registry: SkillRegistry) -> Callable[[Mapping[str, Any], Any], Completed]:
+def skill_view(
+    registry: SkillRegistry,
+) -> Callable[[Mapping[str, Any], Any], Completed]:
     def handler(arguments: Mapping[str, Any], context: Any) -> Completed:
         name = arguments.get("name")
         if not isinstance(name, str) or not name.strip():
-            return Completed("Skill name must be a nonempty string", is_error=True)
+            return Completed(
+                "Skill name must be a nonempty string", is_error=True
+            )
         try:
             document = registry.load(name.strip())
         except SkillError as exc:
@@ -131,13 +151,16 @@ def _split_frontmatter(text: str, path: Path) -> tuple[str | None, str]:
         raise SkillError(f"{path}: expected frontmatter starting with ---")
     for index in range(1, len(lines)):
         if lines[index].strip() == "---":
-            return "\n".join(lines[1:index]), "\n".join(lines[index + 1 :]).lstrip("\n")
+            return "\n".join(lines[1:index]), "\n".join(
+                lines[index + 1 :]
+            ).lstrip("\n")
     raise SkillError(f"{path}: frontmatter is not closed with ---")
 
 
 def _parse_fields(metadata: str, path: Path) -> dict[str, str]:
     fields: dict[str, str] = {}
     for line in metadata.splitlines():
+        # bits:allow(BCS007): Python has no brace blocks
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if ":" not in line:
@@ -155,7 +178,9 @@ def _parse_tool_list(value: str) -> tuple[str, ...]:
     stripped = value.strip()
     if stripped.startswith("[") and stripped.endswith("]"):
         stripped = stripped[1:-1]
-    return tuple(sorted({item.strip() for item in stripped.split(",") if item.strip()}))
+    return tuple(
+        sorted({item.strip() for item in stripped.split(",") if item.strip()})
+    )
 
 
 def _check_version(min_nextloop: str, path: Path) -> None:
@@ -163,6 +188,10 @@ def _check_version(min_nextloop: str, path: Path) -> None:
         required = parse_version(min_nextloop)
         current = parse_version(API_VERSION)
     except ValueError as exc:
-        raise SkillError(f"{path}: invalid nextloop version '{min_nextloop}'") from exc
+        raise SkillError(
+            f"{path}: invalid nextloop version '{min_nextloop}'"
+        ) from exc
     if current < required:
-        raise SkillError(f"{path}: requires nextloop >= {min_nextloop}, current is {API_VERSION}")
+        raise SkillError(
+            f"{path}: requires nextloop >= {min_nextloop}, current is {API_VERSION}"
+        )

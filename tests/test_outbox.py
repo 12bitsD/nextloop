@@ -41,10 +41,17 @@ def closed_turn(turn=1):
 async def test_outbox_exports_closed_turns_once_with_otel_ids(tmp_path):
     store = InMemoryEventStore()
     await AgentLoop().run(
-        context(store, FakeProvider([ModelResponse(content="done")]), registry(), FakeDelivery())
+        context(
+            store,
+            FakeProvider([ModelResponse(content="done")]),
+            registry(),
+            FakeDelivery(),
+        )
     )
     stream = io.StringIO()
-    outbox = SQLiteOutbox(store, str(tmp_path / "outbox.sqlite3"), [StdoutExporter(stream)])
+    outbox = SQLiteOutbox(
+        store, str(tmp_path / "outbox.sqlite3"), [StdoutExporter(stream)]
+    )
 
     report = await outbox.export_pending()
 
@@ -60,7 +67,9 @@ async def test_outbox_exports_closed_turns_once_with_otel_ids(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_active_turn_is_not_exported_and_closed_turn_needs_no_recover(tmp_path):
+async def test_active_turn_is_not_exported_and_closed_turn_needs_no_recover(
+    tmp_path,
+):
     store = InMemoryEventStore()
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, closed_turn()[:2])
@@ -79,7 +88,9 @@ async def test_active_turn_is_not_exported_and_closed_turn_needs_no_recover(tmp_
 
 
 @pytest.mark.asyncio
-async def test_crash_after_export_ack_before_cursor_replays_but_after_cursor_does_not(tmp_path):
+async def test_export_ack_cursor_crash_replay_semantics(
+    tmp_path,
+):
     store = InMemoryEventStore()
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, closed_turn())
@@ -93,20 +104,30 @@ async def test_crash_after_export_ack_before_cursor_replays_but_after_cursor_doe
             super()._advance(session_id, seq)
             raise InjectedCrash("after cursor")
 
-    before = BeforeCursor(store, str(tmp_path / "before.sqlite3"), [lambda record: None])
+    before = BeforeCursor(
+        store, str(tmp_path / "before.sqlite3"), [lambda record: None]
+    )
     with pytest.raises(InjectedCrash):
         await before.export_pending()
     before.close()
-    assert SQLiteOutbox(store, str(tmp_path / "before.sqlite3"), []).watermark("s") == 0
+    assert (
+        SQLiteOutbox(store, str(tmp_path / "before.sqlite3"), []).watermark("s")
+        == 0
+    )
     replay = SQLiteOutbox(store, str(tmp_path / "before.sqlite3"), [])
     assert (await replay.export_pending()).exported == 1
     replay.close()
 
-    after = AfterCursor(store, str(tmp_path / "after.sqlite3"), [lambda record: None])
+    after = AfterCursor(
+        store, str(tmp_path / "after.sqlite3"), [lambda record: None]
+    )
     with pytest.raises(InjectedCrash):
         await after.export_pending()
     after.close()
-    assert SQLiteOutbox(store, str(tmp_path / "after.sqlite3"), []).watermark("s") == 3
+    assert (
+        SQLiteOutbox(store, str(tmp_path / "after.sqlite3"), []).watermark("s")
+        == 3
+    )
     deduplicated = SQLiteOutbox(store, str(tmp_path / "after.sqlite3"), [])
     assert (await deduplicated.export_pending()).exported == 0
     deduplicated.close()
@@ -121,7 +142,9 @@ async def test_persistent_failures_become_auditable_gaps_and_advance(tmp_path):
     def fail(record):
         raise RuntimeError("export unavailable")
 
-    outbox = SQLiteOutbox(store, str(tmp_path / "outbox.sqlite3"), [fail], max_attempts=1)
+    outbox = SQLiteOutbox(
+        store, str(tmp_path / "outbox.sqlite3"), [fail], max_attempts=1
+    )
 
     first = await outbox.export_pending()
     second = await outbox.export_pending()

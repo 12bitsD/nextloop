@@ -43,15 +43,21 @@ async def test_parallel_pool_never_exceeds_four_and_preserves_order():
         return arguments["path"]
 
     tools = registry(read_handler=read)
-    calls = tuple(call(call_id=f"c{index}", path=f"{index}.txt") for index in range(6))
+    calls = tuple(
+        call(call_id=f"c{index}", path=f"{index}.txt") for index in range(6)
+    )
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=calls, finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=calls, finish_reason=FinishReason.TOOL_CALLS
+            ),
             ModelResponse(content="done"),
         ]
     )
     store = InMemoryEventStore()
-    task = asyncio.create_task(AgentLoop().run(context(store, provider, tools, FakeDelivery())))
+    task = asyncio.create_task(
+        AgentLoop().run(context(store, provider, tools, FakeDelivery()))
+    )
     await asyncio.wait_for(filled.wait(), timeout=1)
     assert maximum == 4
     release.set()
@@ -77,7 +83,8 @@ async def test_parallel_unknown_closes_later_exclusive_work():
 
     writes = []
     tools = registry(
-        read_handler=read, write_handler=lambda arguments, ctx: writes.append(arguments)
+        read_handler=read,
+        write_handler=lambda arguments, ctx: writes.append(arguments),
     )
     provider = FakeProvider(
         [
@@ -92,7 +99,9 @@ async def test_parallel_unknown_closes_later_exclusive_work():
             ModelResponse(content="inspect first"),
         ]
     )
-    outcome = await AgentLoop().run(context(InMemoryEventStore(), provider, tools, FakeDelivery()))
+    outcome = await AgentLoop().run(
+        context(InMemoryEventStore(), provider, tools, FakeDelivery())
+    )
     assert outcome.status == TurnStatus.SUCCEEDED
     assert reads == ["uncertain", "other"]
     assert writes == []
@@ -114,7 +123,13 @@ async def test_protocol_exhaustion_and_partial_failure_stop_cleanly():
     partial = await AgentLoop().run(
         context(
             InMemoryEventStore(),
-            FakeProvider([ProviderError("disconnected", retryable=True, partial_output=True)]),
+            FakeProvider(
+                [
+                    ProviderError(
+                        "disconnected", retryable=True, partial_output=True
+                    )
+                ]
+            ),
             registry(),
             FakeDelivery(),
         )
@@ -131,7 +146,9 @@ async def test_steer_during_retry_creates_new_step_not_exact_retry():
         raise ProviderError("temporary", retryable=True)
 
     provider = FakeProvider([fail_with_steer, ModelResponse(content="done")])
-    outcome = await loop.run(context(InMemoryEventStore(), provider, registry(), FakeDelivery()))
+    outcome = await loop.run(
+        context(InMemoryEventStore(), provider, registry(), FakeDelivery())
+    )
     assert outcome.status == TurnStatus.SUCCEEDED
     assert outcome.step == 2
     assert [attempt for attempt, _ in provider.attempts] == [1, 1]
@@ -143,10 +160,20 @@ async def test_second_turn_continues_session_sequence():
     store = InMemoryEventStore()
     loop = AgentLoop()
     first = await loop.run(
-        context(store, FakeProvider([ModelResponse(content="one")]), registry(), FakeDelivery())
+        context(
+            store,
+            FakeProvider([ModelResponse(content="one")]),
+            registry(),
+            FakeDelivery(),
+        )
     )
     second = await loop.run(
-        context(store, FakeProvider([ModelResponse(content="two")]), registry(), FakeDelivery())
+        context(
+            store,
+            FakeProvider([ModelResponse(content="two")]),
+            registry(),
+            FakeDelivery(),
+        )
     )
     assert (first.turn, second.turn) == (1, 2)
     events = await store.load_recovery("s")
@@ -166,7 +193,9 @@ async def main():
     store = SQLiteEventStore({str(path)!r})
     tools = registry(write_handler=lambda arguments, ctx: os._exit(23))
     provider = FakeProvider([
-        ModelResponse(tool_calls=(call('write'),), finish_reason=FinishReason.TOOL_CALLS)
+        ModelResponse(
+            tool_calls=(call('write'),), finish_reason=FinishReason.TOOL_CALLS
+        )
     ])
     delivery = FakeDelivery()
     if {mode!r} == 'delivery':
@@ -179,6 +208,7 @@ async def main():
 
 asyncio.run(main())
 """
+    # bits:allow(BCS011): isolated test process environment
     env = os.environ.copy()
     env["PYTHONPATH"] = "src:tests"
     return subprocess.run(
@@ -212,7 +242,9 @@ async def test_real_process_exit_after_tool_start_recovers_sqlite(tmp_path):
     release_tools = ToolRegistry()
     release_tools.register(
         ToolSpec("release", "Verify and release", {"type": "object"}),
-        lambda arguments, ctx: Completed("released", release_resources=("workspace",)),
+        lambda arguments, ctx: Completed(
+            "released", release_resources=("workspace",)
+        ),
     )
     loop = AgentLoop()
     recovered_loop = await loop.recover("s", store, FakeDelivery())
@@ -226,13 +258,17 @@ async def test_real_process_exit_after_tool_start_recovers_sqlite(tmp_path):
             ModelResponse(content="released"),
         ]
     )
-    outcome = await loop.run(context(store, provider, release_tools, FakeDelivery()))
+    outcome = await loop.run(
+        context(store, provider, release_tools, FakeDelivery())
+    )
     assert outcome.status == TurnStatus.SUCCEEDED
     store.close()
 
 
 @pytest.mark.asyncio
-async def test_real_process_exit_after_final_commit_only_recovers_delivery(tmp_path):
+async def test_real_process_exit_after_final_commit_only_recovers_delivery(
+    tmp_path,
+):
     path = tmp_path / "delivery.sqlite3"
     result = run_crash_script(path, "delivery")
     assert result.returncode == 24, result.stderr
@@ -262,16 +298,28 @@ async def test_recovered_lock_prevents_conflicting_tool_dispatch():
     store = InMemoryEventStore()
     loop = AgentLoop()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     with pytest.raises(ConflictingCrash):
         await loop.run(context(store, provider, tools, FakeDelivery()))
     await loop.recover("s", store, FakeDelivery())
 
     blocked_provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
-    outcome = await loop.run(context(store, blocked_provider, tools, FakeDelivery()))
+    outcome = await loop.run(
+        context(store, blocked_provider, tools, FakeDelivery())
+    )
     assert outcome.status == TurnStatus.BLOCKED
     assert len(invocations) == 1
     assert len(blocked_provider.requests) == 1

@@ -56,8 +56,11 @@ class OpenAIProvider:
         cancel: asyncio.Event,
         emit: Callable[[Mapping[str, Any]], None],
     ) -> ModelResponse:
-        return await self._complete(request, attempt=attempt, cancel=cancel, emit=emit)
+        return await self._complete(
+            request, attempt=attempt, cancel=cancel, emit=emit
+        )
 
+    # bits:explain(BCS003): SSE state; split scatters state; keep protocol
     async def _complete(
         self,
         request: CandidateRequest,
@@ -69,7 +72,9 @@ class OpenAIProvider:
         body = {
             **self.default_parameters,
             "model": self.model_id,
-            "messages": [self._message(message) for message in request.messages],
+            "messages": [
+                self._message(message) for message in request.messages
+            ],
             "stream": True,
         }
         if request.tools:
@@ -84,7 +89,10 @@ class OpenAIProvider:
                 }
                 for tool in request.tools
             ]
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
         client = await self._clients.client()
         content_parts: list[str] = []
         refusal_parts: list[str] = []
@@ -109,6 +117,7 @@ class OpenAIProvider:
                         code=str(response.status_code),
                     )
                 async for event, data in data_events(response):
+                    # bits:allow(BCS007): Python has no brace blocks
                     if cancel.is_set():
                         return ModelResponse(
                             content="".join(content_parts),
@@ -118,7 +127,10 @@ class OpenAIProvider:
                         raise ProviderError(
                             f"OpenAI stream error: {data}",
                             partial_output=bool(
-                                content_parts or refusal_parts or calls or provider_data
+                                content_parts
+                                or refusal_parts
+                                or calls
+                                or provider_data
                             ),
                         )
                     if data == "[DONE]":
@@ -142,7 +154,9 @@ class OpenAIProvider:
                         if not private_field or value is None:
                             continue
                         if key in ("reasoning_content", "reasoning_summary"):
-                            provider_data[key] = provider_data.get(key, "") + str(value)
+                            provider_data[key] = provider_data.get(
+                                key, ""
+                            ) + str(value)
                         else:
                             provider_data[key] = value
                     if delta.get("content"):
@@ -156,9 +170,15 @@ class OpenAIProvider:
                         if emit is not None:
                             emit({"channel": "refusal", "delta": text})
                     for fragment in delta.get("tool_calls") or []:
+                        # bits:allow(BCS007): Python has no brace blocks
                         index = int(fragment["index"])
                         current = calls.setdefault(
-                            index, {"id": f"call_{index}", "name": "", "arguments": ""}
+                            index,
+                            {
+                                "id": f"call_{index}",
+                                "name": "",
+                                "arguments": "",
+                            },
                         )
                         function = fragment.get("function") or {}
                         preview = {"channel": "tool_call", "index": index}
@@ -170,7 +190,9 @@ class OpenAIProvider:
                             preview["name_delta"] = str(function["name"])
                         if function.get("arguments"):
                             current["arguments"] += str(function["arguments"])
-                            preview["arguments_delta"] = str(function["arguments"])
+                            preview["arguments_delta"] = str(
+                                function["arguments"]
+                            )
                         if emit is not None:
                             emit(preview)
                     raw_finish_reason = choice.get("finish_reason")
@@ -181,7 +203,10 @@ class OpenAIProvider:
                                 "OpenAI stream returned unknown finish reason: "
                                 f"{raw_finish_reason}",
                                 partial_output=bool(
-                                    content_parts or refusal_parts or calls or provider_data
+                                    content_parts
+                                    or refusal_parts
+                                    or calls
+                                    or provider_data
                                 ),
                             )
                         finish_reason = mapped
@@ -189,12 +214,16 @@ class OpenAIProvider:
                 raise ProviderError(
                     "OpenAI stream ended before [DONE]",
                     retryable=True,
-                    partial_output=bool(content_parts or refusal_parts or calls or provider_data),
+                    partial_output=bool(
+                        content_parts or refusal_parts or calls or provider_data
+                    ),
                 )
             if finish_reason is None:
                 raise ProviderError(
                     "OpenAI stream completed without a finish reason",
-                    partial_output=bool(content_parts or refusal_parts or calls or provider_data),
+                    partial_output=bool(
+                        content_parts or refusal_parts or calls or provider_data
+                    ),
                 )
             return ModelResponse(
                 content="".join(content_parts),
@@ -210,7 +239,9 @@ class OpenAIProvider:
         except ProviderError:
             raise
         except (TimeoutError, httpx.HTTPError, json.JSONDecodeError) as exc:
-            partial = bool(content_parts or refusal_parts or calls or provider_data)
+            partial = bool(
+                content_parts or refusal_parts or calls or provider_data
+            )
             raise ProviderError(
                 f"OpenAI stream failed: {exc}",
                 retryable=True,
@@ -233,13 +264,19 @@ class OpenAIProvider:
                 "tool_call_id": message.tool_call_id,
                 "content": message.content,
             }
-        value: dict[str, Any] = {"role": message.role, "content": message.content or None}
+        value: dict[str, Any] = {
+            "role": message.role,
+            "content": message.content or None,
+        }
         if message.tool_calls:
             value["tool_calls"] = [
                 {
                     "id": call.call_id,
                     "type": "function",
-                    "function": {"name": call.name, "arguments": call.arguments},
+                    "function": {
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    },
                 }
                 for call in message.tool_calls
             ]

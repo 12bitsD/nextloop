@@ -24,7 +24,10 @@ def request(messages=None):
         turn=1,
         step=1,
         messages=messages
-        or (Message(role="system", content="system"), Message(role="user", content="hello")),
+        or (
+            Message(role="system", content="system"),
+            Message(role="user", content="hello"),
+        ),
         tools=(
             ToolSpec(
                 "read",
@@ -55,12 +58,21 @@ async def test_openai_sse_text_tool_calls_and_usage():
                 "reasoning_signature": "signed-reasoning",
                 "continuation_token": "continue-openai",
                 "tool_calls": [
-                    {"index": 0, "id": "c1", "function": {"name": "read", "arguments": '{"pa'}}
+                    {
+                        "index": 0,
+                        "id": "c1",
+                        "function": {"name": "read", "arguments": '{"pa'},
+                    }
                 ],
             }
         ),
         openai_chunk(
-            {"content": "lo", "tool_calls": [{"index": 0, "function": {"arguments": 'th":"x"}'}}]},
+            {
+                "content": "lo",
+                "tool_calls": [
+                    {"index": 0, "function": {"arguments": 'th":"x"}'}}
+                ],
+            },
             "tool_calls",
         ),
         {
@@ -72,7 +84,10 @@ async def test_openai_sse_text_tool_calls_and_usage():
             },
         },
     ]
-    body = "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks) + "data: [DONE]\n\n"
+    body = (
+        "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks)
+        + "data: [DONE]\n\n"
+    )
 
     def handler(request):
         payload = json.loads(request.content)
@@ -88,7 +103,9 @@ async def test_openai_sse_text_tool_calls_and_usage():
         api_key="secret",
         http_client=client,
     )
-    response = await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+    response = await provider.complete(
+        request(), attempt=1, cancel=asyncio.Event()
+    )
     assert response.content == "Hello"
     assert response.finish_reason == FinishReason.TOOL_CALLS
     assert response.tool_calls == (ToolCall("c1", "read", '{"path":"x"}'),)
@@ -101,7 +118,10 @@ async def test_openai_sse_text_tool_calls_and_usage():
             role="assistant",
             content="checking",
             tool_calls=response.tool_calls,
-            provider_data={**response.provider_data, "working_context": {"action": "internal"}},
+            provider_data={
+                **response.provider_data,
+                "working_context": {"action": "internal"},
+            },
         )
     )
     assert projected["reasoning_content"] == "analysis"
@@ -112,7 +132,9 @@ async def test_openai_sse_text_tool_calls_and_usage():
 
     reasoning_body = 'data: {"choices":[{"delta":{"reasoning_content":"private-analysis"}}]}\n\n'
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=reasoning_body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=reasoning_body)
+        )
     )
     provider = OpenAIProvider(
         model_id="test-model",
@@ -130,26 +152,52 @@ async def test_openai_sse_text_tool_calls_and_usage():
 async def test_anthropic_sse_tool_use_and_wire_projection():
     events = [
         ("message_start", {"message": {"usage": {"input_tokens": 12}}}),
-        ("content_block_start", {"index": 0, "content_block": {"type": "text", "text": "Hello"}}),
+        (
+            "content_block_start",
+            {"index": 0, "content_block": {"type": "text", "text": "Hello"}},
+        ),
         (
             "content_block_start",
             {
                 "index": 1,
-                "content_block": {"type": "tool_use", "id": "c1", "name": "read", "input": {}},
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "c1",
+                    "name": "read",
+                    "input": {},
+                },
             },
         ),
         (
             "content_block_delta",
-            {"index": 1, "delta": {"type": "input_json_delta", "partial_json": '{"path":'}},
+            {
+                "index": 1,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": '{"path":',
+                },
+            },
         ),
         (
             "content_block_delta",
-            {"index": 1, "delta": {"type": "input_json_delta", "partial_json": '"x"}'}},
+            {
+                "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": '"x"}'},
+            },
         ),
-        ("message_delta", {"delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 4}}),
+        (
+            "message_delta",
+            {
+                "delta": {"stop_reason": "tool_use"},
+                "usage": {"output_tokens": 4},
+            },
+        ),
         ("message_stop", {}),
     ]
-    body = "".join(f"event: {name}\ndata: {json.dumps(payload)}\n\n" for name, payload in events)
+    body = "".join(
+        f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+        for name, payload in events
+    )
 
     def handler(request):
         payload = json.loads(request.content)
@@ -173,9 +221,13 @@ async def test_anthropic_sse_tool_use_and_wire_projection():
             content="checking",
             tool_calls=(ToolCall("c1", "read", '{"path":"x"}'),),
         ),
-        Message(role="tool", content="file body", tool_call_id="c1", name="read"),
+        Message(
+            role="tool", content="file body", tool_call_id="c1", name="read"
+        ),
     )
-    response = await provider.complete(request(messages), attempt=1, cancel=asyncio.Event())
+    response = await provider.complete(
+        request(messages), attempt=1, cancel=asyncio.Event()
+    )
     assert response.content == "Hello"
     assert response.finish_reason == FinishReason.TOOL_CALLS
     assert response.tool_calls == (ToolCall("c1", "read", '{"path":"x"}'),)
@@ -206,16 +258,25 @@ async def test_anthropic_sse_tool_use_and_wire_projection():
         ),
         (
             "content_block_delta",
-            {"index": 0, "delta": {"type": "signature_delta", "signature": "signed-thinking"}},
+            {
+                "index": 0,
+                "delta": {
+                    "type": "signature_delta",
+                    "signature": "signed-thinking",
+                },
+            },
         ),
         ("message_delta", {"delta": {"stop_reason": "end_turn"}}),
         ("message_stop", {}),
     ]
     thinking_body = "".join(
-        f"event: {name}\ndata: {json.dumps(payload)}\n\n" for name, payload in thinking_events
+        f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+        for name, payload in thinking_events
     )
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=thinking_body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=thinking_body)
+        )
     )
     provider = AnthropicProvider(
         model_id="test-model",
@@ -223,7 +284,9 @@ async def test_anthropic_sse_tool_use_and_wire_projection():
         api_key="secret",
         http_client=client,
     )
-    thinking = await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+    thinking = await provider.complete(
+        request(), attempt=1, cancel=asyncio.Event()
+    )
     block = thinking.provider_data["thinking_blocks"][0]
     assert block["type"] == "thinking"
     assert block["thinking"] == "analysis"
@@ -257,7 +320,9 @@ async def test_anthropic_sse_tool_use_and_wire_projection():
         for name, payload in missing_signature_events
     )
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=missing_body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=missing_body)
+        )
     )
     provider = AnthropicProvider(
         model_id="test-model",
@@ -279,7 +344,9 @@ async def test_anthropic_stream_error_preserves_partial_evidence():
         'event: error\ndata: {"error":{"type":"overloaded_error","message":"busy"}}\n\n'
     )
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=body)
+        )
     )
     provider = AnthropicProvider(
         model_id="test-model",
@@ -300,7 +367,9 @@ async def test_provider_http_error_body_is_bounded_and_classified():
     for provider_class in (OpenAIProvider, AnthropicProvider):
         client = httpx.AsyncClient(
             transport=httpx.MockTransport(
-                lambda request: httpx.Response(500, text="x" * (64 * 1024 + 100))
+                lambda request: httpx.Response(
+                    500, text="x" * (64 * 1024 + 100)
+                )
             )
         )
         provider = provider_class(
@@ -311,7 +380,9 @@ async def test_provider_http_error_body_is_bounded_and_classified():
         )
 
         with pytest.raises(ProviderError) as caught:
-            await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+            await provider.complete(
+                request(), attempt=1, cancel=asyncio.Event()
+            )
 
         assert caught.value.retryable is True
         assert caught.value.code == "500"
@@ -342,7 +413,9 @@ async def test_provider_http_error_body_is_bounded_and_classified():
         for status, retryable in ((400, False), (429, True), (500, True)):
             client = httpx.AsyncClient(
                 transport=httpx.MockTransport(
-                    lambda request, status=status: httpx.Response(status, stream=BrokenStream())
+                    lambda request, status=status: httpx.Response(
+                        status, stream=BrokenStream()
+                    )
                 )
             )
             provider = provider_class(
@@ -352,7 +425,9 @@ async def test_provider_http_error_body_is_bounded_and_classified():
                 http_client=client,
             )
             with pytest.raises(ProviderError) as caught:
-                await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+                await provider.complete(
+                    request(), attempt=1, cancel=asyncio.Event()
+                )
             assert caught.value.retryable is retryable
             assert caught.value.code == str(status)
             assert "connection lost mid-error-body" in str(caught.value)

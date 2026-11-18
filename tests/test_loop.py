@@ -33,7 +33,9 @@ READ = ToolSpec(
     },
     mode=ToolExecutionMode.PARALLEL,
 )
-WRITE = ToolSpec("write", "Write one path", {"type": "object"}, resources=("workspace",))
+WRITE = ToolSpec(
+    "write", "Write one path", {"type": "object"}, resources=("workspace",)
+)
 
 
 def call(name="read", call_id="c1", path="a.txt"):
@@ -42,8 +44,13 @@ def call(name="read", call_id="c1", path="a.txt"):
 
 def registry(read_handler=None, write_handler=None):
     tools = ToolRegistry()
-    tools.register(READ, read_handler or (lambda arguments, context: "contents"))
-    tools.register(WRITE, write_handler or (lambda arguments, context: Completed("written")))
+    tools.register(
+        READ, read_handler or (lambda arguments, context: "contents")
+    )
+    tools.register(
+        WRITE,
+        write_handler or (lambda arguments, context: Completed("written")),
+    )
     return tools
 
 
@@ -72,11 +79,15 @@ async def test_text_tool_and_multiple_steps():
 
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS
+            ),
             ModelResponse(content="done"),
         ]
     )
-    outcome = await AgentLoop().run(context(store, provider, registry(read), delivery))
+    outcome = await AgentLoop().run(
+        context(store, provider, registry(read), delivery)
+    )
     assert outcome.status == TurnStatus.SUCCEEDED
     assert outcome.step == 2
     assert seen == ["a.txt"]
@@ -87,8 +98,12 @@ async def test_text_tool_and_multiple_steps():
     events = await store.load_recovery("s")
     types = [event.event_type for event in events]
     assert types.index(EventType.TOOL_CALL) < types.index(EventType.TOOL_RESULT)
-    assert types.index(EventType.TOOL_RESULT) < types.index(EventType.FINAL_MESSAGE)
-    assert types.index(EventType.TURN_END) < types.index(EventType.DELIVERY_COMMITTED)
+    assert types.index(EventType.TOOL_RESULT) < types.index(
+        EventType.FINAL_MESSAGE
+    )
+    assert types.index(EventType.TURN_END) < types.index(
+        EventType.DELIVERY_COMMITTED
+    )
 
 
 @pytest.mark.asyncio
@@ -97,7 +112,10 @@ async def test_invalid_batch_executes_nothing_then_corrects():
     provider = FakeProvider(
         [
             ModelResponse(
-                tool_calls=(ToolCall("bad", "read", "{}"), call(call_id="good")),
+                tool_calls=(
+                    ToolCall("bad", "read", "{}"),
+                    call(call_id="good"),
+                ),
                 finish_reason=FinishReason.TOOL_CALLS,
             ),
             ModelResponse(content="corrected"),
@@ -115,11 +133,15 @@ async def test_invalid_batch_executes_nothing_then_corrects():
     assert outcome.status == TurnStatus.SUCCEEDED
     assert invoked == []
     events = await store.load_recovery("s")
-    assert any(event.event_type == EventType.TOOL_BATCH_REJECTED for event in events)
+    assert any(
+        event.event_type == EventType.TOOL_BATCH_REJECTED for event in events
+    )
     assert not any(event.event_type == EventType.TOOL_CALL for event in events)
     second_request = provider.requests[1]
     assert all(not message.tool_calls for message in second_request.messages)
-    assert second_request.messages[-1].content.startswith("[Protocol correction]")
+    assert second_request.messages[-1].content.startswith(
+        "[Protocol correction]"
+    )
 
 
 @pytest.mark.asyncio
@@ -150,7 +172,10 @@ async def test_exclusive_error_truncates_remaining_batch():
         for event in await store.load_recovery("s")
         if event.event_type == EventType.TOOL_RESULT
     ]
-    assert [event.payload["outcome"]["kind"] for event in results] == ["completed", "skipped"]
+    assert [event.payload["outcome"]["kind"] for event in results] == [
+        "completed",
+        "skipped",
+    ]
 
 
 @pytest.mark.asyncio
@@ -182,7 +207,9 @@ async def test_cancel_before_final_closes_turn_without_delivery():
         return ModelResponse(content="too late")
 
     store = InMemoryEventStore()
-    outcome = await loop.run(context(store, FakeProvider([respond]), registry(), FakeDelivery()))
+    outcome = await loop.run(
+        context(store, FakeProvider([respond]), registry(), FakeDelivery())
+    )
     assert outcome.status == TurnStatus.CANCELLED
     events = await store.load_recovery("s")
     assert events[-1].event_type == EventType.TURN_END
@@ -192,7 +219,10 @@ async def test_cancel_before_final_closes_turn_without_delivery():
 @pytest.mark.asyncio
 async def test_retry_reuses_exact_request_bytes_and_step():
     provider = FakeProvider(
-        [ProviderError("temporary", retryable=True), ModelResponse(content="ok")]
+        [
+            ProviderError("temporary", retryable=True),
+            ModelResponse(content="ok"),
+        ]
     )
     outcome = await AgentLoop().run(
         context(InMemoryEventStore(), provider, registry(), FakeDelivery())
@@ -213,12 +243,15 @@ async def test_tool_concludes_turn_and_working_context_expires():
     provider = FakeProvider(
         [
             ModelResponse(
-                tool_calls=(ToolCall("q", "ask_user", "{}"),), finish_reason=FinishReason.TOOL_CALLS
+                tool_calls=(ToolCall("q", "ask_user", "{}"),),
+                finish_reason=FinishReason.TOOL_CALLS,
             )
         ]
     )
     delivery = FakeDelivery()
-    outcome = await AgentLoop().run(context(InMemoryEventStore(), provider, tools, delivery))
+    outcome = await AgentLoop().run(
+        context(InMemoryEventStore(), provider, tools, delivery)
+    )
     assert outcome.status == TurnStatus.SUCCEEDED
     assert delivery.messages[0].content == "Which option?"
 
@@ -232,21 +265,30 @@ async def test_working_context_is_appended_and_expired():
         provider_data={"working_context": {"action": "set", "scope": "turn"}},
     )
     tools.register(
-        WRITE, lambda arguments, ctx: Completed("saved", additional_messages=(reminder,))
+        WRITE,
+        lambda arguments, ctx: Completed(
+            "saved", additional_messages=(reminder,)
+        ),
     )
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
     store = InMemoryEventStore()
-    outcome = await AgentLoop().run(context(store, provider, tools, FakeDelivery()))
+    outcome = await AgentLoop().run(
+        context(store, provider, tools, FakeDelivery())
+    )
     assert outcome.status == TurnStatus.SUCCEEDED
     assert provider.requests[1].messages[-1].content.endswith("focus on tests")
     events = await store.load_recovery("s")
     assert any(
-        event.payload.get("working_context", {}).get("action") == "expired" for event in events
+        event.payload.get("working_context", {}).get("action") == "expired"
+        for event in events
     )
 
 
@@ -262,7 +304,10 @@ async def test_delivery_failure_recovers_delivery_only():
     recovered = await loop.recover("s", store, delivery)
     assert recovered.delivered_final_ids == (final_id,)
     assert len(provider.requests) == 1
-    assert [message.final_message_id for message in delivery.messages] == [final_id, final_id]
+    assert [message.final_message_id for message in delivery.messages] == [
+        final_id,
+        final_id,
+    ]
 
 
 class SimulatedCrash(BaseException):
@@ -278,12 +323,21 @@ async def test_crash_after_tool_start_recovers_unknown_without_replay():
         raise SimulatedCrash("process died")
 
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
     with pytest.raises(SimulatedCrash):
-        await loop.run(context(store, provider, registry(write_handler=write), FakeDelivery()))
+        await loop.run(
+            context(
+                store, provider, registry(write_handler=write), FakeDelivery()
+            )
+        )
     recovered = await loop.recover("s", store, FakeDelivery())
     assert recovered.interrupted_turns == (1,)
     assert recovered.active_resource_locks == frozenset({"workspace"})
@@ -300,7 +354,9 @@ async def test_crash_after_tool_start_recovers_unknown_without_replay():
 
 @pytest.mark.asyncio
 async def test_compaction_runs_without_tools_then_proceeds():
-    provider = FakeProvider([ModelResponse(content="short summary"), ModelResponse(content="done")])
+    provider = FakeProvider(
+        [ModelResponse(content="short summary"), ModelResponse(content="done")]
+    )
     store = InMemoryEventStore()
     outcome = await AgentLoop().run(
         context(
@@ -309,7 +365,11 @@ async def test_compaction_runs_without_tools_then_proceeds():
             registry(),
             FakeDelivery(),
             initial_input="x" * 5000,
-            config=config(compaction_prompt="compact", context_window=1000, output_reserve=0),
+            config=config(
+                compaction_prompt="compact",
+                context_window=1000,
+                output_reserve=0,
+            ),
         )
     )
     assert outcome.status == TurnStatus.SUCCEEDED
@@ -324,19 +384,33 @@ async def test_parallel_concludes_turn_skips_unstarted_calls():
     invoked = []
     tools = ToolRegistry()
     tools.register(
-        ToolSpec("first", "Finish the Turn", {"type": "object"}, mode=ToolExecutionMode.PARALLEL),
+        ToolSpec(
+            "first",
+            "Finish the Turn",
+            {"type": "object"},
+            mode=ToolExecutionMode.PARALLEL,
+        ),
         lambda arguments, ctx: (
-            invoked.append("first") or Completed("question", concludes_turn=True)
+            invoked.append("first")
+            or Completed("question", concludes_turn=True)
         ),
     )
     tools.register(
-        ToolSpec("second", "Must not start", {"type": "object"}, mode=ToolExecutionMode.PARALLEL),
+        ToolSpec(
+            "second",
+            "Must not start",
+            {"type": "object"},
+            mode=ToolExecutionMode.PARALLEL,
+        ),
         lambda arguments, ctx: invoked.append("second") or Completed("second"),
     )
     provider = FakeProvider(
         [
             ModelResponse(
-                tool_calls=(ToolCall("c1", "first", "{}"), ToolCall("c2", "second", "{}")),
+                tool_calls=(
+                    ToolCall("c1", "first", "{}"),
+                    ToolCall("c2", "second", "{}"),
+                ),
                 finish_reason=FinishReason.TOOL_CALLS,
             )
         ]

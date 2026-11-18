@@ -13,7 +13,12 @@ from typing import Any, NoReturn, cast
 
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
-from .adapters.observing import ObservingEventStore, StdoutExporter, get_turn_trace, query_history
+from .adapters.observing import (
+    ObservingEventStore,
+    StdoutExporter,
+    get_turn_trace,
+    query_history,
+)
 from .adapters.openai import OpenAIProvider
 from .adapters.sqlite import SQLiteEventStore
 from .contracts import (
@@ -55,7 +60,16 @@ from .execute.tools import ToolRegistry
 from .loop import AgentLoop
 from .skills import SkillRegistry, skill_view
 
-_ROOT_FIELDS = {"schema", "min_nextloop", "provider", "store", "loop", "tools", "skills", "trace"}
+_ROOT_FIELDS = {
+    "schema",
+    "min_nextloop",
+    "provider",
+    "store",
+    "loop",
+    "tools",
+    "skills",
+    "trace",
+}
 _TRACE_FIELDS = {"exporter"}
 _PROVIDER_FIELDS = {
     "protocol",
@@ -115,7 +129,9 @@ class Harness:
         spec: HarnessSpec,
         *,
         session_id: str | None = None,
-        exporter: TraceExporterInput | Sequence[TraceExporterInput] | None = None,
+        exporter: TraceExporterInput
+        | Sequence[TraceExporterInput]
+        | None = None,
         provider: ModelProvider | None = None,
         store: EventStore | None = None,
         delivery: DeliveryOwner | None = None,
@@ -159,7 +175,9 @@ class Harness:
         path: str | Path,
         *,
         session_id: str | None = None,
-        exporter: TraceExporterInput | Sequence[TraceExporterInput] | None = None,
+        exporter: TraceExporterInput
+        | Sequence[TraceExporterInput]
+        | None = None,
         provider: ModelProvider | None = None,
         store: EventStore | None = None,
         delivery: DeliveryOwner | None = None,
@@ -185,7 +203,9 @@ class Harness:
             "schema": self.spec.schema,
             "nextloop": API_VERSION,
             "tools": [spec.name for spec in runtime.catalog()],
-            "skills": [spec.name for spec in self.skills.list()] if self.skills else [],
+            "skills": [spec.name for spec in self.skills.list()]
+            if self.skills
+            else [],
             "warnings": [
                 f"tools[{index}].effect is unset; defaulting to NON_IDEMPOTENT"
                 for index, config in enumerate(self.spec.tools)
@@ -200,7 +220,9 @@ class Harness:
         input_id: str | None = None,
         preview: PreviewSink | None = None,
     ) -> TurnOutcome:
-        context = await self._make_context(initial_input, input_id=input_id, preview=preview)
+        context = await self._make_context(
+            initial_input, input_id=input_id, preview=preview
+        )
         return await self.loop.run(context)
 
     async def _make_context(
@@ -226,16 +248,25 @@ class Harness:
         )
 
     async def steer(self, content: str, *, input_id: str | None = None) -> bool:
-        return await self.loop.steer(self.session_id, content, input_id=input_id)
+        return await self.loop.steer(
+            self.session_id, content, input_id=input_id
+        )
 
-    async def steer_result(self, content: str, *, input_id: str | None = None) -> SteerResult:
-        return await self.loop.steer_result(self.session_id, content, input_id=input_id)
+    async def steer_result(
+        self, content: str, *, input_id: str | None = None
+    ) -> SteerResult:
+        return await self.loop.steer_result(
+            self.session_id, content, input_id=input_id
+        )
 
     async def cancel(self, cause: str = "user_stop") -> bool:
         return await self.loop.cancel(self.session_id, cause)
 
+    # bits:allow(BCS004): established API/test-double signature
     async def recover(self, *, force: bool = False) -> RecoveryOutcome:
-        return await self.loop.recover(self.session_id, self.store, self.delivery, force=force)
+        return await self.loop.recover(
+            self.session_id, self.store, self.delivery, force=force
+        )
 
     async def pending_inputs(self) -> tuple[PendingInput, ...]:
         return await self.loop.pending_inputs(self.session_id, self.store)
@@ -244,6 +275,7 @@ class Harness:
         self,
         *,
         decisions: Mapping[str, bool] | None = None,
+        # bits:allow(BCS004): established API/test-double signature
         reject_all: bool = False,
         new_input: str | None = None,
         input_id: str | None = None,
@@ -254,7 +286,9 @@ class Harness:
             input_id=input_id,
             preview=preview,
         )
-        return await self.loop.resume(context, decisions=decisions, reject_all=reject_all)
+        return await self.loop.resume(
+            context, decisions=decisions, reject_all=reject_all
+        )
 
     async def retry_operation(
         self,
@@ -263,15 +297,23 @@ class Harness:
         initial_input: str = "Reconcile uncertain operation",
         input_id: str | None = None,
     ) -> TurnOutcome:
-        context = await self._make_context(initial_input, input_id=input_id, preview=None)
+        context = await self._make_context(
+            initial_input, input_id=input_id, preview=None
+        )
         return await self.loop.retry_operation(context, operation_id)
 
     async def resource_locks(self) -> frozenset[str]:
         return await self.loop.resource_locks(self.session_id, self.store)
 
-    async def release_resource(self, resource: str, *, actor: str, evidence: str) -> bool:
+    async def release_resource(
+        self, resource: str, *, actor: str, evidence: str
+    ) -> bool:
         return await self.loop.release_resource(
-            self.session_id, self.store, resource, actor=actor, evidence=evidence
+            self.session_id,
+            self.store,
+            resource,
+            actor=actor,
+            evidence=evidence,
         )
 
     async def delete_session(self) -> None:
@@ -294,7 +336,9 @@ class Harness:
 
     async def _close(self) -> None:
         try:
-            if self._owns_tools and isinstance(self.tools, CompositeToolRuntime):
+            if self._owns_tools and isinstance(
+                self.tools, CompositeToolRuntime
+            ):
                 await self.tools.close()
         finally:
             try:
@@ -304,7 +348,11 @@ class Harness:
                     if inspect.isawaitable(result):
                         await result
             finally:
-                close = getattr(self.store, "close", None) if self._close_store_on_close else None
+                close = (
+                    getattr(self.store, "close", None)
+                    if self._close_store_on_close
+                    else None
+                )
                 if callable(close):
                     result = close()
                     if inspect.isawaitable(result):
@@ -317,14 +365,19 @@ class Harness:
             return self._owned_provider
         config = self.spec.provider
         if config.protocol not in ("openai", "anthropic"):
-            raise HarnessError(f"Unsupported Provider protocol: {config.protocol}")
+            raise HarnessError(
+                f"Unsupported Provider protocol: {config.protocol}"
+            )
+        # bits:allow(BCS011): configured credential process boundary
         api_key = os.environ.get(config.api_key_env)
         if not api_key:
             raise HarnessError(
                 f"{self.spec.source_path}: provider.api_key_env environment variable "
                 f"'{config.api_key_env}' is not set"
             )
-        provider_class = OpenAIProvider if config.protocol == "openai" else AnthropicProvider
+        provider_class = (
+            OpenAIProvider if config.protocol == "openai" else AnthropicProvider
+        )
         self._owned_provider = provider_class(
             model_id=config.model_id,
             base_url=config.base_url,
@@ -361,13 +414,18 @@ class Harness:
             )
             self._skill_registry = skill_tools
             runtime = CompositeToolRuntime([self.tools, skill_tools])
-        self._all_tools = with_result_reads(runtime, self.store, self.spec.loop.tool_result_bytes)
+        self._all_tools = with_result_reads(
+            runtime, self.store, self.spec.loop.tool_result_bytes
+        )
         return self._all_tools
 
     def _loop_config(self) -> LoopConfig:
         if not self.skills:
             return self.spec.loop
-        metadata = "\n".join(f"- {skill.name}: {skill.description}" for skill in self.skills.list())
+        metadata = "\n".join(
+            f"- {skill.name}: {skill.description}"
+            for skill in self.skills.list()
+        )
         prompt = (
             self.spec.loop.system_prompt
             + "\n\nAvailable Skills (use skill_view to load instructions on demand):\n"
@@ -376,13 +434,16 @@ class Harness:
         return replace(self.spec.loop, system_prompt=prompt)
 
 
+# bits:explain(BCS003): config dispatch; split duplicates validation; keep API
 def load_harness_spec(path: str | Path) -> HarnessSpec:
     source = Path(path).expanduser().resolve()
     try:
         with source.open("rb") as stream:
             raw = tomllib.load(stream)
     except OSError as exc:
-        raise HarnessError(f"{source}: cannot read configuration: {exc}") from exc
+        raise HarnessError(
+            f"{source}: cannot read configuration: {exc}"
+        ) from exc
     except tomllib.TOMLDecodeError as exc:
         raise HarnessError(f"{source}: invalid TOML: {exc}") from exc
     _fields(raw, _ROOT_FIELDS, "", source)
@@ -396,17 +457,27 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     if _version_tuple(API_VERSION, source, "min_nextloop") < _version_tuple(
         minimum, source, "min_nextloop"
     ):
-        _fail(source, "min_nextloop", f"requires nextloop >= {minimum}, current is {API_VERSION}")
+        _fail(
+            source,
+            "min_nextloop",
+            f"requires nextloop >= {minimum}, current is {API_VERSION}",
+        )
 
     provider_raw = _table(raw, "provider", source)
     _fields(provider_raw, _PROVIDER_FIELDS, "provider", source)
     provider = ProviderConfig(
-        protocol=_choice(provider_raw, "protocol", ("openai", "anthropic"), source),
+        protocol=_choice(
+            provider_raw, "protocol", ("openai", "anthropic"), source
+        ),
         model_id=_string(provider_raw, "model_id", source, "provider"),
         base_url=_string(provider_raw, "base_url", source, "provider"),
         api_key_env=_string(provider_raw, "api_key_env", source, "provider"),
-        default_parameters=_optional_table(provider_raw, "default_parameters", source, "provider"),
-        timeout_seconds=_number(provider_raw, "timeout_seconds", 60.0, source, "provider"),
+        default_parameters=_optional_table(
+            provider_raw, "default_parameters", source, "provider"
+        ),
+        timeout_seconds=_number(
+            provider_raw, "timeout_seconds", 60.0, source, "provider"
+        ),
     )
     store_raw = _optional_table(raw, "store", source)
     _fields(store_raw, _STORE_FIELDS, "store", source)
@@ -414,7 +485,9 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     if owner_id is not None and not isinstance(owner_id, str):
         _fail(source, "store.owner_id", "must be a string")
     store = StoreConfig(
-        driver=_choice(store_raw, "driver", ("memory", "sqlite"), source, default="memory"),
+        driver=_choice(
+            store_raw, "driver", ("memory", "sqlite"), source, default="memory"
+        ),
         path=_string(store_raw, "path", source, "store", default=":memory:"),
         owner_id=owner_id,
         lease_seconds=_number(store_raw, "lease_seconds", 5.0, source, "store"),
@@ -437,16 +510,26 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     _validate_loop(loop, source)
 
     tools_raw = raw.get("tools", [])
-    if not isinstance(tools_raw, list) or not all(isinstance(item, dict) for item in tools_raw):
+    if not isinstance(tools_raw, list) or not all(
+        isinstance(item, dict) for item in tools_raw
+    ):
         _fail(source, "tools", "must be an array of tables")
-    tools = tuple(_tool_config(item, index, source) for index, item in enumerate(tools_raw))
+    tools = tuple(
+        _tool_config(item, index, source)
+        for index, item in enumerate(tools_raw)
+    )
     skills_raw = _optional_table(raw, "skills", source)
     _fields(skills_raw, _SKILL_FIELDS, "skills", source)
     paths_raw = skills_raw.get("paths", [])
-    if not isinstance(paths_raw, list) or not all(isinstance(item, str) for item in paths_raw):
+    if not isinstance(paths_raw, list) or not all(
+        isinstance(item, str) for item in paths_raw
+    ):
         _fail(source, "skills.paths", "must be an array of paths")
-    skills = SkillConfig(paths=tuple(str(_resolve_path(source, item)) for item in paths_raw))
+    skills = SkillConfig(
+        paths=tuple(str(_resolve_path(source, item)) for item in paths_raw)
+    )
     for skill_path in skills.paths:
+        # bits:allow(BCS007): Python has no brace blocks
         if not Path(skill_path).exists():
             _fail(source, "skills.paths", f"path does not exist: {skill_path}")
     trace_raw = _optional_table(raw, "trace", source)
@@ -457,10 +540,17 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
             _fail(source, "trace.exporter", "must be a nonempty string")
         if (
             trace_exporter != "stdout"
-            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*", trace_exporter)
+            and re.fullmatch(
+                r"[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*",
+                trace_exporter,
+            )
             is None
         ):
-            _fail(source, "trace.exporter", "must be 'stdout' or 'module.path:attribute'")
+            _fail(
+                source,
+                "trace.exporter",
+                "must be 'stdout' or 'module.path:attribute'",
+            )
     trace = TraceConfig(exporter=trace_exporter)
     return HarnessSpec(
         schema=schema,
@@ -475,7 +565,10 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     )
 
 
-def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig:
+# bits:explain(BCS003): config dispatch; split duplicates validation; keep API
+def _tool_config(
+    raw: Mapping[str, Any], index: int, source: Path
+) -> ToolConfig:
     prefix = f"tools[{index}]"
     _fields(raw, _TOOL_FIELDS, prefix, source)
     driver = _choice(raw, "driver", ("python", "stdio", "mcp"), source, prefix)
@@ -486,22 +579,36 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
     if not isinstance(command_raw, list) or not all(
         isinstance(item, str) and item for item in command_raw
     ):
-        _fail(source, f"{prefix}.command", "must be an array of nonempty strings")
+        _fail(
+            source, f"{prefix}.command", "must be an array of nonempty strings"
+        )
     if driver == "python" and not target:
         _fail(source, f"{prefix}.target", "is required for the python driver")
     if driver in ("stdio", "mcp") and not command_raw:
-        _fail(source, f"{prefix}.command", f"is required for the {driver} driver")
+        _fail(
+            source, f"{prefix}.command", f"is required for the {driver} driver"
+        )
     if driver == "python" and command_raw:
-        _fail(source, f"{prefix}.command", "is only valid for the stdio and mcp drivers")
+        _fail(
+            source,
+            f"{prefix}.command",
+            "is only valid for the stdio and mcp drivers",
+        )
     if driver in ("stdio", "mcp") and target:
         _fail(source, f"{prefix}.target", "is only valid for the python driver")
     command = tuple(
-        str(_resolve_path(source, item)) if "/" in item or item.startswith(".") else item
+        str(_resolve_path(source, item))
+        if "/" in item or item.startswith(".")
+        else item
         for item in command_raw
     )
-    start = _choice(raw, "start", ("lazy", "eager"), source, prefix, default="lazy")
+    start = _choice(
+        raw, "start", ("lazy", "eager"), source, prefix, default="lazy"
+    )
     resources = raw.get("resources", [])
-    if not isinstance(resources, list) or not all(isinstance(item, str) for item in resources):
+    if not isinstance(resources, list) or not all(
+        isinstance(item, str) for item in resources
+    ):
         _fail(source, f"{prefix}.resources", "must be an array of strings")
     timeout = raw.get("timeout_seconds")
     grace = _number(raw, "cancel_grace_seconds", 0.25, source, prefix)
@@ -510,7 +617,11 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
     effect = raw.get("effect")
     if effect is not None:
         effect = _choice(
-            raw, "effect", ("read_only", "idempotent", "non_idempotent"), source, prefix
+            raw,
+            "effect",
+            ("read_only", "idempotent", "non_idempotent"),
+            source,
+            prefix,
         )
     return ToolConfig(
         driver=driver,
@@ -527,9 +638,13 @@ def _tool_config(raw: Mapping[str, Any], index: int, source: Path) -> ToolConfig
 
 def _make_store(config: StoreConfig) -> InMemoryEventStore | SQLiteEventStore:
     if config.driver == "memory":
-        return InMemoryEventStore(owner_id=config.owner_id, lease_seconds=config.lease_seconds)
+        return InMemoryEventStore(
+            owner_id=config.owner_id, lease_seconds=config.lease_seconds
+        )
     return SQLiteEventStore(
-        config.path, owner_id=config.owner_id, lease_seconds=config.lease_seconds
+        config.path,
+        owner_id=config.owner_id,
+        lease_seconds=config.lease_seconds,
     )
 
 
@@ -546,7 +661,9 @@ def _resolve_exporters(
             module = importlib.import_module(module_name)
             target = getattr(module, attribute)
         except (ImportError, AttributeError) as exc:
-            raise HarnessError(f"Cannot load trace exporter '{spec_exporter}': {exc}") from exc
+            raise HarnessError(
+                f"Cannot load trace exporter '{spec_exporter}': {exc}"
+            ) from exc
         exporters.append(target)
     if runtime_exporter is not None:
         if isinstance(runtime_exporter, Sequence) and not isinstance(
@@ -556,15 +673,26 @@ def _resolve_exporters(
         else:
             exporters.append(runtime_exporter)
     for exporter in exporters:
-        if not callable(exporter) and not callable(getattr(exporter, "export", None)):
-            raise HarnessError(f"Trace exporter '{exporter}' is not callable and has no export()")
+        # bits:allow(BCS007): Python has no brace blocks
+        if not callable(exporter) and not callable(
+            getattr(exporter, "export", None)
+        ):
+            raise HarnessError(
+                f"Trace exporter '{exporter}' is not callable and has no export()"
+            )
     return tuple(exporters)
 
 
-def _fields(raw: Mapping[str, Any], allowed: set[str], prefix: str, source: Path) -> None:
+def _fields(
+    raw: Mapping[str, Any], allowed: set[str], prefix: str, source: Path
+) -> None:
     unknown = sorted(set(raw) - allowed)
     if unknown:
-        _fail(source, f"{prefix + '.' if prefix else ''}{unknown[0]}", "unknown field")
+        _fail(
+            source,
+            f"{prefix + '.' if prefix else ''}{unknown[0]}",
+            "unknown field",
+        )
 
 
 def _reject_secrets(raw: Mapping[str, Any], source: Path) -> None:
@@ -588,22 +716,28 @@ def _reject_secrets(raw: Mapping[str, Any], source: Path) -> None:
     def visit(value: Any, path: str) -> None:
         if isinstance(value, dict):
             for key, child in value.items():
+                # bits:allow(BCS007): Python has no brace blocks
                 child_path = f"{path}.{key}" if path else str(key)
                 normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
                 if normalized in forbidden:
                     _fail(
-                        source, child_path, "plaintext credentials are forbidden; use api_key_env"
+                        source,
+                        child_path,
+                        "plaintext credentials are forbidden; use api_key_env",
                     )
                 visit(child, child_path)
         elif isinstance(value, list):
             for index, child in enumerate(value):
+                # bits:allow(BCS007): Python has no brace blocks
                 visit(child, f"{path}[{index}]")
 
     visit(raw, "")
 
 
+# bits:explain(BCS003): config dispatch; split duplicates validation; keep API
 def _validate_loop(config: LoopConfig, source: Path) -> None:
     for name in ("system_prompt", "compaction_prompt"):
+        # bits:allow(BCS007): Python has no brace blocks
         if not isinstance(getattr(config, name), str):
             _fail(source, f"loop.{name}", "must be a string")
     for name in (
@@ -613,6 +747,7 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
         "tool_result_bytes",
         "tool_result_full_max_bytes",
     ):
+        # bits:allow(BCS007): Python has no brace blocks
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             _fail(source, f"loop.{name}", "must be a positive integer")
@@ -622,6 +757,7 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
         "output_reserve",
         "pacing_step_interval",
     ):
+        # bits:allow(BCS007): Python has no brace blocks
         value = getattr(config, name)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             _fail(source, f"loop.{name}", "must be a nonnegative integer")
@@ -632,29 +768,58 @@ def _validate_loop(config: LoopConfig, source: Path) -> None:
         "max_output_tokens",
         "max_total_tokens",
     ):
+        # bits:allow(BCS007): Python has no brace blocks
         value = getattr(config, name)
         if value is not None and (
             not isinstance(value, int) or isinstance(value, bool) or value <= 0
         ):
             _fail(source, f"loop.{name}", "must be null or a positive integer")
     value = config.max_tool_calls
-    if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
-        _fail(source, "loop.max_tool_calls", "must be null or a nonnegative integer")
+    if value is not None and (
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+    ):
+        _fail(
+            source,
+            "loop.max_tool_calls",
+            "must be null or a nonnegative integer",
+        )
     deadline = config.turn_deadline_seconds
     if deadline is not None and (
-        not isinstance(deadline, (int, float)) or isinstance(deadline, bool) or deadline <= 0
+        not isinstance(deadline, (int, float))
+        or isinstance(deadline, bool)
+        or deadline <= 0
     ):
-        _fail(source, "loop.turn_deadline_seconds", "must be null or a positive number")
+        _fail(
+            source,
+            "loop.turn_deadline_seconds",
+            "must be null or a positive number",
+        )
     if config.tool_result_bytes < TOOL_RESULT_MIN_BYTES:
-        _fail(source, "loop.tool_result_bytes", "must be >= 256 for preview metadata")
+        _fail(
+            source,
+            "loop.tool_result_bytes",
+            "must be >= 256 for preview metadata",
+        )
     if config.tool_result_full_max_bytes < config.tool_result_bytes:
-        _fail(source, "loop.tool_result_full_max_bytes", "must be >= loop.tool_result_bytes")
+        _fail(
+            source,
+            "loop.tool_result_full_max_bytes",
+            "must be >= loop.tool_result_bytes",
+        )
     backoff = config.retry_backoff_seconds
-    if not isinstance(backoff, (int, float)) or isinstance(backoff, bool) or backoff < 0:
-        _fail(source, "loop.retry_backoff_seconds", "must be a nonnegative number")
+    if (
+        not isinstance(backoff, (int, float))
+        or isinstance(backoff, bool)
+        or backoff < 0
+    ):
+        _fail(
+            source, "loop.retry_backoff_seconds", "must be a nonnegative number"
+        )
 
 
-def _version_tuple(value: str, source: Path, field: str) -> tuple[int, int, int, int, int]:
+def _version_tuple(
+    value: str, source: Path, field: str
+) -> tuple[int, int, int, int, int]:
     try:
         return parse_version(value)
     except ValueError:
@@ -663,10 +828,16 @@ def _version_tuple(value: str, source: Path, field: str) -> tuple[int, int, int,
 
 def _resolve_path(source: Path, value: str) -> Path:
     path = Path(value).expanduser()
-    return path.resolve() if path.is_absolute() else (source.parent / path).resolve()
+    return (
+        path.resolve()
+        if path.is_absolute()
+        else (source.parent / path).resolve()
+    )
 
 
-def _table(raw: Mapping[str, Any], name: str, source: Path) -> Mapping[str, Any]:
+def _table(
+    raw: Mapping[str, Any], name: str, source: Path
+) -> Mapping[str, Any]:
     value = raw.get(name)
     if not isinstance(value, dict):
         _fail(source, name, "must be a table")
@@ -678,11 +849,15 @@ def _optional_table(
 ) -> Mapping[str, Any]:
     value = raw.get(name, {})
     if not isinstance(value, dict):
-        _fail(source, f"{prefix + '.' if prefix else ''}{name}", "must be a table")
+        _fail(
+            source, f"{prefix + '.' if prefix else ''}{name}", "must be a table"
+        )
     return cast(Mapping[str, Any], value)
 
 
-def _optional_string(raw: Mapping[str, Any], name: str, source: Path, prefix: str) -> str:
+def _optional_string(
+    raw: Mapping[str, Any], name: str, source: Path, prefix: str
+) -> str:
     value = raw.get(name, "")
     if not isinstance(value, str):
         _fail(source, f"{prefix}.{name}", "must be a string")
@@ -698,7 +873,11 @@ def _string(
 ) -> str:
     value = raw.get(name, default)
     if not isinstance(value, str) or not value:
-        _fail(source, f"{prefix + '.' if prefix else ''}{name}", "must be a nonempty string")
+        _fail(
+            source,
+            f"{prefix + '.' if prefix else ''}{name}",
+            "must be a nonempty string",
+        )
     return value
 
 
@@ -721,11 +900,19 @@ def _choice(
 
 
 def _number(
-    raw: Mapping[str, Any], name: str, default: float, source: Path, prefix: str = ""
+    raw: Mapping[str, Any],
+    name: str,
+    default: float,
+    source: Path,
+    prefix: str = "",
 ) -> float:
     value = raw.get(name, default)
     if not is_positive_number(value):
-        _fail(source, f"{prefix + '.' if prefix else ''}{name}", "must be a positive number")
+        _fail(
+            source,
+            f"{prefix + '.' if prefix else ''}{name}",
+            "must be a positive number",
+        )
     return float(value)
 
 

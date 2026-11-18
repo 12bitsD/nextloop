@@ -28,7 +28,9 @@ from nextloop.execute.model import ModelCaller
 from nextloop.execute.tools import ToolRegistry
 
 
-async def run_stage_once(steps: int, backend: str, directory: Path) -> dict[str, Any]:
+async def run_stage_once(
+    steps: int, backend: str, directory: Path
+) -> dict[str, Any]:
     timings: dict[str, float] = defaultdict(float)
     calls: dict[str, int] = defaultdict(int)
     store = (
@@ -37,7 +39,9 @@ async def run_stage_once(steps: int, backend: str, directory: Path) -> dict[str,
         else SQLiteEventStore(str(directory / f"stage-{steps}.sqlite3"))
     )
 
-    def timed(name: str, function: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+    def timed(
+        name: str, function: Callable[..., Awaitable[Any]]
+    ) -> Callable[..., Awaitable[Any]]:
         async def wrapped(*args, **kwargs):
             started = time.perf_counter()
             try:
@@ -49,6 +53,7 @@ async def run_stage_once(steps: int, backend: str, directory: Path) -> dict[str,
         return wrapped
 
     for name in ("load_surface", "load_recovery", "append"):
+        # bits:allow(BCS007): Python has no brace blocks
         setattr(store, name, timed(f"store_{name}", getattr(store, name)))
 
     original_project = driver_module.project_events
@@ -120,17 +125,30 @@ async def run_stage_once(steps: int, backend: str, directory: Path) -> dict[str,
     }
 
 
-async def run_stage_benchmark(directory: Path, *, repeats: int = 3) -> dict[str, Any]:
+async def run_stage_benchmark(
+    directory: Path, *, repeats: int = 3
+) -> dict[str, Any]:
     report: dict[str, Any] = {}
     for steps in (100, 400):
+        # bits:allow(BCS007): Python has no brace blocks
         for backend in ("memory", "sqlite"):
-            samples = [await run_stage_once(steps, backend, directory) for _ in range(repeats)]
+            # bits:allow(BCS007): Python has no brace blocks
+            samples = [
+                await run_stage_once(steps, backend, directory)
+                for _ in range(repeats)
+            ]
             timings = {
-                name: statistics.median(sample["timings"].get(name, 0.0) for sample in samples)
-                for name in {key for sample in samples for key in sample["timings"]}
+                name: statistics.median(
+                    sample["timings"].get(name, 0.0) for sample in samples
+                )
+                for name in {
+                    key for sample in samples for key in sample["timings"]
+                }
             }
             report[f"{backend}_{steps}"] = {
-                "total_seconds": statistics.median(sample["total_seconds"] for sample in samples),
+                "total_seconds": statistics.median(
+                    sample["total_seconds"] for sample in samples
+                ),
                 "timings": timings,
                 "calls": samples[-1]["calls"],
             }

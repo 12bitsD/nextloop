@@ -53,10 +53,15 @@ async def read_frame(reader: asyncio.StreamReader, buffer: bytearray) -> bytes:
 
 
 class StdioTransport:
-    def __init__(self, config: ToolConfig, *, sensitive_env: Sequence[str] = ()) -> None:
+    def __init__(
+        self, config: ToolConfig, *, sensitive_env: Sequence[str] = ()
+    ) -> None:
         self.config = config
         self._environment = {
-            key: value for key, value in os.environ.items() if key not in set(sensitive_env)
+            key: value
+            # bits:allow(BCS011): stdio process environment boundary
+            for key, value in os.environ.items()
+            if key not in set(sensitive_env)
         }
         self._closed = False
         self._process: asyncio.subprocess.Process | None = None
@@ -81,7 +86,9 @@ class StdioTransport:
         if self._closed:
             raise StdioProtocolError("stdio worker is closed")
         if self._broken:
-            raise StdioProtocolError("stdio worker is unavailable after a crash")
+            raise StdioProtocolError(
+                "stdio worker is unavailable after a crash"
+            )
         if self._process is not None:
             return
         self._process = await asyncio.create_subprocess_exec(
@@ -117,7 +124,9 @@ class StdioTransport:
     ) -> Mapping[str, Any]:
         raise NotImplementedError
 
-    def _response_outcome(self, response: Mapping[str, Any], call: ToolCall) -> ToolOutcome:
+    def _response_outcome(
+        self, response: Mapping[str, Any], call: ToolCall
+    ) -> ToolOutcome:
         raise NotImplementedError
 
     async def _cancel_request(self, request_id: str, remote_name: str) -> None:
@@ -126,6 +135,7 @@ class StdioTransport:
     def _unknown_tool(self, call: ToolCall) -> ToolOutcome:
         return Completed(f"Unknown stdio Tool: {call.name}", is_error=True)
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     async def _execute_with_cancel(
         self,
         call: ToolCall,
@@ -136,7 +146,9 @@ class StdioTransport:
         cancel: asyncio.Event,
     ) -> ToolOutcome:
         if cancel.is_set():
-            return Cancelled(settled=True, partial_content="Cancelled before stdio Tool call")
+            return Cancelled(
+                settled=True, partial_content="Cancelled before stdio Tool call"
+            )
         if not await self._start_for_call(cancel):
             return Cancelled(
                 settled=False,
@@ -144,11 +156,21 @@ class StdioTransport:
                 resource_locks=self.config.resources,
             )
         remote_name = self._remote_names.get(call.name)
-        spec = next((item for item in self._specs if item.name == call.name), None)
+        spec = next(
+            (item for item in self._specs if item.name == call.name), None
+        )
         if remote_name is None or spec is None:
             return self._unknown_tool(call)
-        if self._broken or self._process is None or self._process.returncode is not None:
-            return self._hanging(call.name, spec.uncertain_resources, "stdio worker is not running")
+        if (
+            self._broken
+            or self._process is None
+            or self._process.returncode is not None
+        ):
+            return self._hanging(
+                call.name,
+                spec.uncertain_resources,
+                "stdio worker is not running",
+            )
         request_id = self._reserve_request_id()
         operation = asyncio.create_task(
             self._request_message(
@@ -178,7 +200,9 @@ class StdioTransport:
             await self._cleanup_call(operation, request_id, remote_name)
             if timed_out:
                 return self._hanging(
-                    call.name, spec.uncertain_resources, "stdio Tool call timed out"
+                    call.name,
+                    spec.uncertain_resources,
+                    "stdio Tool call timed out",
                 )
             return Cancelled(
                 settled=False,
@@ -237,18 +261,28 @@ class StdioTransport:
         await asyncio.gather(starting, return_exceptions=True)
 
     async def _cleanup_call(
-        self, operation: asyncio.Task[dict[str, Any]], request_id: str, remote_name: str
+        self,
+        operation: asyncio.Task[dict[str, Any]],
+        request_id: str,
+        remote_name: str,
     ) -> None:
-        cleanup = asyncio.create_task(self._abort_call(operation, request_id, remote_name))
+        cleanup = asyncio.create_task(
+            self._abort_call(operation, request_id, remote_name)
+        )
         await wait_for_cleanup(cleanup)
 
     async def _abort_call(
-        self, operation: asyncio.Task[dict[str, Any]], request_id: str, remote_name: str
+        self,
+        operation: asyncio.Task[dict[str, Any]],
+        request_id: str,
+        remote_name: str,
     ) -> None:
         operation.cancel()
         await asyncio.gather(operation, return_exceptions=True)
         try:
-            with contextlib.suppress(ConnectionError, StdioProtocolError, TimeoutError):
+            with contextlib.suppress(
+                ConnectionError, StdioProtocolError, TimeoutError
+            ):
                 await self._cancel_request(request_id, remote_name)
             await asyncio.sleep(self.config.cancel_grace_seconds)
         finally:
@@ -256,7 +290,9 @@ class StdioTransport:
             if process is not None and process.returncode is None:
                 process.terminate()
                 try:
-                    await asyncio.wait_for(process.wait(), timeout=self.config.cancel_grace_seconds)
+                    await asyncio.wait_for(
+                        process.wait(), timeout=self.config.cancel_grace_seconds
+                    )
                 except TimeoutError:
                     process.kill()
                     await process.wait()
@@ -265,13 +301,19 @@ class StdioTransport:
                 await asyncio.gather(self._reader, return_exceptions=True)
 
     @staticmethod
-    def _hanging(name: str, resources: tuple[str, ...], reason: str) -> UncertainHanging:
+    def _hanging(
+        name: str, resources: tuple[str, ...], reason: str
+    ) -> UncertainHanging:
         return UncertainHanging(
-            f"Tool {name}: {reason}; external effects are unknown", resource_locks=resources
+            f"Tool {name}: {reason}; external effects are unknown",
+            resource_locks=resources,
         )
 
     async def _request(
-        self, method: str, params: Mapping[str, Any], request_timeout: float | None = None
+        self,
+        method: str,
+        params: Mapping[str, Any],
+        request_timeout: float | None = None,
     ) -> dict[str, Any]:
         response = await self._request_message(method, params, request_timeout)
         if "error" in response:
@@ -299,50 +341,80 @@ class StdioTransport:
         request_id: str | None = None,
     ) -> dict[str, Any]:
         process = self._process
-        if process is None or process.returncode is not None or process.stdin is None:
+        if (
+            process is None
+            or process.returncode is not None
+            or process.stdin is None
+        ):
             raise ConnectionError("stdio worker is not running")
-        if request_id is None:
-            request_id = self._reserve_request_id()
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
-        self._pending[request_id] = future
+        resolved_request_id = (
+            request_id if request_id is not None else self._reserve_request_id()
+        )
+        future: asyncio.Future[dict[str, Any]] = (
+            asyncio.get_running_loop().create_future()
+        )
+        self._pending[resolved_request_id] = future
         try:
             await self._send(
-                {"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params)}
+                {
+                    "jsonrpc": "2.0",
+                    "id": resolved_request_id,
+                    "method": method,
+                    "params": dict(params),
+                }
             )
             if request_timeout is None:
                 return await future
             return await asyncio.wait_for(future, timeout=request_timeout)
         finally:
-            self._pending.pop(request_id, None)
+            self._pending.pop(resolved_request_id, None)
             if not future.done():
                 future.cancel()
             elif not future.cancelled():
                 future.exception()
 
-    async def _send(self, message: Mapping[str, Any], send_timeout: float = 1.0) -> None:
+    async def _send(
+        self, message: Mapping[str, Any], send_timeout: float = 1.0
+    ) -> None:
         process = self._process
-        if process is None or process.stdin is None or process.returncode is not None:
+        if (
+            process is None
+            or process.stdin is None
+            or process.returncode is not None
+        ):
             raise ConnectionError("stdio worker stdin is closed")
-        data = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
+        data = (
+            json.dumps(
+                message, ensure_ascii=False, separators=(",", ":")
+            ).encode()
+            + b"\n"
+        )
         if len(data) - 1 > MAX_FRAME_BYTES:
             raise StdioProtocolError("stdio request frame exceeds 16MiB limit")
         async with self._write_lock:
             try:
                 process.stdin.write(data)
-                await asyncio.wait_for(process.stdin.drain(), timeout=send_timeout)
+                await asyncio.wait_for(
+                    process.stdin.drain(), timeout=send_timeout
+                )
             except (BrokenPipeError, ConnectionResetError) as exc:
                 self._broken = True
                 try:
                     await asyncio.wait_for(process.wait(), timeout=0.1)
                 except TimeoutError:
-                    raise ConnectionError("stdio worker stdin is closed") from exc
+                    raise ConnectionError(
+                        "stdio worker stdin is closed"
+                    ) from exc
                 raise ConnectionError(
                     f"stdio worker exited with status {process.returncode}"
                 ) from exc
             except TimeoutError as exc:
                 self._broken = True
-                raise ConnectionError("stdio worker stdin is backpressured") from exc
+                raise ConnectionError(
+                    "stdio worker stdin is backpressured"
+                ) from exc
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     async def _read_messages(self) -> None:
         process = self._process
         if process is None or process.stdout is None:
@@ -368,13 +440,17 @@ class StdioTransport:
             self._broken = True
             for future in self._pending.values():
                 if not future.done():
-                    future.set_exception(exc if isinstance(exc, Exception) else ConnectionError())
+                    future.set_exception(
+                        exc if isinstance(exc, Exception) else ConnectionError()
+                    )
         finally:
             if process.returncode is None:
                 await process.wait()
             if process.returncode != 0:
                 self._broken = True
-            error = ConnectionError(f"stdio worker exited with status {process.returncode}")
+            error = ConnectionError(
+                f"stdio worker exited with status {process.returncode}"
+            )
             for future in self._pending.values():
                 if not future.done():
                     future.set_exception(error)

@@ -23,6 +23,7 @@ from .mcp import McpStdioRuntime
 from .stdio import StdioDriver
 from .tools import ToolRegistry, validate_calls
 
+# bits:allow(BCS011): type alias, not mutable runtime state
 ManagedRuntime = StdioDriver | McpStdioRuntime
 
 
@@ -37,9 +38,12 @@ class CompositeToolRuntime:
     ) -> None:
         self._runtimes = tuple(runtimes)
         self._stdio = tuple(stdio)
-        self._origins = tuple(origins) or tuple("Python runtime" for _ in self._runtimes)
+        self._origins = tuple(origins) or tuple(
+            "Python runtime" for _ in self._runtimes
+        )
         self._stdio_origins = tuple(stdio_origins) or tuple(
-            f"stdio worker {' '.join(driver.config.command)}" for driver in self._stdio
+            f"stdio worker {' '.join(driver.config.command)}"
+            for driver in self._stdio
         )
         self._owners: dict[str, ToolRuntime] = {}
         self._specs: dict[str, ToolSpec] = {}
@@ -57,6 +61,7 @@ class CompositeToolRuntime:
         stdio: list[ManagedRuntime] = []
         stdio_origins: list[str] = []
         for config in configs:
+            # bits:allow(BCS007): Python has no brace blocks
             if config.driver == "python":
                 if config.target is None:
                     raise HarnessError("Python Tool requires target")
@@ -66,7 +71,9 @@ class CompositeToolRuntime:
                 stdio.append(StdioDriver(config, sensitive_env=sensitive_env))
                 stdio_origins.append(f"stdio worker {' '.join(config.command)}")
             elif config.driver == "mcp":
-                stdio.append(McpStdioRuntime(config, sensitive_env=sensitive_env))
+                stdio.append(
+                    McpStdioRuntime(config, sensitive_env=sensitive_env)
+                )
                 stdio_origins.append(f"MCP server {' '.join(config.command)}")
             else:
                 raise HarnessError(f"Unsupported Tool driver: {config.driver}")
@@ -81,7 +88,9 @@ class CompositeToolRuntime:
         async with self._start_lock:
             if self._started:
                 return
-            for driver, origin in zip(self._stdio, self._stdio_origins, strict=True):
+            for driver, origin in zip(
+                self._stdio, self._stdio_origins, strict=True
+            ):
                 await driver.start()
                 self._add_catalog(driver, origin)
             self._started = True
@@ -90,7 +99,10 @@ class CompositeToolRuntime:
         eager = [
             (driver, origin)
             for driver, config, origin in zip(
-                self._stdio, _stdio_configs(configs), self._stdio_origins, strict=True
+                self._stdio,
+                _stdio_configs(configs),
+                self._stdio_origins,
+                strict=True,
             )
             if config.start == "eager"
         ]
@@ -136,10 +148,13 @@ class CompositeToolRuntime:
         for driver in self._stdio:
             await driver.close()
 
-    def _add_catalog(self, runtime: ToolRuntime, origin: str = "Tool runtime") -> None:
+    def _add_catalog(
+        self, runtime: ToolRuntime, origin: str = "Tool runtime"
+    ) -> None:
         if any(owner is runtime for owner in self._owners.values()):
             return
         for spec in runtime.catalog():
+            # bits:allow(BCS007): Python has no brace blocks
             if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", spec.name) is None:
                 raise HarnessError(
                     f"{origin}: Tool '{spec.name}' has invalid name; expected 1-64 characters "
@@ -152,7 +167,9 @@ class CompositeToolRuntime:
                     f"{origin}: Tool '{spec.name}' has invalid JSON Schema: {exc.message}"
                 ) from exc
             if spec.name in self._specs:
-                raise HarnessError(f"{origin}: Duplicate Tool name: {spec.name}")
+                raise HarnessError(
+                    f"{origin}: Duplicate Tool name: {spec.name}"
+                )
             self._specs[spec.name] = spec
             self._owners[spec.name] = runtime
 
@@ -160,11 +177,15 @@ class CompositeToolRuntime:
 def load_python_tools(target: str) -> ToolRegistry:
     module_name, separator, register_name = target.partition(":")
     if not separator or not module_name or not register_name:
-        raise HarnessError("Python Tool target must have the form module:register")
+        raise HarnessError(
+            "Python Tool target must have the form module:register"
+        )
     try:
         module = importlib.import_module(module_name)
     except ImportError as exc:
-        raise HarnessError(f"Cannot import Python Tool module '{module_name}': {exc}") from exc
+        raise HarnessError(
+            f"Cannot import Python Tool module '{module_name}': {exc}"
+        ) from exc
     register = getattr(module, register_name, None)
     if not callable(register):
         raise HarnessError(f"Python Tool target '{target}' is not callable")
@@ -172,11 +193,17 @@ def load_python_tools(target: str) -> ToolRegistry:
     try:
         register(registry)
     except Exception as exc:
-        raise HarnessError(f"Python Tool registration '{target}' failed: {exc}") from exc
+        raise HarnessError(
+            f"Python Tool registration '{target}' failed: {exc}"
+        ) from exc
     if not registry.catalog():
-        raise HarnessError(f"Python Tool registration '{target}' registered no Tools")
+        raise HarnessError(
+            f"Python Tool registration '{target}' registered no Tools"
+        )
     return registry
 
 
 def _stdio_configs(configs: Sequence[ToolConfig]) -> tuple[ToolConfig, ...]:
-    return tuple(config for config in configs if config.driver in ("stdio", "mcp"))
+    return tuple(
+        config for config in configs if config.driver in ("stdio", "mcp")
+    )

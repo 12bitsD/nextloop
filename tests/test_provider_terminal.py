@@ -9,12 +9,20 @@ from helpers import FakeDelivery
 from test_loop import context, registry
 from test_providers import openai_chunk, request
 
-from nextloop import AgentLoop, AnthropicProvider, OpenAIProvider, ProviderError, TurnStatus
+from nextloop import (
+    AgentLoop,
+    AnthropicProvider,
+    OpenAIProvider,
+    ProviderError,
+    TurnStatus,
+)
 
 
 def openai_provider(body: str) -> OpenAIProvider:
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=body)
+        )
     )
     return OpenAIProvider(
         model_id="test-model",
@@ -25,9 +33,14 @@ def openai_provider(body: str) -> OpenAIProvider:
 
 
 def anthropic_provider(events) -> AnthropicProvider:
-    body = "".join(f"event: {name}\ndata: {json.dumps(payload)}\n\n" for name, payload in events)
+    body = "".join(
+        f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+        for name, payload in events
+    )
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=body)
+        )
     )
     return AnthropicProvider(
         model_id="test-model",
@@ -39,23 +52,31 @@ def anthropic_provider(events) -> AnthropicProvider:
 
 @pytest.mark.asyncio
 async def test_openai_rejects_eof_without_done():
-    body = f"data: {json.dumps(openai_chunk({'content': 'partial'}, 'stop'))}\n\n"
+    body = (
+        f"data: {json.dumps(openai_chunk({'content': 'partial'}, 'stop'))}\n\n"
+    )
     with pytest.raises(ProviderError, match=r"before \[DONE\]"):
-        await openai_provider(body).complete(request(), attempt=1, cancel=asyncio.Event())
+        await openai_provider(body).complete(
+            request(), attempt=1, cancel=asyncio.Event()
+        )
 
 
 @pytest.mark.asyncio
 async def test_openai_rejects_error_event_and_unknown_finish_reason():
     error = f"event: error\ndata: {json.dumps(openai_chunk({'content': 'partial'}, 'stop'))}\n\n"
     with pytest.raises(ProviderError):
-        await openai_provider(error).complete(request(), attempt=1, cancel=asyncio.Event())
+        await openai_provider(error).complete(
+            request(), attempt=1, cancel=asyncio.Event()
+        )
 
     unknown = (
         f"data: {json.dumps(openai_chunk({'content': 'partial'}, 'future_reason'))}\n\n"
         "data: [DONE]\n\n"
     )
     with pytest.raises(ProviderError, match="finish reason"):
-        await openai_provider(unknown).complete(request(), attempt=1, cancel=asyncio.Event())
+        await openai_provider(unknown).complete(
+            request(), attempt=1, cancel=asyncio.Event()
+        )
 
 
 @pytest.mark.asyncio
@@ -64,7 +85,10 @@ async def test_anthropic_rejects_eof_without_message_stop():
         [
             (
                 "content_block_start",
-                {"index": 0, "content_block": {"type": "text", "text": "partial"}},
+                {
+                    "index": 0,
+                    "content_block": {"type": "text", "text": "partial"},
+                },
             )
         ]
     )
@@ -78,9 +102,15 @@ async def test_anthropic_rejects_unknown_stop_reason():
         [
             (
                 "content_block_start",
-                {"index": 0, "content_block": {"type": "text", "text": "partial"}},
+                {
+                    "index": 0,
+                    "content_block": {"type": "text", "text": "partial"},
+                },
             ),
-            ("message_delta", {"delta": {"stop_reason": "future_reason"}, "usage": {}}),
+            (
+                "message_delta",
+                {"delta": {"stop_reason": "future_reason"}, "usage": {}},
+            ),
             ("message_stop", {}),
         ]
     )
@@ -90,7 +120,9 @@ async def test_anthropic_rejects_unknown_stop_reason():
 
 @pytest.mark.asyncio
 async def test_incomplete_stream_never_reaches_delivery():
-    body = f"data: {json.dumps(openai_chunk({'content': 'partial'}, 'stop'))}\n\n"
+    body = (
+        f"data: {json.dumps(openai_chunk({'content': 'partial'}, 'stop'))}\n\n"
+    )
     delivery = FakeDelivery()
     outcome = await AgentLoop().run(
         context(

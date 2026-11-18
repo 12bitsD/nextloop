@@ -44,7 +44,9 @@ class SQLiteEventStore:
             raise ValueError("lease_seconds must be positive")
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        self._connection = sqlite3.connect(
+            path, check_same_thread=False, isolation_level=None
+        )
         self._connection.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         self._owner_id = owner_id
@@ -116,7 +118,9 @@ class SQLiteEventStore:
             query = "SELECT DISTINCT session_id FROM session_events"
             if self._has_tombstone_table_locked():
                 query += " WHERE session_id NOT IN (SELECT session_id FROM session_tombstones)"
-            rows = self._connection.execute(query + " ORDER BY session_id").fetchall()
+            rows = self._connection.execute(
+                query + " ORDER BY session_id"
+            ).fetchall()
             return tuple(str(row["session_id"]) for row in rows)
 
     def _has_tombstone_table_locked(self) -> bool:
@@ -131,10 +135,13 @@ class SQLiteEventStore:
         if not self._has_tombstone_table_locked():
             return
         row = self._connection.execute(
-            "SELECT state FROM session_tombstones WHERE session_id = ?", (session_id,)
+            "SELECT state FROM session_tombstones WHERE session_id = ?",
+            (session_id,),
         ).fetchone()
         if row is not None:
-            raise SessionDeletedError(f"Session is {row['state']}: {session_id}")
+            raise SessionDeletedError(
+                f"Session is {row['state']}: {session_id}"
+            )
 
     def _delete_lease_locked(self, session_id: str) -> None:
         exists = self._connection.execute(
@@ -154,7 +161,9 @@ class SQLiteEventStore:
                     """
                     CREATE TABLE IF NOT EXISTS session_tombstones (
                         session_id TEXT PRIMARY KEY,
-                        state TEXT NOT NULL CHECK(state IN ('deleting', 'deleted'))
+                        state TEXT NOT NULL CHECK(state IN (
+                            'deleting', 'deleted'
+                        ))
                     )
                     """
                 )
@@ -171,10 +180,12 @@ class SQLiteEventStore:
                 self._delete_lease_locked(session_id)
             with write_transaction(self._connection):
                 self._connection.execute(
-                    "DELETE FROM session_events WHERE session_id = ?", (session_id,)
+                    "DELETE FROM session_events WHERE session_id = ?",
+                    (session_id,),
                 )
                 self._connection.execute(
-                    "DELETE FROM session_writers WHERE session_id = ?", (session_id,)
+                    "DELETE FROM session_writers WHERE session_id = ?",
+                    (session_id,),
                 )
                 self._connection.execute(
                     "UPDATE session_tombstones SET state = 'deleted' WHERE session_id = ?",
@@ -183,9 +194,16 @@ class SQLiteEventStore:
             purge_deleted_bytes(self._connection)
 
     @offload
-    def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
+    def attach_writer(
+        self,
+        session_id: str,
+        *,
+        force: bool = False,  # bits:allow(BCS004): established API
+    ) -> tuple[int, int, int]:
         with self._lock, write_transaction(self._connection):
-            epoch, last_seq, last_turn, _ = self._attach_writer_locked(session_id, force=force)
+            epoch, last_seq, last_turn, _ = self._attach_writer_locked(
+                session_id, force=force
+            )
             return epoch, last_seq, last_turn
 
     @offload
@@ -194,18 +212,24 @@ class SQLiteEventStore:
         session_id: str,
         check: HistoryCheck,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool = False,
         initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
         with self._lock, write_transaction(self._connection):
             return self._attach_writer_locked(
-                session_id, force=force, check=check, initial_events=initial_events
+                session_id,
+                force=force,
+                check=check,
+                initial_events=initial_events,
             )
 
+    # bits:explain(BCS003): transaction state; split risks atomicity; keep I/O
     def _attach_writer_locked(
         self,
         session_id: str,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool,
         check: HistoryCheck | None = None,
         initial_events: Sequence[NewEvent] = (),
@@ -214,7 +238,9 @@ class SQLiteEventStore:
         history: Sequence[Event] = ()
         if check is not None:
             rows = self._connection.execute(
-                "SELECT * FROM session_events WHERE session_id = ? ORDER BY seq", (session_id,)
+                "SELECT * FROM session_events "
+                "WHERE session_id = ? ORDER BY seq",
+                (session_id,),
             ).fetchall()
             history = tuple(self._event_from_row(row) for row in rows)
             check(history)
@@ -230,9 +256,12 @@ class SQLiteEventStore:
                 and float(lease["expires_at"]) > now
                 and not force
             ):
-                raise WriterLeaseError("Another owner holds an unexpired Session lease")
+                raise WriterLeaseError(
+                    "Another owner holds an unexpired Session lease"
+                )
         row = self._connection.execute(
-            "SELECT writer_epoch FROM session_writers WHERE session_id = ?", (session_id,)
+            "SELECT writer_epoch FROM session_writers WHERE session_id = ?",
+            (session_id,),
         ).fetchone()
         epoch = (int(row["writer_epoch"]) if row else 0) + 1
         self._connection.execute(
@@ -247,7 +276,12 @@ class SQLiteEventStore:
                 "ON CONFLICT(session_id) DO UPDATE SET "
                 "owner_id = excluded.owner_id, writer_epoch = excluded.writer_epoch, "
                 "expires_at = excluded.expires_at",
-                (session_id, self._owner_id, epoch, self._clock() + self.lease_seconds),
+                (
+                    session_id,
+                    self._owner_id,
+                    epoch,
+                    self._clock() + self.lease_seconds,
+                ),
             )
         tail = self._connection.execute(
             "SELECT COALESCE(MAX(seq), 0) AS last_seq, COALESCE(MAX(turn), 0) AS last_turn "
@@ -260,8 +294,9 @@ class SQLiteEventStore:
             self._connection.execute(
                 """
                 INSERT INTO session_events (
-                    session_id, seq, turn, step, attempt, writer_epoch, event_id,
-                    event_type, surface_op, payload_json, occurred_at, schema_version
+                    session_id, seq, turn, step, attempt, writer_epoch,
+                    event_id, event_type, surface_op, payload_json,
+                    occurred_at, schema_version
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -314,7 +349,9 @@ class SQLiteEventStore:
         ):
             raise InvariantViolation("Stale writer_epoch")
 
-    def _check_writer_and_tail_locked(self, session_id: str, writer_epoch: int) -> int:
+    def _check_writer_and_tail_locked(
+        self, session_id: str, writer_epoch: int
+    ) -> int:
         self._ensure_active_locked(session_id)
         row = self._connection.execute(
             "SELECT (SELECT writer_epoch FROM session_writers WHERE session_id = ?) "
@@ -322,7 +359,10 @@ class SQLiteEventStore:
             "FROM session_events WHERE session_id = ?",
             (session_id, session_id),
         ).fetchone()
-        if row["writer_epoch"] is None or int(row["writer_epoch"]) != writer_epoch:
+        if (
+            row["writer_epoch"] is None
+            or int(row["writer_epoch"]) != writer_epoch
+        ):
             raise InvariantViolation("Stale writer_epoch")
         self._check_lease_locked(session_id, writer_epoch)
         return int(row["last_seq"])
@@ -384,7 +424,9 @@ class SQLiteEventStore:
                 self._ensure_active_locked(session_id)
                 return ()
             with write_transaction(self._connection):
-                last_seq = self._check_writer_and_tail_locked(session_id, writer_epoch)
+                last_seq = self._check_writer_and_tail_locked(
+                    session_id, writer_epoch
+                )
                 if expected_seq != last_seq + 1:
                     existing = []
                     for draft in events:
@@ -393,7 +435,9 @@ class SQLiteEventStore:
                             (session_id, draft.event_id),
                         ).fetchone()
                         if row is not None:
-                            existing.append(self._event_from_row(row, upcast=False))
+                            existing.append(
+                                self._event_from_row(row, upcast=False)
+                            )
                     committed = verify_idempotent_append(existing, events)
                     return committed
                 committed = []
@@ -423,21 +467,28 @@ class SQLiteEventStore:
                     )
                     committed.append(
                         self._event_from_draft(
-                            session_id, expected_seq + offset, writer_epoch, draft, occurred_at
+                            session_id,
+                            expected_seq + offset,
+                            writer_epoch,
+                            draft,
+                            occurred_at,
                         )
                     )
                 self._connection.executemany(
                     """
                     INSERT INTO session_events (
-                        session_id, seq, turn, step, attempt, writer_epoch, event_id,
-                        event_type, surface_op, payload_json, occurred_at, schema_version
+                        session_id, seq, turn, step, attempt, writer_epoch,
+                        event_id, event_type, surface_op, payload_json,
+                        occurred_at, schema_version
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     rows,
                 )
                 return committed
 
-    def _read_rows_locked(self, statement: str, parameters: Sequence[str]) -> list[sqlite3.Row]:
+    def _read_rows_locked(
+        self, statement: str, parameters: Sequence[str]
+    ) -> list[sqlite3.Row]:
         with write_transaction(self._connection, immediate=False):
             self._ensure_active_locked(session_id=parameters[0])
             return self._connection.execute(statement, parameters).fetchall()
@@ -467,7 +518,8 @@ class SQLiteEventStore:
     def load_recovery(self, session_id: str) -> Sequence[Event]:
         with self._lock:
             rows = self._read_rows_locked(
-                "SELECT * FROM session_events WHERE session_id = ? ORDER BY seq",
+                "SELECT * FROM session_events "
+                "WHERE session_id = ? ORDER BY seq",
                 (session_id,),
             )
             return tuple(self._event_from_row(row) for row in rows)
@@ -513,6 +565,7 @@ class SQLiteEventStore:
         )
 
     @staticmethod
+    # bits:allow(BCS004): established API/test-double signature
     def _event_from_row(row: sqlite3.Row, *, upcast: bool = True) -> Event:
         event = Event(
             session_id=row["session_id"],

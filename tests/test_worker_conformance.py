@@ -15,22 +15,41 @@ ROOT = Path(__file__).parents[1]
 
 
 @pytest.fixture(scope="session")
-def native_workers(tmp_path_factory: pytest.TempPathFactory) -> dict[str, tuple[str, ...]]:
+def native_workers(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> dict[str, tuple[str, ...]]:
     directory = tmp_path_factory.mktemp("workers")
     rust = directory / "rust-worker"
     cpp = directory / "cpp-worker"
     subprocess.run(
-        ["rustc", "+stable", str(ROOT / "examples/workers/rust_worker.rs"), "-O", "-o", str(rust)],
+        [
+            "rustc",
+            "+stable",
+            str(ROOT / "examples/workers/rust_worker.rs"),
+            "-O",
+            "-o",
+            str(rust),
+        ],
         cwd=ROOT,
         check=True,
     )
     subprocess.run(
-        ["c++", "-std=c++17", "-O2", str(ROOT / "examples/workers/cpp_worker.cpp"), "-o", str(cpp)],
+        [
+            "c++",
+            "-std=c++17",
+            "-O2",
+            str(ROOT / "examples/workers/cpp_worker.cpp"),
+            "-o",
+            str(cpp),
+        ],
         cwd=ROOT,
         check=True,
     )
     return {
-        "python": (sys.executable, str(ROOT / "examples/workers/python_worker.py")),
+        "python": (
+            sys.executable,
+            str(ROOT / "examples/workers/python_worker.py"),
+        ),
         "rust": (str(rust),),
         "cpp": (str(cpp),),
     }
@@ -68,26 +87,48 @@ async def invoke(
     )
 
 
-async def test_protocol_initialize_list_and_escaped_call(driver: StdioDriver) -> None:
+async def test_protocol_initialize_list_and_escaped_call(
+    driver: StdioDriver,
+) -> None:
     await driver.start()
-    assert {spec.name.rsplit("__", 1)[-1] for spec in driver.catalog()} >= {"echo", "wait"}
-    for value in ('Unicode 中文 😀 "quote" \\ slash\nnext\tline', "", "null \\u1234"):
-        outcome = await invoke(driver, f"{driver.config.namespace}__echo", {"text": value})
+    assert {spec.name.rsplit("__", 1)[-1] for spec in driver.catalog()} >= {
+        "echo",
+        "wait",
+    }
+    for value in (
+        'Unicode 中文 😀 "quote" \\ slash\nnext\tline',
+        "",
+        "null \\u1234",
+    ):
+        # bits:allow(BCS007): Python has no brace blocks
+        outcome = await invoke(
+            driver, f"{driver.config.namespace}__echo", {"text": value}
+        )
         assert isinstance(outcome, Completed)
         assert outcome.content == value
         assert outcome.structured == {"echo": value}
 
 
-async def test_protocol_concurrent_out_of_order_and_shutdown(driver: StdioDriver) -> None:
+async def test_protocol_concurrent_out_of_order_and_shutdown(
+    driver: StdioDriver,
+) -> None:
     namespace = driver.config.namespace
-    slow = asyncio.create_task(invoke(driver, f"{namespace}__wait", {"seconds": 0.3}))
+    slow = asyncio.create_task(
+        invoke(driver, f"{namespace}__wait", {"seconds": 0.3})
+    )
     await asyncio.sleep(0.03)
-    fast = asyncio.create_task(invoke(driver, f"{namespace}__echo", {"text": "fast"}))
+    fast = asyncio.create_task(
+        invoke(driver, f"{namespace}__echo", {"text": "fast"})
+    )
     fast_outcome = await asyncio.wait_for(fast, timeout=0.2)
-    assert isinstance(fast_outcome, Completed) and fast_outcome.content == "fast"
+    assert (
+        isinstance(fast_outcome, Completed) and fast_outcome.content == "fast"
+    )
     assert not slow.done()
     slow_outcome = await slow
-    assert isinstance(slow_outcome, Completed) and slow_outcome.content == "done"
+    assert (
+        isinstance(slow_outcome, Completed) and slow_outcome.content == "done"
+    )
     process = driver._process
     assert process is not None
     await driver.close()
@@ -100,7 +141,9 @@ async def test_protocol_cancellation(driver: StdioDriver) -> None:
     assert process is not None
     cancel = asyncio.Event()
     operation = asyncio.create_task(
-        invoke(driver, f"{driver.config.namespace}__wait", {"seconds": 10}, cancel)
+        invoke(
+            driver, f"{driver.config.namespace}__wait", {"seconds": 10}, cancel
+        )
     )
     await asyncio.sleep(0.03)
     cancel.set()
@@ -130,7 +173,9 @@ async def test_ascii_escaped_unicode_wire_input(
     wire = json.dumps(request, ensure_ascii=True).encode() + b"\n"
     process.stdin.write(wire)
     await process.stdin.drain()
-    response = json.loads(await asyncio.wait_for(process.stdout.readline(), timeout=2))
+    response = json.loads(
+        await asyncio.wait_for(process.stdout.readline(), timeout=2)
+    )
     assert response["result"]["content"] == value
     process.terminate()
     await process.wait()
@@ -141,19 +186,28 @@ async def test_shutdown_response_stress(
     language: str, native_workers: dict[str, tuple[str, ...]]
 ) -> None:
     for iteration in range(20):
+        # bits:allow(BCS007): Python has no brace blocks
         process = await asyncio.create_subprocess_exec(
             *native_workers[language],
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
         )
         assert process.stdin is not None and process.stdout is not None
-        request = {"jsonrpc": "2.0", "id": f"stop-{iteration}", "method": "shutdown"}
+        request = {
+            "jsonrpc": "2.0",
+            "id": f"stop-{iteration}",
+            "method": "shutdown",
+        }
         process.stdin.write(json.dumps(request).encode() + b"\n")
         await process.stdin.drain()
         line = await asyncio.wait_for(process.stdout.readline(), timeout=2)
         assert line, f"{language} shutdown {iteration} returned EOF"
         response = json.loads(line)
-        assert response == {"jsonrpc": "2.0", "id": f"stop-{iteration}", "result": {}}
+        assert response == {
+            "jsonrpc": "2.0",
+            "id": f"stop-{iteration}",
+            "result": {},
+        }
         assert await asyncio.wait_for(process.wait(), timeout=2) == 0
 
 
@@ -162,7 +216,9 @@ async def test_concurrent_two_mib_frames(driver: StdioDriver) -> None:
     values = [("α😀" * 1000) + "x" * (2 * 1024 * 1024), "y" * (2 * 1024 * 1024)]
     outcomes = await asyncio.gather(
         *(
-            invoke(driver, f"{namespace}__wait", {"seconds": 0, "padding": value})
+            invoke(
+                driver, f"{namespace}__wait", {"seconds": 0, "padding": value}
+            )
             for value in values
         )
     )

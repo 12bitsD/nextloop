@@ -27,7 +27,11 @@ from .contracts import (
     UncertainHanging,
     new_id,
 )
-from .events.approval import approval_decision_event, approval_expired, pending_approval
+from .events.approval import (
+    approval_decision_event,
+    approval_expired,
+    pending_approval,
+)
 from .events.codec import is_surface_event, is_uncertain_result, with_origin
 from .events.input import user_input_events
 from .events.outcome import BatchAction, reconciliation_event, settle_outcomes
@@ -124,6 +128,7 @@ class SessionExecution:
         self.tool_calls += count
         return None
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     def record_usage(self, usage: ModelUsage | None) -> str | None:
         config = self.context.config
         limits = (
@@ -141,7 +146,9 @@ class SessionExecution:
             usage.cached_input_tokens,
         ):
             if value is not None and (
-                not isinstance(value, int) or isinstance(value, bool) or value < 0
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 0
             ):
                 return "budget_usage_invalid"
         if config.max_input_tokens is not None and usage.input_tokens is None:
@@ -159,6 +166,7 @@ class SessionExecution:
             ("max_output_tokens", self.output_tokens, config.max_output_tokens),
             ("max_total_tokens", self.total_tokens, config.max_total_tokens),
         ):
+            # bits:allow(BCS007): Python has no brace blocks
             if limit is not None and value > limit:
                 return f"{name}={limit}"
         return None
@@ -202,7 +210,9 @@ class SessionExecution:
                 return False
             if getattr(self.context.store, "lease_seconds", None) is not None:
                 try:
-                    await self.context.store.check_writer(self.session_id, self.writer_epoch)
+                    await self.context.store.check_writer(
+                        self.session_id, self.writer_epoch
+                    )
                 except InvariantViolation:
                     return False
             await self.append_locked(
@@ -252,8 +262,12 @@ class ExecutionFrame:
             self.actor.run_lock.release()
             raise
 
-    async def activate(self, check: HistoryCheck | None = None) -> SessionExecution:
-        checked_attach = getattr(self.context.store, "attach_writer_checked", None)
+    async def activate(
+        self, check: HistoryCheck | None = None
+    ) -> SessionExecution:
+        checked_attach = getattr(
+            self.context.store, "attach_writer_checked", None
+        )
         if check is not None and callable(checked_attach):
             (
                 self.writer_epoch,
@@ -282,31 +296,42 @@ class ExecutionFrame:
             resource_locks=set(active_resource_locks(self.history)),
         )
         self.execution = execution
-        execution.surface = list(await context.store.load_surface(context.session_id))
+        execution.surface = list(
+            await context.store.load_surface(context.session_id)
+        )
         execution.accepted_inputs = {
-            str(event.payload["input_id"]): str(event.payload.get("content", ""))
+            str(event.payload["input_id"]): str(
+                event.payload.get("content", "")
+            )
             for event in self.history
-            if event.event_type == EventType.INPUT_ACCEPTED and event.payload.get("input_id")
+            if event.event_type == EventType.INPUT_ACCEPTED
+            and event.payload.get("input_id")
         }
         if (
             context.input_id in execution.accepted_inputs
-            and execution.accepted_inputs[context.input_id] != context.initial_input
+            and execution.accepted_inputs[context.input_id]
+            != context.initial_input
         ):
             raise InvariantViolation("input_id reused with different content")
         from .events.pending import pending_inputs
 
         execution.recovered_inputs.extend(
-            (item.input_id, item.content) for item in pending_inputs(self.history)
+            (item.input_id, item.content)
+            for item in pending_inputs(self.history)
         )
         if context.preview is not None:
             execution.preview = PreviewChannel(context.preview)
         self._active[context.session_id] = execution
         deadline = context.config.turn_deadline_seconds
         if deadline is not None:
-            execution.deadline_task = asyncio.create_task(self._expire(execution, deadline))
+            execution.deadline_task = asyncio.create_task(
+                self._expire(execution, deadline)
+            )
         interval = getattr(context.store, "lease_seconds", None)
         if interval is not None:
-            execution.heartbeat_task = asyncio.create_task(self._heartbeat(execution, interval / 3))
+            execution.heartbeat_task = asyncio.create_task(
+                self._heartbeat(execution, interval / 3)
+            )
         return execution
 
     def _initial_events(self) -> tuple[NewEvent, NewEvent]:
@@ -336,16 +361,29 @@ class ExecutionFrame:
             execution.step += 1
             execution.open_step = True
             events = [
-                NewEvent(event_type=EventType.STEP_START, turn=execution.turn, step=execution.step)
+                NewEvent(
+                    event_type=EventType.STEP_START,
+                    turn=execution.turn,
+                    step=execution.step,
+                )
             ]
             inputs = []
             if execution.step == 1:
                 inputs.extend(execution.recovered_inputs)
-                inputs.append((execution.context.input_id, execution.context.initial_input))
+                inputs.append(
+                    (
+                        execution.context.input_id,
+                        execution.context.initial_input,
+                    )
+                )
                 execution.recovered_inputs.clear()
             inputs.extend(execution.actor.inbox)
             execution.actor.inbox.clear()
-            events.extend(user_input_events(inputs, turn=execution.turn, step=execution.step))
+            events.extend(
+                user_input_events(
+                    inputs, turn=execution.turn, step=execution.step
+                )
+            )
             await execution.append_locked(events)
 
     async def end_step(self, status: str) -> None:
@@ -385,11 +423,15 @@ class ExecutionFrame:
             raise RuntimeError("ExecutionFrame is not active")
         return self.execution
 
-    async def _expire(self, execution: SessionExecution, seconds: float) -> None:
+    async def _expire(
+        self, execution: SessionExecution, seconds: float
+    ) -> None:
         await asyncio.sleep(seconds)
         await execution.request_cancel("turn_deadline_exceeded")
 
-    async def _heartbeat(self, execution: SessionExecution, seconds: float) -> None:
+    async def _heartbeat(
+        self, execution: SessionExecution, seconds: float
+    ) -> None:
         while True:
             await asyncio.sleep(seconds)
             try:
@@ -406,14 +448,19 @@ class ExecutionFrame:
         for task in tasks:
             if task is not None:
                 task.cancel()
-        await asyncio.gather(*(task for task in tasks if task is not None), return_exceptions=True)
+        await asyncio.gather(
+            *(task for task in tasks if task is not None),
+            return_exceptions=True,
+        )
         try:
             if execution.preview is not None:
                 await execution.preview.close()
         finally:
             self._active.pop(execution.session_id, None)
 
-    async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
+    async def __aexit__(
+        self, exc_type: object, exc: object, traceback: object
+    ) -> None:
         try:
             if self.execution is not None:
                 cleanup = asyncio.create_task(self._cleanup(self.execution))
@@ -451,7 +498,9 @@ class TurnFinalizer:
             surface_op=SurfaceOp.APPEND,
             payload={
                 "message": message_to_data(
-                    Message(role="user", content="[WorkingContext expired · turn]")
+                    Message(
+                        role="user", content="[WorkingContext expired · turn]"
+                    )
                 ),
                 "working_context": {"action": "expired", "scope": "turn"},
             },
@@ -483,7 +532,10 @@ class TurnFinalizer:
                     event_type=EventType.FINAL_MESSAGE,
                     turn=execution.turn,
                     step=execution.step,
-                    payload={"final_message_id": final_message_id, "content": content},
+                    payload={
+                        "final_message_id": final_message_id,
+                        "content": content,
+                    },
                 )
             ]
             expiry = await self._working_context_expiry()
@@ -512,7 +564,9 @@ class TurnFinalizer:
             await self._commit_terminal_locked(events)
         try:
             await await_with_cancel(
-                execution.context.delivery.deliver(final), execution.cancel, _DeliveryCancelled
+                execution.context.delivery.deliver(final),
+                execution.cancel,
+                _DeliveryCancelled,
             )
         except _DeliveryCancelled:
             error = "turn_deadline_exceeded"
@@ -542,7 +596,10 @@ class TurnFinalizer:
                     EventType.DELIVERY_UNKNOWN,
                     turn=execution.turn,
                     step=execution.step,
-                    payload={"final_message_id": final_message_id, "error": error},
+                    payload={
+                        "final_message_id": final_message_id,
+                        "error": error,
+                    },
                 )
             ]
         )
@@ -563,11 +620,13 @@ class TurnFinalizer:
         facts: Sequence[NewEvent] = (),
     ) -> TurnOutcome:
         execution = self.execution
+        final_status = status
+        final_error = error
         async with execution.actor.commit_lock:
             if execution.cancel_cause == "turn_deadline_exceeded":
-                status = TurnStatus.FAILED
-                error = "turn_deadline_exceeded"
-                execution.terminal_reason = error
+                final_status = TurnStatus.FAILED
+                final_error = "turn_deadline_exceeded"
+                execution.terminal_reason = final_error
             events = list(facts)
             expiry = await self._working_context_expiry()
             if expiry is not None:
@@ -578,10 +637,13 @@ class TurnFinalizer:
                         EventType.STEP_END,
                         turn=execution.turn,
                         step=execution.step,
-                        payload={"status": status.value},
+                        payload={"status": final_status.value},
                     )
                 )
-            payload: dict[str, object] = {"status": status.value, "error": error}
+            payload: dict[str, object] = {
+                "status": final_status.value,
+                "error": final_error,
+            }
             if execution.terminal_reason is not None:
                 payload.update(
                     reason=execution.terminal_reason,
@@ -597,11 +659,11 @@ class TurnFinalizer:
             )
             await self._commit_terminal_locked(events)
         return TurnOutcome(
-            status=status,
+            status=final_status,
             session_id=execution.session_id,
             turn=execution.turn,
             step=execution.step,
-            error=error,
+            error=final_error,
         )
 
     async def approval_pending(self, approval_id: str) -> TurnOutcome:
@@ -666,12 +728,16 @@ class TurnDriver:
             admit=self.execution.admit_tool_batch,
         )
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     async def run(self) -> TurnOutcome:
         execution = self.execution
+        config = execution.context.config
         try:
             while True:
                 if execution.cancel.is_set():
-                    return await self.finalizer.finalize(TurnStatus.CANCELLED, "Cancelled")
+                    return await self.finalizer.finalize(
+                        TurnStatus.CANCELLED, "Cancelled"
+                    )
                 reason = execution.step_budget_reason()
                 if reason is not None:
                     return await self.finalizer.budget_failure(reason)
@@ -687,13 +753,17 @@ class TurnDriver:
                 if projection.compaction_reason is not None:
                     surface = tuple(execution.surface)
                     compaction = await self.model.call(
-                        make_compaction_request(projection, execution.context.config),
+                        make_compaction_request(
+                            projection, execution.context.config
+                        ),
                         execution.cancel,
                         purpose="compaction",
                     )
                     await execution.append(compaction.events)
                     if compaction.budget_reason is not None:
-                        return await self.finalizer.budget_failure(compaction.budget_reason)
+                        return await self.finalizer.budget_failure(
+                            compaction.budget_reason
+                        )
                     if compaction.rebuild_for_steer:
                         await self.frame.end_step("steer")
                         continue
@@ -701,17 +771,25 @@ class TurnDriver:
                         return await self.finalizer.finalize(
                             TurnStatus.CANCELLED, "Cancelled during compaction"
                         )
-                    summary = compaction.response.content if compaction.response else ""
+                    summary = (
+                        compaction.response.content
+                        if compaction.response
+                        else ""
+                    )
                     if compaction.error or not valid_compaction(
                         summary,
                         projection,
-                        bootstrap_count=len(execution.context.config.bootstrap_messages),
+                        bootstrap_count=len(
+                            execution.context.config.bootstrap_messages
+                        ),
                     ):
                         error = str(
                             compaction.error
                             or "Compaction returned an empty or non-shrinking summary"
                         )
-                        return await self.finalizer.finalize(TurnStatus.FAILED, error)
+                        return await self.finalizer.finalize(
+                            TurnStatus.FAILED, error
+                        )
                     await execution.append(
                         compaction_events(
                             summary,
@@ -734,15 +812,21 @@ class TurnDriver:
                             "Request still exceeds capacity after one compaction",
                         )
 
-                result = await self.model.call(projection.request, execution.cancel)
+                result = await self.model.call(
+                    projection.request, execution.cancel
+                )
                 await execution.append(result.events)
                 if result.budget_reason is not None:
-                    return await self.finalizer.budget_failure(result.budget_reason)
+                    return await self.finalizer.budget_failure(
+                        result.budget_reason
+                    )
                 if result.rebuild_for_steer:
                     await self.frame.end_step("steer")
                     continue
                 if result.cancelled or execution.cancel.is_set():
-                    return await self.finalizer.finalize(TurnStatus.CANCELLED, "Cancelled")
+                    return await self.finalizer.finalize(
+                        TurnStatus.CANCELLED, "Cancelled"
+                    )
                 if result.error or result.response is None:
                     return await self.finalizer.finalize(
                         TurnStatus.FAILED,
@@ -755,7 +839,7 @@ class TurnDriver:
                     step=execution.step,
                     attempt=attempt,
                     corrections=execution.corrections,
-                    max_corrections=execution.context.config.max_protocol_corrections,
+                    max_corrections=config.max_protocol_corrections,
                 )
                 if decision.action != ResponseAction.RUN_TOOLS:
                     await execution.append(decision.events)
@@ -764,21 +848,27 @@ class TurnDriver:
                         projection.request,
                         attempt,
                         action=decision.action.value,
-                        decision_event_ids=tuple(item.event_id for item in decision.events),
+                        decision_event_ids=tuple(
+                            item.event_id for item in decision.events
+                        ),
                     )
                 if decision.action == ResponseAction.NEXT_STEP:
                     execution.corrections += 1
                     await self.frame.end_step("protocol_correction")
                     continue
                 if decision.action == ResponseAction.CANCELLED:
-                    return await self.finalizer.finalize(TurnStatus.CANCELLED, "Provider cancelled")
+                    return await self.finalizer.finalize(
+                        TurnStatus.CANCELLED, "Provider cancelled"
+                    )
                 if decision.action == ResponseAction.FAILED:
                     return await self.finalizer.finalize(
                         TurnStatus.FAILED,
                         decision.error or "Provider terminal failure",
                     )
                 if decision.action == ResponseAction.FINAL_CANDIDATE:
-                    outcome = await self.finalizer.finish_success(decision.final_content)
+                    outcome = await self.finalizer.finish_success(
+                        decision.final_content
+                    )
                     if outcome is not None:
                         return outcome
                     continue
@@ -797,9 +887,13 @@ class TurnDriver:
                     intent_events=decision.events,
                 )
                 if batch.approval is not None:
-                    return await self.finalizer.approval_pending(batch.approval.approval_id)
+                    return await self.finalizer.approval_pending(
+                        batch.approval.approval_id
+                    )
                 if batch.budget_reason is not None:
-                    return await self.finalizer.budget_failure(batch.budget_reason)
+                    return await self.finalizer.budget_failure(
+                        batch.budget_reason
+                    )
                 if batch.issues:
                     await execution.append(decision.events)
                     rejection = reject_batch(
@@ -807,7 +901,7 @@ class TurnDriver:
                         turn=execution.turn,
                         step=execution.step,
                         corrections=execution.corrections,
-                        max_corrections=execution.context.config.max_protocol_corrections,
+                        max_corrections=config.max_protocol_corrections,
                     )
                     await execution.append(rejection.events)
                     if rejection.action == ResponseAction.NEXT_STEP:
@@ -822,15 +916,17 @@ class TurnDriver:
                     batch.outcomes,
                     turn=execution.turn,
                     step=execution.step,
-                    pacing_step_interval=execution.context.config.pacing_step_interval,
+                    pacing_step_interval=config.pacing_step_interval,
                     blocked_resources=batch.blocked_resources,
                     timings=batch.timings,
-                    result_bytes=execution.context.config.tool_result_bytes,
-                    full_max_bytes=execution.context.config.tool_result_full_max_bytes,
+                    result_bytes=config.tool_result_bytes,
+                    full_max_bytes=config.tool_result_full_max_bytes,
                 )
                 await execution.append(settled.events)
                 execution.resource_locks.update(settled.acquired_resources)
-                execution.resource_locks.difference_update(settled.released_resources)
+                execution.resource_locks.difference_update(
+                    settled.released_resources
+                )
                 if settled.action == BatchAction.FAILED:
                     return await self.finalizer.finalize(
                         TurnStatus.FAILED,
@@ -841,12 +937,17 @@ class TurnDriver:
                         TurnStatus.BLOCKED,
                         settled.error or "Blocked by unresolved resources",
                     )
-                if settled.action == BatchAction.CANCELLED or execution.cancel.is_set():
+                if (
+                    settled.action == BatchAction.CANCELLED
+                    or execution.cancel.is_set()
+                ):
                     return await self.finalizer.finalize(
                         TurnStatus.CANCELLED, "Cancelled during Tool batch"
                     )
                 if settled.action == BatchAction.FINALIZE:
-                    outcome = await self.finalizer.finish_success(settled.final_content)
+                    outcome = await self.finalizer.finish_success(
+                        settled.final_content
+                    )
                     if outcome is not None:
                         return outcome
                     continue
@@ -858,13 +959,17 @@ class TurnDriver:
         except InvariantViolation:
             raise
         except Exception as exc:
-            return await self.finalizer.finalize(TurnStatus.FAILED, f"{type(exc).__name__}: {exc}")
+            return await self.finalizer.finalize(
+                TurnStatus.FAILED, f"{type(exc).__name__}: {exc}"
+            )
 
 
+# bits:explain(BCS003): turn state machine; split risks order; preserve I/O
 async def run_approval_resume(
     frame: ExecutionFrame,
     *,
     decisions: Mapping[str, bool] | None,
+    # bits:allow(BCS004): established API/test-double signature
     reject_all: bool,
 ) -> TurnOutcome:
     context = frame.context
@@ -877,15 +982,20 @@ async def run_approval_resume(
         resolved = {operation_id: False for operation_id in expected}
     else:
         if decisions is None or set(decisions) != expected:
-            raise InvariantViolation("Approval decisions must cover every original operation")
+            raise InvariantViolation(
+                "Approval decisions must cover every original operation"
+            )
         resolved = dict(decisions)
     if any(type(value) is not bool for value in resolved.values()):
         raise InvariantViolation("Approval decisions must be boolean")
     if any(
-        event.event_type == EventType.TOOL_CALL and event.payload.get("operation_id") in expected
+        event.event_type == EventType.TOOL_CALL
+        and event.payload.get("operation_id") in expected
         for event in history
     ):
-        raise InvariantViolation("Approval dispatch already started; recover first")
+        raise InvariantViolation(
+            "Approval dispatch already started; recover first"
+        )
     decision_cause = "approval_expired" if approval_expired(request) else None
     if decision_cause is not None:
         resolved = {operation_id: False for operation_id in expected}
@@ -899,7 +1009,11 @@ async def run_approval_resume(
                 if item.policy_version
                 else approval is None
             )
-            if spec is None or item.schema_version != EVENT_SCHEMA_VERSION or not policy_matches:
+            if (
+                spec is None
+                or item.schema_version != EVENT_SCHEMA_VERSION
+                or not policy_matches
+            ):
                 raise InvariantViolation(
                     "Approval policy or Event schema changed; reload decisions"
                 )
@@ -913,20 +1027,28 @@ async def run_approval_resume(
             or {item.operation_id for item in current.items} != expected
         ):
             raise InvariantViolation("Approval changed; reload decisions")
-        closed_turns = {event.turn for event in events if event.event_type == EventType.TURN_END}
+        closed_turns = {
+            event.turn
+            for event in events
+            if event.event_type == EventType.TURN_END
+        }
         if any(
             event.event_type == EventType.TURN_START
             and event.turn != request.origin_turn
             and event.turn not in closed_turns
             for event in events
         ):
-            raise InvariantViolation("Approval dispatch already started; recover first")
+            raise InvariantViolation(
+                "Approval dispatch already started; recover first"
+            )
         if any(
             event.event_type == EventType.TOOL_CALL
             and event.payload.get("operation_id") in expected
             for event in events
         ):
-            raise InvariantViolation("Approval dispatch already started; recover first")
+            raise InvariantViolation(
+                "Approval dispatch already started; recover first"
+            )
 
     execution = await frame.activate(validate_current)
     await frame.begin()
@@ -936,7 +1058,9 @@ async def run_approval_resume(
     await execution.append(
         [
             approval_decision_event(
-                EventType.APPROVAL_GRANTED if approved else EventType.APPROVAL_REJECTED,
+                EventType.APPROVAL_GRANTED
+                if approved
+                else EventType.APPROVAL_REJECTED,
                 request,
                 resolved,
                 turn=execution.turn,
@@ -960,7 +1084,12 @@ async def run_approval_resume(
         async def commit(events: Sequence[NewEvent]) -> None:
             await execution.append(
                 [
-                    with_origin(event, request.origin_turn, request.origin_step, "approval")
+                    with_origin(
+                        event,
+                        request.origin_turn,
+                        request.origin_step,
+                        "approval",
+                    )
                     for event in events
                 ]
             )
@@ -983,7 +1112,9 @@ async def run_approval_resume(
             approval_checked=True,
         )
         if batch.budget_reason:
-            return await TurnFinalizer(frame).budget_failure(batch.budget_reason)
+            return await TurnFinalizer(frame).budget_failure(
+                batch.budget_reason
+            )
         if batch.issues:
             raise InvariantViolation("Approved batch could not be admitted")
         outcomes = batch.outcomes
@@ -992,9 +1123,15 @@ async def run_approval_resume(
     else:
         validated, issues = context.tools.validate(calls)
         if issues:
-            raise InvariantViolation("; ".join(issue.message for issue in issues))
+            raise InvariantViolation(
+                "; ".join(issue.message for issue in issues)
+            )
         outcomes = tuple(
-            (item.call, item.spec, Skipped(decision_cause or "Rejected by approval"))
+            (
+                item.call,
+                item.spec,
+                Skipped(decision_cause or "Rejected by approval"),
+            )
             for item in validated
         )
         blocked = frozenset()
@@ -1024,7 +1161,9 @@ async def run_approval_resume(
         BatchAction.FAILED: TurnStatus.FAILED,
     }
     if settled.action in terminal:
-        return await finalizer.finalize(terminal[settled.action], settled.error, facts=events)
+        return await finalizer.finalize(
+            terminal[settled.action], settled.error, facts=events
+        )
     if settled.action == BatchAction.FINALIZE:
         await execution.append(events)
         outcome = await finalizer.finish_success(settled.final_content)
@@ -1056,7 +1195,9 @@ async def run_approval_resume(
     return await TurnDriver(frame).run()
 
 
-def has_successful_reconciliation(events: Sequence[Event], operation_id: str) -> bool:
+def has_successful_reconciliation(
+    events: Sequence[Event], operation_id: str
+) -> bool:
     return any(
         event.event_type == EventType.RECONCILIATION_RESULT
         and event.payload.get("operation_id") == operation_id
@@ -1066,7 +1207,10 @@ def has_successful_reconciliation(events: Sequence[Event], operation_id: str) ->
     )
 
 
-async def run_reconciliation(frame: ExecutionFrame, operation_id: str) -> TurnOutcome:
+# bits:explain(BCS003): turn state machine; split risks order; preserve I/O
+async def run_reconciliation(
+    frame: ExecutionFrame, operation_id: str
+) -> TurnOutcome:
     context = frame.context
     history = frame.history
     original_result = next(
@@ -1080,7 +1224,9 @@ async def run_reconciliation(frame: ExecutionFrame, operation_id: str) -> TurnOu
         None,
     )
     if original_result is None:
-        raise InvariantViolation("Operation must have a recovered uncertain result")
+        raise InvariantViolation(
+            "Operation must have a recovered uncertain result"
+        )
     original = next(
         (
             event
@@ -1117,7 +1263,9 @@ async def run_reconciliation(frame: ExecutionFrame, operation_id: str) -> TurnOu
             and is_uncertain_result(event)
             for event in events
         ):
-            raise InvariantViolation("Operation must have a recovered uncertain result")
+            raise InvariantViolation(
+                "Operation must have a recovered uncertain result"
+            )
         if has_successful_reconciliation(events, operation_id):
             raise InvariantViolation("Operation is already reconciled")
 
@@ -1135,7 +1283,9 @@ async def run_reconciliation(frame: ExecutionFrame, operation_id: str) -> TurnOu
                 surface_op=SurfaceOp.APPEND,
                 payload={
                     "input_id": context.input_id,
-                    "message": message_to_data(Message(role="user", content=context.initial_input)),
+                    "message": message_to_data(
+                        Message(role="user", content=context.initial_input)
+                    ),
                 },
             ),
         ]
@@ -1143,7 +1293,10 @@ async def run_reconciliation(frame: ExecutionFrame, operation_id: str) -> TurnOu
 
     async def commit(events: Sequence[NewEvent]) -> None:
         await execution.append(
-            [with_origin(event, original.turn, original.step) for event in events]
+            [
+                with_origin(event, original.turn, original.step)
+                for event in events
+            ]
         )
 
     batch = await BatchExecutor(
@@ -1158,7 +1311,9 @@ async def run_reconciliation(frame: ExecutionFrame, operation_id: str) -> TurnOu
         cancel=execution.cancel,
         active_resources=frozenset(),
         commit=commit,
-        check_writer=lambda: context.store.check_writer(context.session_id, execution.writer_epoch),
+        check_writer=lambda: context.store.check_writer(
+            context.session_id, execution.writer_epoch
+        ),
     )
     finalizer = TurnFinalizer(frame)
     if batch.budget_reason:
@@ -1178,7 +1333,9 @@ async def run_reconciliation(frame: ExecutionFrame, operation_id: str) -> TurnOu
             sorted(
                 {
                     *original.payload.get("resources", ()),
-                    *original_result.payload.get("outcome", {}).get("resource_locks", ()),
+                    *original_result.payload.get("outcome", {}).get(
+                        "resource_locks", ()
+                    ),
                     *reconciliation_locks,
                 }
             )

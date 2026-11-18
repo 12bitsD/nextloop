@@ -3,7 +3,12 @@ from __future__ import annotations
 import pytest
 
 from nextloop.adapters.sqlite import SQLiteEventStore
-from nextloop.contracts import EventType, InvariantViolation, NewEvent, SurfaceOp
+from nextloop.contracts import (
+    EventType,
+    InvariantViolation,
+    NewEvent,
+    SurfaceOp,
+)
 
 
 @pytest.mark.asyncio
@@ -39,7 +44,9 @@ async def test_sqlite_reopen_preserves_surface_and_writer_fence(tmp_path):
     await store.append("s", epoch, 1, drafts)
     surface = await store.load_surface("s")
     assert [
-        event.payload.get("summary", event.payload.get("message", {}).get("content"))
+        event.payload.get(
+            "summary", event.payload.get("message", {}).get("content")
+        )
         for event in surface
     ] == [
         "short",
@@ -51,7 +58,9 @@ async def test_sqlite_reopen_preserves_surface_and_writer_fence(tmp_path):
     epoch2, seq2, turn2 = await reopened.attach_writer("s")
     assert (epoch2, seq2, turn2) == (2, 4, 1)
     with pytest.raises(InvariantViolation):
-        await reopened.append("s", epoch, seq2 + 1, [NewEvent(EventType.STEP_END, turn=1, step=1)])
+        await reopened.append(
+            "s", epoch, seq2 + 1, [NewEvent(EventType.STEP_END, turn=1, step=1)]
+        )
     assert len(await reopened.load_recovery("s")) == 4
     reopened.close()
 

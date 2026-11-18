@@ -44,17 +44,19 @@ def make_working_context_message(
 ) -> Message:
     if scope not in ("turn", "session"):
         raise ValueError("WorkingContext scope must be 'turn' or 'session'")
-    content = content.strip()
-    if not content:
+    stripped_content = content.strip()
+    if not stripped_content:
         raise ValueError("WorkingContext content must be non-empty")
     return Message(
         role="user",
-        content=f"[WorkingContext · {scope}]\n{content}",
+        content=f"[WorkingContext · {scope}]\n{stripped_content}",
         provider_data={"working_context": {"action": "set", "scope": scope}},
     )
 
 
-def make_clear_working_context_message(*, scope: Literal["turn", "session"] = "turn") -> Message:
+def make_clear_working_context_message(
+    *, scope: Literal["turn", "session"] = "turn"
+) -> Message:
     if scope not in ("turn", "session"):
         raise ValueError("WorkingContext scope must be 'turn' or 'session'")
     return Message(
@@ -77,6 +79,7 @@ def _capacity_reason(request_bytes: int, config: LoopConfig) -> str | None:
     return None
 
 
+# bits:explain(BCS003): event projection; split risks parity; keep hot path
 def project_events(
     events: Sequence[Event],
     *,
@@ -88,7 +91,9 @@ def project_events(
 ) -> Projection:
     facts = fold_projection_facts(events)
     rejected_steps = facts.rejected_steps
-    pending = [Message(role="user", content=item.content) for item in facts.pending]
+    pending = [
+        Message(role="user", content=item.content) for item in facts.pending
+    ]
     approval_result_seq = facts.approval_result_seq
     injected = False
     messages = [Message(role="system", content=config.system_prompt)]
@@ -105,7 +110,10 @@ def project_events(
             injected = True
         if event.event_type == EventType.COMPACTION:
             messages.append(
-                Message(role="user", content="[Task summary]\n" + str(event.payload["summary"]))
+                Message(
+                    role="user",
+                    content="[Task summary]\n" + str(event.payload["summary"]),
+                )
             )
         elif event.event_type in (
             EventType.USER_MESSAGE,
@@ -146,9 +154,13 @@ def project_events(
     )
 
 
-def make_compaction_request(projection: Projection, config: LoopConfig) -> CandidateRequest:
+def make_compaction_request(
+    projection: Projection, config: LoopConfig
+) -> CandidateRequest:
     if not config.compaction_prompt.strip():
-        raise CapacityError("Compaction is required but compaction_prompt is empty")
+        raise CapacityError(
+            "Compaction is required but compaction_prompt is empty"
+        )
     request = projection.request
     return CandidateRequest(
         session_id=request.session_id,
@@ -166,19 +178,28 @@ def make_compaction_request(projection: Projection, config: LoopConfig) -> Candi
 def _message_bytes(message: Message) -> int:
     return len(
         json.dumps(
-            message_to_data(message), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            message_to_data(message),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
         ).encode("utf-8")
     )
 
 
-def valid_compaction(summary: str, projection: Projection, *, bootstrap_count: int = 0) -> bool:
-    summary = summary.strip()
-    if not summary:
+def valid_compaction(
+    summary: str, projection: Projection, *, bootstrap_count: int = 0
+) -> bool:
+    stripped_summary = summary.strip()
+    if not stripped_summary:
         return False
     replaced = projection.request.messages[1 + bootstrap_count :]
     before_bytes = sum(_message_bytes(message) for message in replaced)
-    retained = (Message(role="user", content="[Task summary]\n" + summary),) + (
-        (projection.working_context,) if projection.working_context is not None else ()
+    retained = (
+        Message(role="user", content="[Task summary]\n" + stripped_summary),
+    ) + (
+        (projection.working_context,)
+        if projection.working_context is not None
+        else ()
     )
     after_bytes = sum(_message_bytes(message) for message in retained)
     return after_bytes < before_bytes
@@ -193,7 +214,8 @@ def _require_paired_tool_intents(events: Sequence[Event]) -> None:
     result_operations = {
         str(event.payload.get("operation_id"))
         for event in events
-        if event.event_type == EventType.TOOL_RESULT and event.payload.get("operation_id")
+        if event.event_type == EventType.TOOL_RESULT
+        and event.payload.get("operation_id")
     }
     result_coordinates = {
         (event.turn, event.step, str(event.payload.get("call_id")))
@@ -201,7 +223,10 @@ def _require_paired_tool_intents(events: Sequence[Event]) -> None:
         if event.event_type == EventType.TOOL_RESULT
     }
     for event in events:
-        if event.event_type != EventType.ASSISTANT_MESSAGE or (event.turn, event.step) in rejected:
+        if (
+            event.event_type != EventType.ASSISTANT_MESSAGE
+            or (event.turn, event.step) in rejected
+        ):
             continue
         for call in event.payload["message"].get("tool_calls", ()):
             operation_id = call.get("operation_id")
@@ -209,7 +234,9 @@ def _require_paired_tool_intents(events: Sequence[Event]) -> None:
                 continue
             coordinate = (event.turn, event.step, str(call["call_id"]))
             if coordinate not in result_coordinates:
-                raise InvariantViolation("Cannot compact across an unresolved Tool Intent")
+                raise InvariantViolation(
+                    "Cannot compact across an unresolved Tool Intent"
+                )
 
 
 def compaction_events(
@@ -229,7 +256,9 @@ def compaction_events(
             payload={
                 "summary": summary.strip(),
                 "source_seqs": (
-                    [[surface_events[0].seq, surface_events[-1].seq]] if surface_events else []
+                    [[surface_events[0].seq, surface_events[-1].seq]]
+                    if surface_events
+                    else []
                 ),
             },
         )

@@ -34,11 +34,21 @@ async def test_retry_releases_dynamic_outcome_locks():
         return Completed("done")
 
     tools.register(
-        ToolSpec("write", "Retry a write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT),
+        ToolSpec(
+            "write",
+            "Retry a write",
+            {"type": "object"},
+            effect=ToolEffect.IDEMPOTENT,
+        ),
         write,
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -68,15 +78,27 @@ async def test_uncertain_reconciliation_can_be_retried_then_closes():
         if len(attempts) == 1:
             raise InjectedCrash("original")
         if len(attempts) == 2:
-            return UncertainHanging("still unknown", resource_locks=("dynamic",))
+            return UncertainHanging(
+                "still unknown", resource_locks=("dynamic",)
+            )
         return Completed("done")
 
     tools.register(
-        ToolSpec("write", "Retry a write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT),
+        ToolSpec(
+            "write",
+            "Retry a write",
+            {"type": "object"},
+            effect=ToolEffect.IDEMPOTENT,
+        ),
         write,
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -102,7 +124,8 @@ async def test_uncertain_reconciliation_can_be_retried_then_closes():
     assert len(attempts) == 3
     with pytest.raises(InvariantViolation, match="already reconciled"):
         await loop.retry_operation(
-            context(store, FakeProvider([]), tools, FakeDelivery()), operation_id
+            context(store, FakeProvider([]), tools, FakeDelivery()),
+            operation_id,
         )
 
 
@@ -118,11 +141,21 @@ async def test_concurrent_reconciliation_has_one_winner():
         return Completed("done")
 
     tools.register(
-        ToolSpec("write", "Retry a write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT),
+        ToolSpec(
+            "write",
+            "Retry a write",
+            {"type": "object"},
+            effect=ToolEffect.IDEMPOTENT,
+        ),
         write,
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -136,13 +169,28 @@ async def test_concurrent_reconciliation_has_one_winner():
     )
 
     outcomes = await asyncio.gather(
-        loop.retry_operation(context(store, FakeProvider([]), tools, FakeDelivery()), operation_id),
-        loop.retry_operation(context(store, FakeProvider([]), tools, FakeDelivery()), operation_id),
+        loop.retry_operation(
+            context(store, FakeProvider([]), tools, FakeDelivery()),
+            operation_id,
+        ),
+        loop.retry_operation(
+            context(store, FakeProvider([]), tools, FakeDelivery()),
+            operation_id,
+        ),
         return_exceptions=True,
     )
 
-    assert sum(isinstance(outcome, InvariantViolation) for outcome in outcomes) == 1
+    assert (
+        sum(isinstance(outcome, InvariantViolation) for outcome in outcomes)
+        == 1
+    )
     assert sum(not isinstance(outcome, Exception) for outcome in outcomes) == 1
     assert len(attempts) == 2
     events = await store.load_recovery("s")
-    assert sum(event.event_type == EventType.RECONCILIATION_RESULT for event in events) == 1
+    assert (
+        sum(
+            event.event_type == EventType.RECONCILIATION_RESULT
+            for event in events
+        )
+        == 1
+    )

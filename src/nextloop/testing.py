@@ -50,7 +50,12 @@ class InjectedCrash(BaseException):
 
 class _FaultInjector:
     def _init_fault(
-        self, *, fail_at: int | None, after_effect: bool, exception: BaseException
+        self,
+        *,
+        fail_at: int | None,
+        # bits:allow(BCS004): established API/test-double signature
+        after_effect: bool,
+        exception: BaseException,
     ) -> None:
         if fail_at is not None and fail_at < 1:
             raise ValueError("fail_at must be positive")
@@ -66,8 +71,12 @@ class _FaultInjector:
     def _after_effect(self) -> None:
         self._raise_if_needed(True)
 
+    # bits:allow(BCS004): established API/test-double signature
     def _raise_if_needed(self, after_effect: bool) -> None:
-        if self.calls == self._fail_at and self._raise_after_effect == after_effect:
+        if (
+            self.calls == self._fail_at
+            and self._raise_after_effect == after_effect
+        ):
             raise self._exception
 
 
@@ -77,6 +86,7 @@ class FaultInjectingEventStore(_FaultInjector):
         store: EventStore,
         *,
         fail_at: int | None = None,
+        # bits:allow(BCS004): established API/test-double signature
         after_commit: bool = False,
         exception: BaseException | None = None,
     ) -> None:
@@ -93,7 +103,12 @@ class FaultInjectingEventStore(_FaultInjector):
     async def delete_session(self, session_id: str) -> None:
         await self._store.delete_session(session_id)
 
-    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
+    async def attach_writer(
+        self,
+        session_id: str,
+        *,
+        force: bool = False,  # bits:allow(BCS004): established API
+    ) -> tuple[int, int, int]:
         return await self._store.attach_writer(session_id, force=force)
 
     async def attach_writer_checked(
@@ -101,13 +116,18 @@ class FaultInjectingEventStore(_FaultInjector):
         session_id: str,
         check: HistoryCheck,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool = False,
         initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
         if initial_events:
             self._before_effect()
         result = await attach_writer_with_check(
-            self._store, session_id, check, force=force, initial_events=initial_events
+            self._store,
+            session_id,
+            check,
+            force=force,
+            initial_events=initial_events,
         )
         if initial_events:
             self._after_effect()
@@ -138,7 +158,9 @@ class FaultInjectingEventStore(_FaultInjector):
         events: Sequence[NewEvent],
     ) -> Sequence[Event]:
         self._before_effect()
-        committed = await self._store.append(session_id, writer_epoch, expected_seq, events)
+        committed = await self._store.append(
+            session_id, writer_epoch, expected_seq, events
+        )
         self._after_effect()
         return committed
 
@@ -161,6 +183,7 @@ class FaultInjectingToolRuntime(_FaultInjector):
         runtime: ToolRuntime,
         *,
         fail_at: int | None = None,
+        # bits:allow(BCS004): established API/test-double signature
         after_execute: bool = False,
         exception: BaseException | None = None,
     ) -> None:
@@ -208,13 +231,15 @@ class FaultInjectingDeliveryOwner(_FaultInjector):
         delivery: DeliveryOwner,
         *,
         fail_at: int | None = None,
+        # bits:allow(BCS004): established API/test-double signature
         after_delivery: bool = False,
         exception: BaseException | None = None,
     ) -> None:
         self._init_fault(
             fail_at=fail_at,
             after_effect=after_delivery,
-            exception=exception or InjectedCrash("Injected DeliveryOwner crash"),
+            exception=exception
+            or InjectedCrash("Injected DeliveryOwner crash"),
         )
         self._delivery = delivery
 
@@ -235,12 +260,16 @@ class UncheckedWriterStore(InMemoryEventStore):
         expected_seq: int,
         events: Sequence[NewEvent],
     ) -> Sequence[Event]:
-        return await super().append(session_id, self._epochs[session_id], expected_seq, events)
+        return await super().append(
+            session_id, self._epochs[session_id], expected_seq, events
+        )
 
 
 class DuplicateEventIdStore(InMemoryEventStore):
     @staticmethod
-    def _idempotent(existing: list[Event], drafts: Sequence[NewEvent]) -> Sequence[Event]:
+    def _idempotent(
+        existing: list[Event], drafts: Sequence[NewEvent]
+    ) -> Sequence[Event]:
         by_id = {event.event_id: event for event in existing}
         committed = tuple(
             replace(by_id[draft.event_id], seq=len(existing) + offset)
@@ -286,7 +315,9 @@ async def check_event_store(
     assert [event.seq for event in committed] == [1, 2]
     assert await store.session_ids() == (session_id,)
     repeated = await store.append(session_id, epoch, 1, drafts)
-    assert [event.event_id for event in repeated] == [event.event_id for event in committed]
+    assert [event.event_id for event in repeated] == [
+        event.event_id for event in committed
+    ]
     assert len(await store.load_recovery(session_id)) == 2
 
     changed = NewEvent(
@@ -297,7 +328,9 @@ async def check_event_store(
         surface_op=SurfaceOp.APPEND,
         payload={"message": {"role": "user", "content": "changed"}},
     )
-    await _expect_invariant(store.append(session_id, epoch, 1, [drafts[0], changed]))
+    await _expect_invariant(
+        store.append(session_id, epoch, 1, [drafts[0], changed])
+    )
     assert len(await store.load_recovery(session_id)) == 2
 
     next_epoch, _, _ = await store.attach_writer(session_id)
@@ -318,7 +351,11 @@ async def check_event_store(
         session_id,
         next_epoch,
         3,
-        [NewEvent(EventType.COMPACTION, turn=1, step=1, surface_op=SurfaceOp.EPOCH)],
+        [
+            NewEvent(
+                EventType.COMPACTION, turn=1, step=1, surface_op=SurfaceOp.EPOCH
+            )
+        ],
     )
     await store.append(
         session_id,
@@ -343,7 +380,12 @@ async def check_event_store(
 
     failed_batch = [
         NewEvent(EventType.STEP_END, turn=1, step=1),
-        NewEvent(EventType.STEP_START, turn=1, step=2, payload={"bad": Unserializable()}),
+        NewEvent(
+            EventType.STEP_START,
+            turn=1,
+            step=2,
+            payload={"bad": Unserializable()},
+        ),
     ]
     failed = False
     try:

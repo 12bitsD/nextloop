@@ -8,7 +8,10 @@ from nextloop import SkillError, SkillRegistry, skill_view
 
 
 def write_skill(
-    directory: Path, name="coding", description="用于代码修改与验证", body="先读代码，再运行测试。"
+    directory: Path,
+    name="coding",
+    description="用于代码修改与验证",
+    body="先读代码，再运行测试。",
 ):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "SKILL.md"
@@ -50,7 +53,9 @@ def test_direct_file_and_current_body_on_next_load(tmp_path):
     registry = SkillRegistry([path])
     assert registry.load("coding").body == "先读代码，再运行测试。"
 
-    path.write_text(path.read_text().replace("先读代码，再运行测试。", "修改后重新验证。"))
+    path.write_text(
+        path.read_text().replace("先读代码，再运行测试。", "修改后重新验证。")
+    )
     assert registry.load("coding").body == "修改后重新验证。"
 
 

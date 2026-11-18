@@ -32,7 +32,10 @@ async def test_surface_is_loaded_once_per_turn():
             store,
             FakeProvider(
                 [
-                    ModelResponse(tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS),
+                    ModelResponse(
+                        tool_calls=(call(),),
+                        finish_reason=FinishReason.TOOL_CALLS,
+                    ),
                     ModelResponse(content="one"),
                 ]
             ),
@@ -41,7 +44,12 @@ async def test_surface_is_loaded_once_per_turn():
         )
     )
     second = await loop.run(
-        context(store, FakeProvider([ModelResponse(content="two")]), registry(), FakeDelivery())
+        context(
+            store,
+            FakeProvider([ModelResponse(content="two")]),
+            registry(),
+            FakeDelivery(),
+        )
     )
 
     assert first.status == TurnStatus.SUCCEEDED
@@ -52,7 +60,9 @@ async def test_surface_is_loaded_once_per_turn():
 @pytest.mark.asyncio
 async def test_compaction_reuses_committed_surface_snapshot():
     store = CountingStore()
-    provider = FakeProvider([ModelResponse(content="short summary"), ModelResponse(content="done")])
+    provider = FakeProvider(
+        [ModelResponse(content="short summary"), ModelResponse(content="done")]
+    )
 
     outcome = await AgentLoop().run(
         context(
@@ -61,10 +71,17 @@ async def test_compaction_reuses_committed_surface_snapshot():
             registry(),
             FakeDelivery(),
             initial_input="x" * 5000,
-            config=config(compaction_prompt="compact", context_window=1000, output_reserve=0),
+            config=config(
+                compaction_prompt="compact",
+                context_window=1000,
+                output_reserve=0,
+            ),
         )
     )
 
     assert outcome.status == TurnStatus.SUCCEEDED
     assert store.surface_reads == 1
-    assert provider.requests[1].messages[-1].content == "[Task summary]\nshort summary"
+    assert (
+        provider.requests[1].messages[-1].content
+        == "[Task summary]\nshort summary"
+    )

@@ -104,7 +104,11 @@ class ScriptedProvider:
         if request.step == 1:
             emit({"channel": "tool_call", "index": 0, "call_id": "echo-1"})
             return ModelResponse(
-                tool_calls=(ToolCall("echo-1", "echo", '{"text":"sensitive-tool-output"}'),),
+                tool_calls=(
+                    ToolCall(
+                        "echo-1", "echo", '{"text":"sensitive-tool-output"}'
+                    ),
+                ),
                 finish_reason=FinishReason.TOOL_CALLS,
             )
         emit({"channel": "content", "delta": "hello"})
@@ -140,12 +144,16 @@ def make_spec() -> HarnessSpec:
             api_key_env="UNUSED_KEY",
         ),
         store=StoreConfig(driver="memory"),
-        loop=LoopConfig(system_prompt="Complete the requested Tool round trip."),
+        loop=LoopConfig(
+            system_prompt="Complete the requested Tool round trip."
+        ),
     )
 
 
 async def run_demo(outbox_path: Path) -> dict:
-    await asyncio.to_thread(outbox_path.parent.mkdir, parents=True, exist_ok=True)
+    await asyncio.to_thread(
+        outbox_path.parent.mkdir, parents=True, exist_ok=True
+    )
     online = MetadataExporter()
     replay = MetadataExporter()
     harness = Harness(
@@ -157,7 +165,9 @@ async def run_demo(outbox_path: Path) -> dict:
         exporter=online,
     )
     try:
-        outcome = await harness.run("Run the demo", input_id="observability-demo-1")
+        outcome = await harness.run(
+            "Run the demo", input_id="observability-demo-1"
+        )
     finally:
         await harness.close()
         online.close()

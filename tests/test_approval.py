@@ -33,7 +33,10 @@ def approval_tools(invoked):
 
     tools.register(
         ToolSpec(
-            "write", "Write after approval", {"type": "object"}, approval=ApprovalPolicy("v1")
+            "write",
+            "Write after approval",
+            {"type": "object"},
+            approval=ApprovalPolicy("v1"),
         ),
         write,
     )
@@ -52,7 +55,10 @@ async def test_approval_suspends_then_resume_dispatches_original_operation():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -88,9 +94,14 @@ async def test_approval_suspends_then_resume_dispatches_original_operation():
     assert dispatched.payload["operation_id"] == operation_id
     assert result.payload["operation_id"] == operation_id
     assert (result.turn, result.step) == (2, 1)
-    assert (result.payload["origin_turn"], result.payload["origin_step"]) == (1, 1)
+    assert (result.payload["origin_turn"], result.payload["origin_step"]) == (
+        1,
+        1,
+    )
     tool_trace = next(
-        record for record in project_traces(events) if isinstance(record, ToolCallTrace)
+        record
+        for record in project_traces(events)
+        if isinstance(record, ToolCallTrace)
     )
     assert tool_trace.operation_id == operation_id
     assert (tool_trace.origin_turn, tool_trace.origin_step) == (1, 1)
@@ -113,7 +124,9 @@ async def test_any_rejection_skips_the_whole_batch_before_new_input():
     )
     pending = await loop.run(context(store, provider, tools, FakeDelivery()))
     assert pending.status == "approval_pending"
-    request = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[0]
+    request = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0]
     first, second = [item["operation_id"] for item in request.payload["items"]]
 
     resumed = await loop.resume(
@@ -127,7 +140,9 @@ async def test_any_rejection_skips_the_whole_batch_before_new_input():
     assert approval_events(events, EventType.TOOL_CALL) == []
     results = approval_events(events, EventType.TOOL_RESULT)
     assert len(results) == 2
-    assert all(event.payload["outcome"]["kind"] == "skipped" for event in results)
+    assert all(
+        event.payload["outcome"]["kind"] == "skipped" for event in results
+    )
     assert all(event.payload["origin_turn"] == 1 for event in results)
     assert provider.requests[1].messages[-1].content == "do the task"
 
@@ -136,11 +151,16 @@ async def test_any_rejection_skips_the_whole_batch_before_new_input():
 async def test_crash_after_approval_request_does_not_skip_intent():
     invoked = []
     tools = approval_tools(invoked)
-    store = FaultInjectingEventStore(InMemoryEventStore(), fail_at=4, after_commit=True)
+    store = FaultInjectingEventStore(
+        InMemoryEventStore(), fail_at=4, after_commit=True
+    )
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -150,12 +170,16 @@ async def test_crash_after_approval_request_does_not_skip_intent():
     recovered = await loop.recover("s", store, FakeDelivery())
 
     assert recovered.interrupted_turns == (1,)
-    assert approval_events(await store.load_recovery("s"), EventType.TOOL_RESULT) == []
-    operation_id = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    assert (
+        approval_events(await store.load_recovery("s"), EventType.TOOL_RESULT)
+        == []
+    )
+    operation_id = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
     resumed = await loop.resume(
-        context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+        context(store, provider, tools, FakeDelivery()),
+        decisions={operation_id: True},
     )
     assert resumed.status == "succeeded"
     assert len(invoked) == 1
@@ -169,31 +193,42 @@ async def test_crash_after_grant_can_resume_without_duplicate_dispatch():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
     pending = await loop.run(context(base, provider, tools, FakeDelivery()))
     assert pending.status == "approval_pending"
-    operation_id = approval_events(await base.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await base.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
     store = FaultInjectingEventStore(base, fail_at=2, after_commit=True)
 
     with pytest.raises(InjectedCrash):
         await loop.resume(
-            context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(store, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         )
 
     await loop.recover("s", base, FakeDelivery())
-    assert approval_events(await base.load_recovery("s"), EventType.TOOL_CALL) == []
+    assert (
+        approval_events(await base.load_recovery("s"), EventType.TOOL_CALL)
+        == []
+    )
     resumed = await loop.resume(
-        context(base, provider, tools, FakeDelivery()), decisions={operation_id: True}
+        context(base, provider, tools, FakeDelivery()),
+        decisions={operation_id: True},
     )
 
     assert resumed.status == "succeeded"
     assert len(invoked) == 1
-    assert len(approval_events(await base.load_recovery("s"), EventType.TOOL_CALL)) == 1
+    assert (
+        len(approval_events(await base.load_recovery("s"), EventType.TOOL_CALL))
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -203,15 +238,24 @@ async def test_cancel_invalidates_pending_approval():
     store = InMemoryEventStore()
     loop = AgentLoop()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     await loop.run(context(store, provider, tools, FakeDelivery()))
 
     assert await loop.cancel("s")
 
-    assert approval_events(await store.load_recovery("s"), EventType.APPROVAL_CANCELLED)
+    assert approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_CANCELLED
+    )
     with pytest.raises(InvariantViolation, match="No pending approval"):
-        await loop.resume(context(store, provider, tools, FakeDelivery()), reject_all=True)
+        await loop.resume(
+            context(store, provider, tools, FakeDelivery()), reject_all=True
+        )
     assert invoked == []
 
 
@@ -232,13 +276,18 @@ async def test_expired_approval_is_rejected_lazily_without_new_events():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="expired"),
         ]
     )
     await loop.run(context(store, provider, tools, FakeDelivery()))
 
-    resumed = await loop.resume(context(store, provider, tools, FakeDelivery()), reject_all=True)
+    resumed = await loop.resume(
+        context(store, provider, tools, FakeDelivery()), reject_all=True
+    )
 
     assert resumed.status == "succeeded"
     assert invoked == []
@@ -259,21 +308,26 @@ async def test_concurrent_resume_dispatches_only_once():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
     await loop.run(context(store, provider, tools, FakeDelivery()))
-    operation_id = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
 
     outcomes = await asyncio.gather(
         loop.resume(
-            context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(store, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         ),
         loop.resume(
-            context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(store, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         ),
         return_exceptions=True,
     )
@@ -288,7 +342,10 @@ async def test_approval_result_compaction_preserves_cross_turn_lineage():
     tools = ToolRegistry()
     tools.register(
         ToolSpec(
-            "write", "Write after approval", {"type": "object"}, approval=ApprovalPolicy("v1")
+            "write",
+            "Write after approval",
+            {"type": "object"},
+            approval=ApprovalPolicy("v1"),
         ),
         lambda arguments, ctx: Completed("x" * 5000),
     )
@@ -296,7 +353,10 @@ async def test_approval_result_compaction_preserves_cross_turn_lineage():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="short summary"),
             ModelResponse(content="done"),
         ]
@@ -307,13 +367,17 @@ async def test_approval_result_compaction_preserves_cross_turn_lineage():
             provider,
             tools,
             FakeDelivery(),
-            config=config(compaction_prompt="compact", context_window=1000, output_reserve=0),
+            config=config(
+                compaction_prompt="compact",
+                context_window=1000,
+                output_reserve=0,
+            ),
         )
     )
     assert pending.status == "approval_pending"
-    operation_id = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
 
     resumed = await loop.resume(
         context(
@@ -321,7 +385,11 @@ async def test_approval_result_compaction_preserves_cross_turn_lineage():
             provider,
             tools,
             FakeDelivery(),
-            config=config(compaction_prompt="compact", context_window=1000, output_reserve=0),
+            config=config(
+                compaction_prompt="compact",
+                context_window=1000,
+                output_reserve=0,
+            ),
         ),
         decisions={operation_id: True},
     )
@@ -333,29 +401,36 @@ async def test_approval_result_compaction_preserves_cross_turn_lineage():
     last_user_seq = max(
         event.seq
         for event in events
-        if event.seq < compaction.seq and event.event_type == EventType.USER_MESSAGE
+        if event.seq < compaction.seq
+        and event.event_type == EventType.USER_MESSAGE
     )
     assert compaction.payload["source_seqs"] == [[1, last_user_seq]]
 
 
 @pytest.mark.asyncio
-async def test_crash_after_approved_tool_call_recovers_uncertain_without_replay():
+async def test_approved_tool_call_crash_recovers_uncertain_without_replay():
     invoked = []
     tools = approval_tools(invoked)
     base = InMemoryEventStore()
     loop = AgentLoop()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     await loop.run(context(base, provider, tools, FakeDelivery()))
-    operation_id = approval_events(await base.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await base.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
     store = FaultInjectingEventStore(base, fail_at=3, after_commit=True)
 
     with pytest.raises(InjectedCrash):
         await loop.resume(
-            context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(store, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         )
 
     recovered = await loop.recover("s", base, FakeDelivery())
@@ -368,10 +443,14 @@ async def test_crash_after_approved_tool_call_recovers_uncertain_without_replay(
     result = approval_events(events, EventType.TOOL_RESULT)[0]
     assert result.payload["outcome"]["kind"] == "uncertain_hanging"
     assert result.payload["origin_kind"] == "approval"
-    assert (result.payload["origin_turn"], result.payload["origin_step"]) == (1, 1)
+    assert (result.payload["origin_turn"], result.payload["origin_step"]) == (
+        1,
+        1,
+    )
     with pytest.raises(InvariantViolation, match="No pending approval"):
         await loop.resume(
-            context(base, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(base, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         )
     assert invoked == []
 
@@ -384,7 +463,10 @@ async def test_reject_all_with_new_input_exits_without_side_effects():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="new path"),
         ]
     )
@@ -398,7 +480,9 @@ async def test_reject_all_with_new_input_exits_without_side_effects():
 
     assert resumed.status == "succeeded"
     assert invoked == []
-    assert provider.requests[1].messages[-1].content == "use a different approach"
+    assert (
+        provider.requests[1].messages[-1].content == "use a different approach"
+    )
 
 
 @pytest.mark.asyncio
@@ -409,7 +493,10 @@ async def test_resume_rejects_changed_policy_version_without_dispatch():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -420,14 +507,21 @@ async def test_resume_rejects_changed_policy_version_without_dispatch():
     tools_v2 = ToolRegistry()
     tools_v2.register(
         ToolSpec(
-            "write", "Write after approval", {"type": "object"}, approval=ApprovalPolicy("v2")
+            "write",
+            "Write after approval",
+            {"type": "object"},
+            approval=ApprovalPolicy("v2"),
         ),
-        lambda arguments, ctx: invoked.append(arguments) or Completed("written-v2"),
+        lambda arguments, ctx: (
+            invoked.append(arguments) or Completed("written-v2")
+        ),
     )
 
     with pytest.raises(InvariantViolation, match="policy"):
         await loop.resume(
-            context(store, provider, tools_v2, FakeDelivery(), input_id="resume-v2"),
+            context(
+                store, provider, tools_v2, FakeDelivery(), input_id="resume-v2"
+            ),
             decisions={operation_id: True},
         )
 
@@ -444,7 +538,9 @@ async def test_resume_rejects_changed_policy_version_without_dispatch():
     mixed_tools = approval_tools(mixed_invoked)
     ordinary = []
     mixed_tools.register(
-        ToolSpec("read", "Ordinary Tool needing no approval", {"type": "object"}),
+        ToolSpec(
+            "read", "Ordinary Tool needing no approval", {"type": "object"}
+        ),
         lambda arguments, ctx: ordinary.append(arguments) or "ordinary result",
     )
     mixed_store = InMemoryEventStore()
@@ -457,13 +553,25 @@ async def test_resume_rejects_changed_policy_version_without_dispatch():
             ModelResponse(content="mixed done"),
         ]
     )
-    await loop.run(context(mixed_store, mixed_provider, mixed_tools, FakeDelivery()))
+    await loop.run(
+        context(mixed_store, mixed_provider, mixed_tools, FakeDelivery())
+    )
     mixed_events = await mixed_store.load_recovery("s")
-    mixed_request = approval_events(mixed_events, EventType.APPROVAL_REQUESTED)[0]
-    decisions = {item["operation_id"]: True for item in mixed_request.payload["items"]}
+    mixed_request = approval_events(mixed_events, EventType.APPROVAL_REQUESTED)[
+        0
+    ]
+    decisions = {
+        item["operation_id"]: True for item in mixed_request.payload["items"]
+    }
 
     resumed = await loop.resume(
-        context(mixed_store, mixed_provider, mixed_tools, FakeDelivery(), input_id="mixed-resume"),
+        context(
+            mixed_store,
+            mixed_provider,
+            mixed_tools,
+            FakeDelivery(),
+            input_id="mixed-resume",
+        ),
         decisions=decisions,
     )
 

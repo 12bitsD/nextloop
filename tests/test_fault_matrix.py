@@ -26,7 +26,9 @@ class PauseAfterToolCallStore(InMemoryEventStore):
         self.resume_old_writer = asyncio.Event()
 
     async def append(self, session_id, writer_epoch, expected_seq, events):
-        committed = await super().append(session_id, writer_epoch, expected_seq, events)
+        committed = await super().append(
+            session_id, writer_epoch, expected_seq, events
+        )
         if any(event.event_type == EventType.TOOL_CALL for event in committed):
             self.tool_call_committed.set()
             await self.resume_old_writer.wait()
@@ -37,14 +39,21 @@ class PauseAfterToolCallStore(InMemoryEventStore):
 async def test_takeover_after_tool_call_commit_prevents_old_dispatch():
     store = PauseAfterToolCallStore()
     invoked = []
-    tools = registry(write_handler=lambda arguments, ctx: invoked.append(arguments))
+    tools = registry(
+        write_handler=lambda arguments, ctx: invoked.append(arguments)
+    )
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="unreachable"),
         ]
     )
-    old_run = asyncio.create_task(AgentLoop().run(context(store, provider, tools, FakeDelivery())))
+    old_run = asyncio.create_task(
+        AgentLoop().run(context(store, provider, tools, FakeDelivery()))
+    )
     await asyncio.wait_for(store.tool_call_committed.wait(), timeout=1)
     await store.attach_writer("s")
 
@@ -71,8 +80,12 @@ def base_store(request, tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_at", range(1, 14))
 @pytest.mark.parametrize("after_commit", [False, True])
-async def test_every_append_crash_recovers_without_replay(base_store, fail_at, after_commit):
-    store = FaultInjectingEventStore(base_store, fail_at=fail_at, after_commit=after_commit)
+async def test_every_append_crash_recovers_without_replay(
+    base_store, fail_at, after_commit
+):
+    store = FaultInjectingEventStore(
+        base_store, fail_at=fail_at, after_commit=after_commit
+    )
     loop = AgentLoop()
     invoked = []
 
@@ -83,7 +96,10 @@ async def test_every_append_crash_recovers_without_replay(base_store, fail_at, a
 
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -108,7 +124,9 @@ async def test_every_append_crash_recovers_without_replay(base_store, fail_at, a
 
     started = any(event.event_type == EventType.TURN_START for event in before)
     closed = any(event.event_type == EventType.TURN_END for event in before)
-    assert recovered.interrupted_turns == ((1,) if started and not closed else ())
+    assert recovered.interrupted_turns == (
+        (1,) if started and not closed else ()
+    )
     assert await recovery_loop.pending_inputs("s", base_store) == pending_before
 
     events = await base_store.load_recovery("s")
@@ -117,11 +135,13 @@ async def test_every_append_crash_recovers_without_replay(base_store, fail_at, a
         and event.payload["message"].get("tool_calls")
         for event in before
     )
-    results = [event for event in events if event.event_type == EventType.TOOL_RESULT]
+    results = [
+        event for event in events if event.event_type == EventType.TOOL_RESULT
+    ]
     assert len(results) == int(proposed)
-    unresolved = any(event.event_type == EventType.TOOL_CALL for event in before) and not any(
-        event.event_type == EventType.TOOL_RESULT for event in before
-    )
+    unresolved = any(
+        event.event_type == EventType.TOOL_CALL for event in before
+    ) and not any(event.event_type == EventType.TOOL_RESULT for event in before)
     expected_locks = frozenset({"workspace"}) if unresolved else frozenset()
     assert recovered.active_resource_locks == expected_locks
 
@@ -142,7 +162,9 @@ async def test_every_append_crash_recovers_without_replay(base_store, fail_at, a
     ] == expected_delivery
 
     invocation_count = len(invoked)
-    recovered_again = await recovery_loop.recover("s", base_store, recovered_delivery)
+    recovered_again = await recovery_loop.recover(
+        "s", base_store, recovered_delivery
+    )
     assert recovered_again.interrupted_turns == ()
     assert recovered_again.active_resource_locks == expected_locks
     assert recovered_again.delivered_final_ids == ()
@@ -163,24 +185,30 @@ async def test_every_append_crash_recovers_without_replay(base_store, fail_at, a
     )
     assert next_outcome.status == "succeeded"
     completed = any(
-        event.event_type == EventType.TURN_END and event.payload.get("status") == "succeeded"
+        event.event_type == EventType.TURN_END
+        and event.payload.get("status") == "succeeded"
         for event in before
     )
     if completed:
         assert next_provider.requests == []
         assert len(recovered_delivery.messages) == len(expected_delivery)
     else:
-        contents = [message.content for message in next_provider.requests[0].messages]
+        contents = [
+            message.content for message in next_provider.requests[0].messages
+        ]
         historical_inputs = [
             event
             for event in before
-            if event.event_type == EventType.USER_MESSAGE and "input_id" in event.payload
+            if event.event_type == EventType.USER_MESSAGE
+            and "input_id" in event.payload
         ]
         historical_initial = sum(
-            event.payload["input_id"] == "initial-1" for event in historical_inputs
+            event.payload["input_id"] == "initial-1"
+            for event in historical_inputs
         )
         historical_steer = sum(
-            event.payload["input_id"] == "steer-1" for event in historical_inputs
+            event.payload["input_id"] == "steer-1"
+            for event in historical_inputs
         )
         assert contents.count("do the task") == historical_initial + 1
         assert contents.count("follow up") == historical_steer + int(
@@ -190,7 +218,9 @@ async def test_every_append_crash_recovers_without_replay(base_store, fail_at, a
     assert len(invoked) == invocation_count
 
     final_events = await base_store.load_recovery("s")
-    assert [event.seq for event in final_events] == list(range(1, len(final_events) + 1))
+    assert [event.seq for event in final_events] == list(
+        range(1, len(final_events) + 1)
+    )
     event_ids = [event.event_id for event in final_events]
     assert len(event_ids) == len(set(event_ids))
 
@@ -209,10 +239,19 @@ async def test_late_tool_result_after_takeover_is_not_committed():
         return Completed("late result")
 
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     old_run = asyncio.create_task(
-        AgentLoop().run(context(store, provider, registry(write_handler=write), FakeDelivery()))
+        AgentLoop().run(
+            context(
+                store, provider, registry(write_handler=write), FakeDelivery()
+            )
+        )
     )
     await asyncio.wait_for(started.wait(), timeout=1)
     await store.attach_writer("s")
@@ -222,7 +261,8 @@ async def test_late_tool_result_after_takeover_is_not_committed():
         await old_run
 
     assert not any(
-        event.event_type == EventType.TOOL_RESULT for event in await store.load_recovery("s")
+        event.event_type == EventType.TOOL_RESULT
+        for event in await store.load_recovery("s")
     )
     recovered = await AgentLoop().recover("s", store, FakeDelivery())
     assert recovered.active_resource_locks == frozenset({"workspace"})
@@ -231,9 +271,15 @@ async def test_late_tool_result_after_takeover_is_not_committed():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("after_commit", [False, True])
-async def test_compaction_commit_crash_preserves_only_durable_facts(after_commit):
-    store = FaultInjectingEventStore(InMemoryEventStore(), fail_at=4, after_commit=after_commit)
-    provider = FakeProvider([ModelResponse(content="short summary"), ModelResponse(content="done")])
+async def test_compaction_commit_crash_preserves_only_durable_facts(
+    after_commit,
+):
+    store = FaultInjectingEventStore(
+        InMemoryEventStore(), fail_at=4, after_commit=after_commit
+    )
+    provider = FakeProvider(
+        [ModelResponse(content="short summary"), ModelResponse(content="done")]
+    )
 
     with pytest.raises(InjectedCrash):
         await AgentLoop().run(
@@ -243,15 +289,24 @@ async def test_compaction_commit_crash_preserves_only_durable_facts(after_commit
                 registry(),
                 FakeDelivery(),
                 initial_input="x" * 5000,
-                config=config(compaction_prompt="compact", context_window=1000, output_reserve=0),
+                config=config(
+                    compaction_prompt="compact",
+                    context_window=1000,
+                    output_reserve=0,
+                ),
             )
         )
 
     before = await store.load_recovery("s")
-    assert any(event.event_type == EventType.COMPACTION for event in before) == after_commit
+    assert (
+        any(event.event_type == EventType.COMPACTION for event in before)
+        == after_commit
+    )
     recovered = await AgentLoop().recover("s", store, FakeDelivery())
     assert recovered.interrupted_turns == (1,)
     events = await store.load_recovery("s")
-    assert sum(event.event_type == EventType.COMPACTION for event in events) == int(after_commit)
+    assert sum(
+        event.event_type == EventType.COMPACTION for event in events
+    ) == int(after_commit)
     assert events[-1].event_type == EventType.TURN_END
     assert events[-1].payload["status"] == "interrupted"

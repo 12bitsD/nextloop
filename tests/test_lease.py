@@ -37,13 +37,18 @@ def stores(request, tmp_path):
     if request.param == "memory":
 
         def factory(owner):
-            return InMemoryEventStore(owner_id=owner, lease_seconds=10, clock=clock)
+            return InMemoryEventStore(
+                owner_id=owner, lease_seconds=10, clock=clock
+            )
 
     else:
 
         def factory(owner):
             return SQLiteEventStore(
-                str(tmp_path / "lease.sqlite3"), owner_id=owner, lease_seconds=10, clock=clock
+                str(tmp_path / "lease.sqlite3"),
+                owner_id=owner,
+                lease_seconds=10,
+                clock=clock,
             )
 
     return factory, clock, request.param
@@ -124,7 +129,10 @@ async def test_heartbeat_renews_lease_during_long_tool():
 
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -150,8 +158,12 @@ async def test_expired_writer_cannot_dispatch_after_resume():
             return None
 
         async def append(self, session_id, writer_epoch, expected_seq, events):
-            committed = await super().append(session_id, writer_epoch, expected_seq, events)
-            if any(event.event_type == EventType.TOOL_CALL for event in committed):
+            committed = await super().append(
+                session_id, writer_epoch, expected_seq, events
+            )
+            if any(
+                event.event_type == EventType.TOOL_CALL for event in committed
+            ):
                 self.committed.set()
                 await self.resume.wait()
             return committed
@@ -159,7 +171,12 @@ async def test_expired_writer_cannot_dispatch_after_resume():
     store = PauseStore()
     invoked = []
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     task = asyncio.create_task(
         AgentLoop().run(
@@ -184,8 +201,12 @@ async def test_expired_writer_cannot_dispatch_after_resume():
 async def test_steer_result_distinguishes_input_rejections():
     loop = AgentLoop()
     store = InMemoryEventStore()
-    assert (await loop.steer_result("s", "missing")).status == SteerStatus.SESSION_MISSING
-    assert (await loop.steer_result("s", "bad", input_id="")).status == SteerStatus.INVALID_INPUT
+    assert (
+        await loop.steer_result("s", "missing")
+    ).status == SteerStatus.SESSION_MISSING
+    assert (
+        await loop.steer_result("s", "bad", input_id="")
+    ).status == SteerStatus.INVALID_INPUT
 
     started = asyncio.Event()
     release = asyncio.Event()
@@ -208,11 +229,17 @@ async def test_steer_result_distinguishes_input_rejections():
         )
     )
     await asyncio.wait_for(started.wait(), timeout=1)
-    assert (await loop.steer_result("s", "first")).status == SteerStatus.ACCEPTED
-    assert (await loop.steer_result("s", "second")).status == SteerStatus.QUEUE_FULL
+    assert (
+        await loop.steer_result("s", "first")
+    ).status == SteerStatus.ACCEPTED
+    assert (
+        await loop.steer_result("s", "second")
+    ).status == SteerStatus.QUEUE_FULL
     release.set()
     await task
-    assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+    assert (
+        await loop.steer_result("s", "closed")
+    ).status == SteerStatus.TURN_CLOSED
 
 
 @pytest.mark.asyncio
@@ -236,7 +263,9 @@ async def test_non_writer_is_rejected_and_force_recover_takes_over(tmp_path):
     other = AgentLoop()
     with pytest.raises(WriterLeaseError):
         await other.recover("s", second, FakeDelivery())
-    assert (await other.steer_result("s", "not mine")).status == SteerStatus.NOT_WRITER
+    assert (
+        await other.steer_result("s", "not mine")
+    ).status == SteerStatus.NOT_WRITER
     release.set()
     await task
 
@@ -262,10 +291,19 @@ async def test_late_tool_result_is_discarded_after_lease_takeover(tmp_path):
         return Completed("late")
 
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     task = asyncio.create_task(
-        AgentLoop().run(context(first, provider, registry(write_handler=write), FakeDelivery()))
+        AgentLoop().run(
+            context(
+                first, provider, registry(write_handler=write), FakeDelivery()
+            )
+        )
     )
     await asyncio.wait_for(started.wait(), timeout=1)
     await second.attach_writer("s", force=True)
@@ -275,7 +313,9 @@ async def test_late_tool_result_is_discarded_after_lease_takeover(tmp_path):
         await task
     assert len(invoked) == 1
     before_recovery = await second.load_recovery("s")
-    assert not any(event.event_type == EventType.TOOL_RESULT for event in before_recovery)
+    assert not any(
+        event.event_type == EventType.TOOL_RESULT for event in before_recovery
+    )
     recovered = await AgentLoop().recover("s", second, FakeDelivery())
     assert recovered.active_resource_locks == frozenset({"workspace"})
     recovered_result = next(
@@ -296,7 +336,12 @@ async def test_cancel_requires_current_lease_owner(tmp_path):
     invoked = []
     tools = approval_tools(invoked)
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     loop = AgentLoop()
     await loop.run(context(first, provider, tools, FakeDelivery()))
@@ -324,7 +369,9 @@ async def test_legacy_takeover_invalidates_lease_owner(tmp_path):
         await leased.check_writer("s", epoch)
     assert not await leased.has_writer("s")
     with pytest.raises(InvariantViolation):
-        await leased.append("s", epoch, 1, [NewEvent(EventType.TURN_START, turn=1, step=0)])
+        await leased.append(
+            "s", epoch, 1, [NewEvent(EventType.TURN_START, turn=1, step=0)]
+        )
     leased.close()
     legacy.close()
 
@@ -346,7 +393,10 @@ async def test_operational_heartbeat_failure_cancels_execution():
 
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="unreachable"),
         ]
     )
@@ -370,7 +420,10 @@ async def test_lease_concurrent_resume_and_repeated_recover(tmp_path):
     tools = approval_tools(invoked)
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -386,10 +439,12 @@ async def test_lease_concurrent_resume_and_repeated_recover(tmp_path):
 
     outcomes = await asyncio.gather(
         first_loop.resume(
-            context(first, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(first, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         ),
         second_loop.resume(
-            context(second, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(second, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         ),
         return_exceptions=True,
     )
@@ -422,7 +477,10 @@ async def test_renewal_cannot_succeed_after_expiry(tmp_path):
             clock.value += 11
 
     store = ExpiringStore(
-        str(tmp_path / "renew.sqlite3"), owner_id="owner-a", lease_seconds=10, clock=clock
+        str(tmp_path / "renew.sqlite3"),
+        owner_id="owner-a",
+        lease_seconds=10,
+        clock=clock,
     )
     epoch, _, _ = await store.attach_writer("s")
 
@@ -460,4 +518,7 @@ def test_same_host_multiprocess_lease_contention(tmp_path):
         process.join(timeout=10)
 
     assert all(process.exitcode == 0 for process in processes)
-    assert sorted(results.get(timeout=2)[0] for _ in processes) == ["conflict", "ok"]
+    assert sorted(results.get(timeout=2)[0] for _ in processes) == [
+        "conflict",
+        "ok",
+    ]

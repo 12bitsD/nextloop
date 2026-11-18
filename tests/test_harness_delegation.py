@@ -35,7 +35,9 @@ from nextloop.events.project import (
 
 
 @pytest.mark.asyncio
-async def test_harness_run_supports_stable_input_preview_and_closed_steer(tmp_path):
+async def test_harness_run_supports_stable_input_preview_and_closed_steer(
+    tmp_path,
+):
     provider = FakeProvider([ModelResponse(content="done")])
     harness = Harness.load(write_config(tmp_path), provider=provider)
     published = []
@@ -50,7 +52,9 @@ async def test_harness_run_supports_stable_input_preview_and_closed_steer(tmp_pa
     assert first == second
     assert len(provider.requests) == 1
     assert published
-    assert (await harness.steer_result("closed")).status == SteerStatus.TURN_CLOSED
+    assert (
+        await harness.steer_result("closed")
+    ).status == SteerStatus.TURN_CLOSED
     assert await harness.pending_inputs() == ()
     assert await harness.resource_locks() == frozenset()
     await harness.close()
@@ -60,16 +64,23 @@ async def test_harness_run_supports_stable_input_preview_and_closed_steer(tmp_pa
 async def test_harness_resume_uses_shared_context_assembly(tmp_path):
     tools = ToolRegistry()
     tools.register(
-        ToolSpec("write", "Write", {"type": "object"}, approval=ApprovalPolicy("v1")),
+        ToolSpec(
+            "write", "Write", {"type": "object"}, approval=ApprovalPolicy("v1")
+        ),
         lambda arguments, ctx: Completed("written"),
     )
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
-    harness = Harness.load(write_config(tmp_path), provider=provider, tools=tools)
+    harness = Harness.load(
+        write_config(tmp_path), provider=provider, tools=tools
+    )
 
     pending = await harness.run("start", input_id="initial")
     operation_id = next(
@@ -77,7 +88,9 @@ async def test_harness_resume_uses_shared_context_assembly(tmp_path):
         for event in await harness.store.load_recovery(harness.session_id)
         if event.event_type == EventType.APPROVAL_REQUESTED
     )
-    outcome = await harness.resume(decisions={operation_id: True}, input_id="resume")
+    outcome = await harness.resume(
+        decisions={operation_id: True}, input_id="resume"
+    )
 
     assert pending.status == TurnStatus.APPROVAL_PENDING
     assert outcome.status == TurnStatus.SUCCEEDED
@@ -97,14 +110,23 @@ async def test_harness_retry_release_recover_and_delete(tmp_path):
         return Completed("done")
 
     tools.register(
-        ToolSpec("write", "Write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT),
+        ToolSpec(
+            "write", "Write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT
+        ),
         write,
     )
     store = InMemoryEventStore()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
-    harness = Harness.load(write_config(tmp_path), provider=provider, store=store, tools=tools)
+    harness = Harness.load(
+        write_config(tmp_path), provider=provider, store=store, tools=tools
+    )
 
     blocked = await harness.run("start")
     operation_id = next(
@@ -115,7 +137,9 @@ async def test_harness_retry_release_recover_and_delete(tmp_path):
     assert blocked.status == TurnStatus.BLOCKED
     assert await harness.resource_locks() == frozenset({"dynamic"})
 
-    assert await harness.release_resource("dynamic", actor="operator", evidence="verified")
+    assert await harness.release_resource(
+        "dynamic", actor="operator", evidence="verified"
+    )
     reconciled = await harness.retry_operation(operation_id)
     recovered = await harness.recover(force=True)
 
@@ -128,12 +152,16 @@ async def test_harness_retry_release_recover_and_delete(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_harness_caches_and_closes_only_owned_provider(tmp_path, monkeypatch):
+async def test_harness_caches_and_closes_only_owned_provider(
+    tmp_path, monkeypatch
+):
     created = []
 
     class OwnedProvider(FakeProvider):
         def __init__(self):
-            super().__init__([ModelResponse(content="one"), ModelResponse(content="two")])
+            super().__init__(
+                [ModelResponse(content="one"), ModelResponse(content="two")]
+            )
             self.close_calls = 0
 
         async def close(self):
@@ -172,9 +200,15 @@ def test_working_context_helpers_preserve_existing_marker_shape():
     cleared = make_clear_working_context_message(scope="turn")
 
     assert message.content == "[WorkingContext · session]\nremember"
-    assert message.provider_data["working_context"] == {"action": "set", "scope": "session"}
+    assert message.provider_data["working_context"] == {
+        "action": "set",
+        "scope": "session",
+    }
     assert cleared.content == "[WorkingContext cleared · turn]"
-    assert cleared.provider_data["working_context"] == {"action": "clear", "scope": "turn"}
+    assert cleared.provider_data["working_context"] == {
+        "action": "clear",
+        "scope": "turn",
+    }
     with pytest.raises(ValueError, match="non-empty"):
         make_working_context_message(" ")
     with pytest.raises(ValueError, match="scope"):
@@ -185,7 +219,9 @@ def test_working_context_helpers_preserve_existing_marker_shape():
 async def test_harness_run_matches_direct_agent_loop(tmp_path):
     harness_provider = FakeProvider([ModelResponse(content="done")])
     direct_provider = FakeProvider([ModelResponse(content="done")])
-    harness = Harness.load(write_config(tmp_path), session_id="s", provider=harness_provider)
+    harness = Harness.load(
+        write_config(tmp_path), session_id="s", provider=harness_provider
+    )
     direct_store = InMemoryEventStore()
     direct_delivery = FakeDelivery()
 
@@ -219,7 +255,9 @@ async def test_harness_run_matches_direct_agent_loop(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_owned_provider_close_failure_still_closes_owned_store(tmp_path, monkeypatch):
+async def test_owned_provider_close_failure_still_closes_owned_store(
+    tmp_path, monkeypatch
+):
     class FailingCloseProvider(FakeProvider):
         async def close(self):
             raise RuntimeError("provider close failed")
@@ -233,10 +271,14 @@ async def test_owned_provider_close_failure_still_closes_owned_store(tmp_path, m
         return original_close(store)
 
     monkeypatch.setattr(SQLiteEventStore, "close", tracking_close)
-    monkeypatch.setattr("nextloop.harness.OpenAIProvider", lambda **kwargs: provider)
+    monkeypatch.setattr(
+        "nextloop.harness.OpenAIProvider", lambda **kwargs: provider
+    )
     monkeypatch.setenv("NEXTLOOP_TEST_KEY", "secret")
     harness = Harness.load(
-        write_config(tmp_path, '[store]\ndriver = "sqlite"\npath = "events.sqlite3"'),
+        write_config(
+            tmp_path, '[store]\ndriver = "sqlite"\npath = "events.sqlite3"'
+        ),
         tools=ToolRegistry(),
     )
     await harness.run("start")
@@ -252,7 +294,12 @@ async def test_harness_resume_matches_direct_agent_loop(tmp_path):
     def make_tools():
         tools = ToolRegistry()
         tools.register(
-            ToolSpec("write", "Write", {"type": "object"}, approval=ApprovalPolicy("v1")),
+            ToolSpec(
+                "write",
+                "Write",
+                {"type": "object"},
+                approval=ApprovalPolicy("v1"),
+            ),
             lambda arguments, ctx: Completed("written"),
         )
         return tools
@@ -262,7 +309,10 @@ async def test_harness_resume_matches_direct_agent_loop(tmp_path):
         session_id="s",
         provider=FakeProvider(
             [
-                ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+                ModelResponse(
+                    tool_calls=(call("write"),),
+                    finish_reason=FinishReason.TOOL_CALLS,
+                ),
                 ModelResponse(content="done"),
             ]
         ),
@@ -274,12 +324,17 @@ async def test_harness_resume_matches_direct_agent_loop(tmp_path):
         for event in await harness.store.load_recovery("s")
         if event.event_type == EventType.APPROVAL_REQUESTED
     )
-    harness_outcome = await harness.resume(decisions={operation_id: True}, input_id="resume")
+    harness_outcome = await harness.resume(
+        decisions={operation_id: True}, input_id="resume"
+    )
 
     store = InMemoryEventStore()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -291,7 +346,14 @@ async def test_harness_resume_matches_direct_agent_loop(tmp_path):
     )
     tools = with_result_reads(make_tools(), store)
     await direct.run(
-        context(store, provider, tools, FakeDelivery(), input_id="initial", config=config)
+        context(
+            store,
+            provider,
+            tools,
+            FakeDelivery(),
+            input_id="initial",
+            config=config,
+        )
     )
     direct_operation_id = next(
         event.payload["items"][0]["operation_id"]
@@ -299,7 +361,14 @@ async def test_harness_resume_matches_direct_agent_loop(tmp_path):
         if event.event_type == EventType.APPROVAL_REQUESTED
     )
     direct_outcome = await direct.resume(
-        context(store, provider, tools, FakeDelivery(), input_id="resume", config=config),
+        context(
+            store,
+            provider,
+            tools,
+            FakeDelivery(),
+            input_id="resume",
+            config=config,
+        ),
         decisions={direct_operation_id: True},
     )
 
@@ -321,7 +390,12 @@ async def test_harness_retry_matches_direct_agent_loop(tmp_path):
             return Completed("done")
 
         tools.register(
-            ToolSpec("write", "Write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT),
+            ToolSpec(
+                "write",
+                "Write",
+                {"type": "object"},
+                effect=ToolEffect.IDEMPOTENT,
+            ),
             write,
         )
         return tools
@@ -331,7 +405,12 @@ async def test_harness_retry_matches_direct_agent_loop(tmp_path):
         write_config(tmp_path),
         session_id="s",
         provider=FakeProvider(
-            [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+            [
+                ModelResponse(
+                    tool_calls=(call("write"),),
+                    finish_reason=FinishReason.TOOL_CALLS,
+                )
+            ]
         ),
         tools=make_tools(harness_invocations),
     )
@@ -341,12 +420,19 @@ async def test_harness_retry_matches_direct_agent_loop(tmp_path):
         for event in await harness.store.load_recovery("s")
         if event.event_type == EventType.TOOL_CALL
     )
-    harness_outcome = await harness.retry_operation(operation_id, input_id="retry")
+    harness_outcome = await harness.retry_operation(
+        operation_id, input_id="retry"
+    )
 
     direct_invocations = []
     store = InMemoryEventStore()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     direct = AgentLoop()
     config = LoopConfig(
@@ -356,7 +442,14 @@ async def test_harness_retry_matches_direct_agent_loop(tmp_path):
     )
     tools = with_result_reads(make_tools(direct_invocations), store)
     await direct.run(
-        context(store, provider, tools, FakeDelivery(), input_id="initial", config=config)
+        context(
+            store,
+            provider,
+            tools,
+            FakeDelivery(),
+            input_id="initial",
+            config=config,
+        )
     )
     direct_operation_id = next(
         event.payload["operation_id"]
@@ -364,7 +457,14 @@ async def test_harness_retry_matches_direct_agent_loop(tmp_path):
         if event.event_type == EventType.TOOL_CALL
     )
     direct_outcome = await direct.retry_operation(
-        context(store, provider, tools, FakeDelivery(), input_id="retry", config=config),
+        context(
+            store,
+            provider,
+            tools,
+            FakeDelivery(),
+            input_id="retry",
+            config=config,
+        ),
         direct_operation_id,
     )
 
@@ -376,7 +476,9 @@ async def test_harness_retry_matches_direct_agent_loop(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_harness_query_recovery_and_delete_match_public_direct_calls(tmp_path):
+async def test_harness_query_recovery_and_delete_match_public_direct_calls(
+    tmp_path,
+):
     store = InMemoryEventStore()
     harness = Harness.load(write_config(tmp_path), session_id="s", store=store)
     direct = AgentLoop()
@@ -407,15 +509,30 @@ async def test_harness_query_recovery_and_delete_match_public_direct_calls(tmp_p
         ],
     )
 
-    assert await harness.pending_inputs() == await direct.pending_inputs("s", store)
-    assert await harness.resource_locks() == await direct.resource_locks("s", store)
-    assert await harness.steer_result("closed") == await direct.steer_result("s", "closed")
-    assert await harness.release_resource("dynamic", actor="operator", evidence="verified")
+    assert await harness.pending_inputs() == await direct.pending_inputs(
+        "s", store
+    )
+    assert await harness.resource_locks() == await direct.resource_locks(
+        "s", store
+    )
+    assert await harness.steer_result("closed") == await direct.steer_result(
+        "s", "closed"
+    )
+    assert await harness.release_resource(
+        "dynamic", actor="operator", evidence="verified"
+    )
     assert await direct.resource_locks("s", store) == frozenset()
-    direct_recovery = await direct.recover("s", store, FakeDelivery(), force=True)
+    direct_recovery = await direct.recover(
+        "s", store, FakeDelivery(), force=True
+    )
     harness_recovery = await harness.recover(force=True)
-    assert direct_recovery.interrupted_turns == harness_recovery.interrupted_turns
-    assert direct_recovery.active_resource_locks == harness_recovery.active_resource_locks
+    assert (
+        direct_recovery.interrupted_turns == harness_recovery.interrupted_turns
+    )
+    assert (
+        direct_recovery.active_resource_locks
+        == harness_recovery.active_resource_locks
+    )
 
     await harness.delete_session()
     await store.delete_session("s")

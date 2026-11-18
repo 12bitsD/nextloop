@@ -34,7 +34,9 @@ class RecordingProvider:
 
     async def complete(self, request, *, attempt, cancel):
         self.requests.append(request)
-        return await self.delegate.complete(request, attempt=attempt, cancel=cancel)
+        return await self.delegate.complete(
+            request, attempt=attempt, cancel=cancel
+        )
 
 
 class ScriptedProvider:
@@ -47,7 +49,9 @@ class ScriptedProvider:
             return self.responses.pop(0)
         if self.delegate is None:
             raise AssertionError("ScriptedProvider responses exhausted")
-        return await self.delegate.complete(request, attempt=attempt, cancel=cancel)
+        return await self.delegate.complete(
+            request, attempt=attempt, cancel=cancel
+        )
 
 
 class Delivery:
@@ -63,7 +67,9 @@ class Delivery:
 
 
 def openai_provider():
+    # bits:allow(BCS011): provider choice is explicit in this live example
     return RecordingProvider(
+        # bits:allow(BCS011): provider choice is explicit in this live example
         OpenAIProvider(
             model_id=MODEL,
             base_url=OPENAI_URL,
@@ -76,7 +82,8 @@ def openai_provider():
 
 def config(**kwargs):
     kwargs.setdefault(
-        "system_prompt", "你是 nextloop 的 smoke 测试执行器。严格按用户要求调用工具并简短回复。"
+        "system_prompt",
+        "你是 nextloop 的 smoke 测试执行器。严格按用户要求调用工具并简短回复。",
     )
     kwargs.setdefault("retry_backoff_seconds", 0)
     return LoopConfig(**kwargs)
@@ -111,13 +118,20 @@ def read_spec(mode=ToolExecutionMode.PARALLEL):
 
 def write_spec(**kwargs):
     return ToolSpec(
-        "write", "执行一次测试写入", {"type": "object"}, resources=("workspace",), **kwargs
+        "write",
+        "执行一次测试写入",
+        {"type": "object"},
+        resources=("workspace",),
+        **kwargs,
     )
 
 
 def registry(read_handler=None, write_handler=None, write_timeout=None):
     tools = ToolRegistry()
-    tools.register(read_spec(), read_handler or (lambda arguments, ctx: "NEXTLOOP_TOOL_FACT"))
+    tools.register(
+        read_spec(),
+        read_handler or (lambda arguments, ctx: "NEXTLOOP_TOOL_FACT"),
+    )
     tools.register(
         write_spec(timeout_seconds=write_timeout),
         write_handler or (lambda arguments, ctx: Completed("written")),
@@ -141,12 +155,18 @@ async def test_text():
     delivery = Delivery()
     outcome = await AgentLoop().run(
         context(
-            InMemoryEventStore(), provider, registry(), delivery, "只回复 NEXTLOOP_OK，不要解释。"
+            InMemoryEventStore(),
+            provider,
+            registry(),
+            delivery,
+            "只回复 NEXTLOOP_OK，不要解释。",
         )
     )
     assert outcome.status == "succeeded", outcome
     assert "NEXTLOOP_OK" in delivery.messages[0].content
-    return passed("OpenAI 文本与 final 投递", delivery.messages[0].content[:100])
+    return passed(
+        "OpenAI 文本与 final 投递", delivery.messages[0].content[:100]
+    )
 
 
 async def test_tool_round_trip():
@@ -203,7 +223,9 @@ async def test_parallel_tools():
     delivery = Delivery()
     prompt = "拿到两个独立 read 结果后回复 PARALLEL_OK。"
     outcome = await AgentLoop().run(
-        context(InMemoryEventStore(), provider, registry(read), delivery, prompt)
+        context(
+            InMemoryEventStore(), provider, registry(read), delivery, prompt
+        )
     )
     assert outcome.status == "succeeded", outcome
     assert maximum == 2, (maximum, calls)
@@ -249,7 +271,9 @@ async def test_exclusive_truncation():
         for event in await store.load_recovery("live")
         if event.event_type == EventType.TOOL_RESULT
     ]
-    assert any(event.payload["outcome"]["kind"] == "skipped" for event in results)
+    assert any(
+        event.payload["outcome"]["kind"] == "skipped" for event in results
+    )
     return passed("exclusive 失败截断", "后续 read 未执行且返回 Skipped")
 
 
@@ -265,7 +289,9 @@ async def test_unknown_recovery_and_release():
     tools = registry(write_handler=write, write_timeout=0.05)
     tools.register(
         ToolSpec("release", "释放测试资源", {"type": "object"}),
-        lambda arguments, ctx: Completed("released", release_resources=("workspace",)),
+        lambda arguments, ctx: Completed(
+            "released", release_resources=("workspace",)
+        ),
     )
     store = InMemoryEventStore()
     loop = AgentLoop()
@@ -279,7 +305,13 @@ async def test_unknown_recovery_and_release():
         delegate=openai_provider(),
     )
     blocked = await loop.run(
-        context(store, provider, tools, Delivery(), "只调用一次 write({})，不要调用其他工具。")
+        context(
+            store,
+            provider,
+            tools,
+            Delivery(),
+            "只调用一次 write({})，不要调用其他工具。",
+        )
     )
     assert blocked.status == "blocked", blocked
     recovered = await loop.recover("live", store, Delivery())
@@ -295,7 +327,11 @@ async def test_unknown_recovery_and_release():
     )
     conflict = await loop.run(
         context(
-            store, conflict_provider, tools, Delivery(), "只调用一次 write({})，不要调用其他工具。"
+            store,
+            conflict_provider,
+            tools,
+            Delivery(),
+            "只调用一次 write({})，不要调用其他工具。",
         )
     )
     assert conflict.status == "blocked", conflict
@@ -329,7 +365,9 @@ async def test_unknown_recovery_and_release():
     assert len(release_calls) == 1
     after_release = await loop.recover("live", store, Delivery())
     assert not after_release.active_resource_locks
-    return passed("unknown、恢复、资源锁与释放", "未重放；冲突被阻止；release 后恢复")
+    return passed(
+        "unknown、恢复、资源锁与释放", "未重放；冲突被阻止；release 后恢复"
+    )
 
 
 async def test_steer():
@@ -369,7 +407,9 @@ async def test_steer():
     assert accepted is True
     assert outcome.status == "succeeded", outcome
     second_request = live.requests[-1]
-    assert any("STEER_OK" in message.content for message in second_request.messages)
+    assert any(
+        "STEER_OK" in message.content for message in second_request.messages
+    )
     return passed("运行中 steer", "在 Tool 边界注入，最终请求包含追加要求")
 
 
@@ -391,7 +431,11 @@ async def test_cancel():
                 ScriptedProvider(
                     [
                         ModelResponse(
-                            tool_calls=(ToolCall("cancel-1", "read", '{"path":"cancel"}'),),
+                            tool_calls=(
+                                ToolCall(
+                                    "cancel-1", "read", '{"path":"cancel"}'
+                                ),
+                            ),
                             finish_reason=FinishReason.TOOL_CALLS,
                         )
                     ]
@@ -408,7 +452,9 @@ async def test_cancel():
     outcome = await task
     assert accepted is True
     assert outcome.status == "cancelled", outcome
-    return passed("取消与统一 finalization", "Tool 收到取消，Turn 以 cancelled 结束")
+    return passed(
+        "取消与统一 finalization", "Tool 收到取消，Turn 以 cancelled 结束"
+    )
 
 
 async def test_compaction():
@@ -432,7 +478,9 @@ async def test_compaction():
     events = await store.load_recovery("live")
     assert any(event.event_type == EventType.COMPACTION for event in events)
     assert provider.requests[0].messages[0].content.startswith("用一句中文短句")
-    return passed("Compaction 与 epoch 投影", "先压缩再正常回复，事件包含 compaction")
+    return passed(
+        "Compaction 与 epoch 投影", "先压缩再正常回复，事件包含 compaction"
+    )
 
 
 async def test_protocol_correction():
@@ -450,7 +498,9 @@ async def test_protocol_correction():
                     tool_calls=(ToolCall("bad", "read", "{}"),),
                     finish_reason=FinishReason.TOOL_CALLS,
                 )
-            return await self.delegate.complete(request, attempt=attempt, cancel=cancel)
+            return await self.delegate.complete(
+                request, attempt=attempt, cancel=cancel
+            )
 
     provider = InvalidOnce()
     outcome = await AgentLoop().run(
@@ -477,7 +527,9 @@ async def test_working_context_and_concludes_turn():
     tools.register(
         ToolSpec("ask_user", "设置提醒并向用户提问", {"type": "object"}),
         lambda arguments, ctx: Completed(
-            "请选择 A 或 B", concludes_turn=True, additional_messages=(reminder,)
+            "请选择 A 或 B",
+            concludes_turn=True,
+            additional_messages=(reminder,),
         ),
     )
     live = openai_provider()
@@ -493,7 +545,9 @@ async def test_working_context_and_concludes_turn():
     store = InMemoryEventStore()
     loop = AgentLoop()
     first = await loop.run(
-        context(store, provider, tools, Delivery(), "调用 ask_user({}) 向我提问。")
+        context(
+            store, provider, tools, Delivery(), "调用 ask_user({}) 向我提问。"
+        )
     )
     assert first.status == "succeeded", first
     second = await loop.run(
@@ -501,9 +555,13 @@ async def test_working_context_and_concludes_turn():
     )
     assert second.status == "succeeded", second
     assert second.turn == 2
-    assert any("CONTEXT_OK" in message.content for message in live.requests[-1].messages)
+    assert any(
+        "CONTEXT_OK" in message.content
+        for message in live.requests[-1].messages
+    )
     return passed(
-        "WorkingContext 与 concludes_turn", "提问结束 Turn 1，回答开启 Turn 2，提醒被注入"
+        "WorkingContext 与 concludes_turn",
+        "提问结束 Turn 1，回答开启 Turn 2，提醒被注入",
     )
 
 
@@ -513,17 +571,26 @@ async def test_delivery_recovery():
     delivery = Delivery(failures=1)
     loop = AgentLoop()
     outcome = await loop.run(
-        context(store, provider, registry(), delivery, "只回复 DELIVERY_RECOVERY_OK。")
+        context(
+            store,
+            provider,
+            registry(),
+            delivery,
+            "只回复 DELIVERY_RECOVERY_OK。",
+        )
     )
     assert outcome.status == "delivery_unknown", outcome
     before = len(provider.requests)
     recovered = await loop.recover("live", store, delivery)
     assert recovered.delivered_final_ids == (outcome.final_message_id,)
     assert len(provider.requests) == before
-    return passed("delivery-only recovery", "同一 final_message_id 重试，模型未重跑")
+    return passed(
+        "delivery-only recovery", "同一 final_message_id 重试，模型未重跑"
+    )
 
 
 async def test_anthropic():
+    # bits:allow(BCS011): provider choice is explicit in this live example
     provider = AnthropicProvider(
         model_id=MODEL,
         base_url=ANTHROPIC_URL,
@@ -534,7 +601,11 @@ async def test_anthropic():
     delivery = Delivery()
     outcome = await AgentLoop().run(
         context(
-            InMemoryEventStore(), provider, registry(), delivery, "只回复 ANTHROPIC_OK，不要解释。"
+            InMemoryEventStore(),
+            provider,
+            registry(),
+            delivery,
+            "只回复 ANTHROPIC_OK，不要解释。",
         )
     )
     assert outcome.status == "succeeded", outcome
@@ -559,12 +630,18 @@ async def main():
     ]
     results = []
     for scenario in scenarios:
+        # bits:allow(BCS007): Python has no brace blocks
         try:
             results.append(await scenario())
         except Exception as exc:
-            print(f"FAIL {scenario.__name__}: {type(exc).__name__}: {exc}", flush=True)
+            print(
+                f"FAIL {scenario.__name__}: {type(exc).__name__}: {exc}",
+                flush=True,
+            )
             raise
-    print(f"\n{len(results)}/{len(scenarios)} live scenarios passed", flush=True)
+    print(
+        f"\n{len(results)}/{len(scenarios)} live scenarios passed", flush=True
+    )
 
 
 if __name__ == "__main__":

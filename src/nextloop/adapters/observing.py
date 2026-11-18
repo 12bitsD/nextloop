@@ -66,11 +66,14 @@ class ObservingEventStore:
         max_queue_size: int = 1000,
         close_timeout: float = 5.0,
         on_error: TraceErrorHandler | None = None,
+        # bits:allow(BCS004): established API/test-double signature
         close_store: bool = True,
         close_exporters: Sequence[TraceExporterInput] = (),
     ) -> None:
         if max_queue_size <= 0 or close_timeout <= 0:
-            raise ValueError("max_queue_size and close_timeout must be positive")
+            raise ValueError(
+                "max_queue_size and close_timeout must be positive"
+            )
         self._store = store
         self._close_store = close_store
         self._exporters = tuple(exporters)
@@ -81,7 +84,9 @@ class ObservingEventStore:
         self._deleted_sessions: set[str] = set()
         self._activity_lock = asyncio.Lock()
         self._export_lock = asyncio.Lock()
-        self._queue: asyncio.Queue[TraceRecord] = asyncio.Queue(maxsize=max_queue_size)
+        self._queue: asyncio.Queue[TraceRecord] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
         self._worker_task: asyncio.Task[None] | None = None
         self._in_flight: TraceRecord | None = None
         self._close_timeout = close_timeout
@@ -125,7 +130,12 @@ class ObservingEventStore:
             for record in retained:
                 self._queue.put_nowait(record)
 
-    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
+    async def attach_writer(
+        self,
+        session_id: str,
+        *,
+        force: bool = False,  # bits:allow(BCS004): established API
+    ) -> tuple[int, int, int]:
         async with self._activity_lock:
             result = await self._store.attach_writer(session_id, force=force)
             try:
@@ -140,16 +150,29 @@ class ObservingEventStore:
         session_id: str,
         check: HistoryCheck,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool = False,
         initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
         async with self._activity_lock:
-            epoch, last_seq, last_turn, history = await attach_writer_with_check(
-                self._store, session_id, check, force=force, initial_events=initial_events
+            (
+                epoch,
+                last_seq,
+                last_turn,
+                history,
+            ) = await attach_writer_with_check(
+                self._store,
+                session_id,
+                check,
+                force=force,
+                initial_events=initial_events,
             )
             committed = (
                 await self._store.append(
-                    session_id, epoch, last_seq - len(initial_events) + 1, initial_events
+                    session_id,
+                    epoch,
+                    last_seq - len(initial_events) + 1,
+                    initial_events,
                 )
                 if initial_events
                 else ()
@@ -201,7 +224,9 @@ class ObservingEventStore:
             return events
 
     async def get_event(self, session_id: str, event_id: str) -> Event | None:
-        return await read_event(self._store, session_id, event_id, load_recovery=self.load_recovery)
+        return await read_event(
+            self._store, session_id, event_id, load_recovery=self.load_recovery
+        )
 
     async def last_seq(self, session_id: str) -> int:
         return await read_last_seq(self._store, session_id)
@@ -214,7 +239,9 @@ class ObservingEventStore:
         events: Sequence[NewEvent],
     ) -> Sequence[Event]:
         async with self._activity_lock:
-            committed = await self._store.append(session_id, writer_epoch, expected_seq, events)
+            committed = await self._store.append(
+                session_id, writer_epoch, expected_seq, events
+            )
             try:
                 async with self._projector_lock:
                     records = self._projector.feed(committed)
@@ -228,7 +255,9 @@ class ObservingEventStore:
     def _enqueue(self, record: TraceRecord) -> None:
         if self._closed:
             self.dropped_count += 1
-            self._report_error(RuntimeError("Trace Store is closed; dropping trace"), record)
+            self._report_error(
+                RuntimeError("Trace Store is closed; dropping trace"), record
+            )
             return
         if self._worker_task is None or self._worker_task.done():
             self._worker_task = asyncio.create_task(self._worker())
@@ -236,7 +265,10 @@ class ObservingEventStore:
             self._queue.put_nowait(record)
         except asyncio.QueueFull:
             self.dropped_count += 1
-            self._report_error(BufferError("Trace export queue is full; dropping trace"), record)
+            self._report_error(
+                BufferError("Trace export queue is full; dropping trace"),
+                record,
+            )
 
     async def _worker(self) -> None:
         while True:
@@ -252,32 +284,43 @@ class ObservingEventStore:
                 try:
                     for exporter in self._exporters:
                         self.dropped_count += await export_trace_batch(
-                            exporter, records, self._deleted_sessions, self._report_error
+                            exporter,
+                            records,
+                            self._deleted_sessions,
+                            self._report_error,
                         )
                 finally:
                     self._in_flight = None
                     for _ in records:
                         self._queue.task_done()
 
-    def _report_error(self, error: Exception, record: TraceRecord | None) -> None:
+    def _report_error(
+        self, error: Exception, record: TraceRecord | None
+    ) -> None:
         try:
             if self._on_error is not None:
                 self._on_error(error, record)
             else:
                 print(f"nextloop trace export error: {error}", file=sys.stderr)
         except Exception as fallback_error:
-            print(f"nextloop trace error handler failed: {fallback_error}", file=sys.stderr)
+            print(
+                f"nextloop trace error handler failed: {fallback_error}",
+                file=sys.stderr,
+            )
 
     async def flush(self, timeout_seconds: float | None = None) -> bool:
         try:
             await asyncio.wait_for(self._queue.join(), timeout=timeout_seconds)
         except TimeoutError:
-            self._report_error(TimeoutError("Timed out flushing trace exports"), None)
+            self._report_error(
+                TimeoutError("Timed out flushing trace exports"), None
+            )
             return False
         for exporter in self._exporters:
             try:
                 await asyncio.wait_for(
-                    exporter_lifecycle(exporter, "flush"), timeout=timeout_seconds
+                    exporter_lifecycle(exporter, "flush"),
+                    timeout=timeout_seconds,
                 )
             except Exception as exc:
                 self._report_error(exc, None)
@@ -290,7 +333,9 @@ class ObservingEventStore:
                 return
             self._closed = True
             try:
-                cancelled = await wait_for_cleanup(asyncio.create_task(self._close()))
+                cancelled = await wait_for_cleanup(
+                    asyncio.create_task(self._close())
+                )
             except TimeoutError as exc:
                 self._closed = False
                 self._report_error(exc, None)
@@ -302,6 +347,7 @@ class ObservingEventStore:
                 self._closed = False
                 raise asyncio.CancelledError()
 
+    # bits:explain(BCS003): transaction state; split risks atomicity; keep I/O
     async def _close(self) -> None:
         try:
             deadline = asyncio.get_running_loop().time() + self._close_timeout
@@ -310,31 +356,48 @@ class ObservingEventStore:
             if not flushed and pending:
                 self.dropped_count += pending
                 self._report_error(
-                    RuntimeError(f"Closing trace Store with {pending} unexported records"),
+                    RuntimeError(
+                        f"Closing trace Store with {pending} unexported records"
+                    ),
                     self._in_flight,
                 )
             if self._worker_task is not None:
                 self._worker_task.cancel()
-                remaining = max(0.0, deadline - asyncio.get_running_loop().time())
+                remaining = max(
+                    0.0, deadline - asyncio.get_running_loop().time()
+                )
                 try:
-                    await asyncio.wait_for(asyncio.shield(self._worker_task), timeout=remaining)
+                    await asyncio.wait_for(
+                        asyncio.shield(self._worker_task), timeout=remaining
+                    )
                 except TimeoutError:
                     self._report_error(
-                        TimeoutError("Trace exporter did not stop before close timeout"), None
+                        TimeoutError(
+                            "Trace exporter did not stop before close timeout"
+                        ),
+                        None,
                     )
                 except asyncio.CancelledError:
                     if not self._worker_task.done():
                         raise
             for exporter in self._close_exporters:
                 try:
-                    remaining = max(0.0, deadline - asyncio.get_running_loop().time())
-                    await asyncio.wait_for(exporter_lifecycle(exporter, "close"), timeout=remaining)
+                    remaining = max(
+                        0.0, deadline - asyncio.get_running_loop().time()
+                    )
+                    await asyncio.wait_for(
+                        exporter_lifecycle(exporter, "close"), timeout=remaining
+                    )
                 except TimeoutError:
                     raise
                 except Exception as exc:
                     self._report_error(exc, None)
         finally:
-            close = getattr(self._store, "close", None) if self._close_store else None
+            close = (
+                getattr(self._store, "close", None)
+                if self._close_store
+                else None
+            )
             if callable(close):
                 result = close()
                 if inspect.isawaitable(result):
@@ -343,15 +406,23 @@ class ObservingEventStore:
     async def history(
         self, session_id: str, *, from_turn: int = 1, to_turn: int | None = None
     ) -> tuple[TraceRecord, ...]:
-        return await query_history(self._store, session_id, from_turn=from_turn, to_turn=to_turn)
+        return await query_history(
+            self._store, session_id, from_turn=from_turn, to_turn=to_turn
+        )
 
     async def get_turn(self, session_id: str, turn: int) -> TurnTrace | None:
         return await get_turn_trace(self._store, session_id, turn)
 
 
-async def export_trace(exporter: TraceExporterInput, record: TraceRecord) -> None:
+async def export_trace(
+    exporter: TraceExporterInput, record: TraceRecord
+) -> None:
     export = getattr(exporter, "export", None)
-    callback = export if callable(export) else cast(Callable[[TraceRecord], Any], exporter)
+    callback = (
+        export
+        if callable(export)
+        else cast(Callable[[TraceRecord], Any], exporter)
+    )
     if inspect.iscoroutinefunction(callback):
         result = callback(record)
     else:
@@ -360,6 +431,7 @@ async def export_trace(exporter: TraceExporterInput, record: TraceRecord) -> Non
         await result
 
 
+# bits:explain(BCS003): transaction state; split risks atomicity; keep I/O
 async def export_trace_batch(
     exporter: TraceExporterInput,
     records: list[TraceRecord],
@@ -367,7 +439,11 @@ async def export_trace_batch(
     on_error: TraceErrorHandler,
 ) -> int:
     export = getattr(exporter, "export", None)
-    callback = export if callable(export) else cast(Callable[[TraceRecord], Any], exporter)
+    callback = (
+        export
+        if callable(export)
+        else cast(Callable[[TraceRecord], Any], exporter)
+    )
     deleted = 0
     if inspect.iscoroutinefunction(callback):
         for record in records:
@@ -381,7 +457,9 @@ async def export_trace_batch(
             except Exception as exc:
                 on_error(exc, record)
         return deleted
-    outcomes = await asyncio.to_thread(_export_sync_batch, callback, records, deleted_sessions)
+    outcomes = await asyncio.to_thread(
+        _export_sync_batch, callback, records, deleted_sessions
+    )
     for record, error, result, was_deleted in outcomes:
         if was_deleted:
             deleted += 1
@@ -423,9 +501,15 @@ async def exporter_lifecycle(exporter: TraceExporterInput, method: str) -> None:
         await result
 
 
-async def get_turn_trace(store: EventStore, session_id: str, turn: int) -> TurnTrace | None:
-    records = await query_history(store, session_id, from_turn=turn, to_turn=turn)
-    return next((record for record in records if isinstance(record, TurnTrace)), None)
+async def get_turn_trace(
+    store: EventStore, session_id: str, turn: int
+) -> TurnTrace | None:
+    records = await query_history(
+        store, session_id, from_turn=turn, to_turn=turn
+    )
+    return next(
+        (record for record in records if isinstance(record, TurnTrace)), None
+    )
 
 
 async def query_history(
@@ -439,5 +523,6 @@ async def query_history(
     return tuple(
         record
         for record in project_traces(events)
-        if record.turn >= from_turn and (to_turn is None or record.turn <= to_turn)
+        if record.turn >= from_turn
+        and (to_turn is None or record.turn <= to_turn)
     )

@@ -6,7 +6,12 @@ import threading
 import time
 
 import pytest
-from helpers import CountingEventStore, FakeDelivery, FakeProvider, MinimalEventStore
+from helpers import (
+    CountingEventStore,
+    FakeDelivery,
+    FakeProvider,
+    MinimalEventStore,
+)
 from test_approval import approval_tools
 from test_loop import call, context, registry
 from test_outbox import closed_turn
@@ -30,13 +35,19 @@ from nextloop.testing import FaultInjectingEventStore, InjectedCrash
 @pytest.mark.asyncio
 async def test_exports_are_serialized_and_cursor_never_regresses(tmp_path):
     for same_instance in (True, False):
+        # bits:allow(BCS007): Python has no brace blocks
         store = InMemoryEventStore()
         epoch, _, _ = await store.attach_writer("s")
         await store.append("s", epoch, 1, [*closed_turn(1), *closed_turn(2)])
         started = asyncio.Event()
         release = asyncio.Event()
 
-        async def slow(record, same_instance=same_instance, started=started, release=release):
+        async def slow(
+            record,
+            same_instance=same_instance,
+            started=started,
+            release=release,
+        ):
             if same_instance or record.turn == 2:
                 started.set()
                 await release.wait()
@@ -54,7 +65,9 @@ async def test_exports_are_serialized_and_cursor_never_regresses(tmp_path):
         assert not second_task.done()
 
         release.set()
-        first_report, second_report = await asyncio.gather(first_task, second_task)
+        first_report, second_report = await asyncio.gather(
+            first_task, second_task
+        )
 
         assert first_report.exported == 2
         assert second_report.exported == 0
@@ -87,7 +100,9 @@ async def test_exporter_timeouts_are_bounded_and_recorded(tmp_path):
 
     assert report.exported == 1
     assert "fast" in report.session_ids
-    assert [(gap.session_id, gap.from_seq, gap.to_seq) for gap in report.gaps] == [("slow", 0, 3)]
+    assert [
+        (gap.session_id, gap.from_seq, gap.to_seq) for gap in report.gaps
+    ] == [("slow", 0, 3)]
     outbox.close()
 
     store = InMemoryEventStore()
@@ -114,7 +129,9 @@ async def test_exporter_timeouts_are_bounded_and_recorded(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_replay_after_restart_preserves_record_identity_and_content(tmp_path):
+async def test_replay_after_restart_preserves_record_identity_and_content(
+    tmp_path,
+):
     store = InMemoryEventStore()
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, closed_turn())
@@ -124,12 +141,16 @@ async def test_replay_after_restart_preserves_record_identity_and_content(tmp_pa
         def _advance(self, session_id, seq):
             raise InjectedCrash("before cursor")
 
-    crashing = BeforeCursor(store, str(tmp_path / "outbox.sqlite3"), [first.append])
+    crashing = BeforeCursor(
+        store, str(tmp_path / "outbox.sqlite3"), [first.append]
+    )
     with pytest.raises(InjectedCrash):
         await crashing.export_pending()
     crashing.close()
     second = []
-    outbox = SQLiteOutbox(store, str(tmp_path / "outbox.sqlite3"), [second.append])
+    outbox = SQLiteOutbox(
+        store, str(tmp_path / "outbox.sqlite3"), [second.append]
+    )
 
     assert (await outbox.export_pending()).exported == 1
     assert first == second
@@ -145,7 +166,9 @@ async def test_delete_session_clears_cursor_attempts_and_gaps(tmp_path):
     def fail(record):
         raise RuntimeError("unavailable")
 
-    outbox = SQLiteOutbox(store, str(tmp_path / "outbox.sqlite3"), [fail], max_attempts=1)
+    outbox = SQLiteOutbox(
+        store, str(tmp_path / "outbox.sqlite3"), [fail], max_attempts=1
+    )
     await outbox.export_pending()
     assert outbox.gaps("s")
 
@@ -164,7 +187,10 @@ async def test_approval_wait_is_not_in_tool_duration():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -177,17 +203,22 @@ async def test_approval_wait_is_not_in_tool_duration():
     await asyncio.sleep(0.05)
 
     await loop.resume(
-        context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+        context(store, provider, tools, FakeDelivery()),
+        decisions={operation_id: True},
     )
 
     traces = project_traces(await store.load_recovery("s"))
-    tool = next(record for record in traces if isinstance(record, ToolCallTrace))
+    tool = next(
+        record for record in traces if isinstance(record, ToolCallTrace)
+    )
     turn = next(record for record in traces if isinstance(record, TurnTrace))
     assert tool.duration_ms < 50
     assert turn.duration_ms is not None
 
 
-@pytest.mark.flaky(reason="Depends on wall-clock heartbeat scheduling; excluded from CI")
+@pytest.mark.flaky(
+    reason="Depends on wall-clock heartbeat scheduling; excluded from CI"
+)
 @pytest.mark.asyncio
 async def test_live_export_heartbeat_prevents_duplicate_export(tmp_path):
     store = InMemoryEventStore()
@@ -242,7 +273,9 @@ async def test_previous_owner_cannot_release_new_owner_lock(tmp_path):
     third = SQLiteOutbox(store, path, [])
     await first._acquire("s")
     with first._lock, first._connection:
-        first._connection.execute("UPDATE outbox_locks SET locked_at = 0 WHERE session_id = 's'")
+        first._connection.execute(
+            "UPDATE outbox_locks SET locked_at = 0 WHERE session_id = 's'"
+        )
     await second._acquire("s")
 
     await first._release("s")
@@ -276,7 +309,9 @@ async def test_lock_timeout_preserves_integrity_error(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_failure_still_releases_lock_without_advancing_cursor(tmp_path):
+async def test_heartbeat_failure_still_releases_lock_without_advancing_cursor(
+    tmp_path,
+):
     store = InMemoryEventStore()
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, closed_turn())
@@ -289,14 +324,20 @@ async def test_heartbeat_failure_still_releases_lock_without_advancing_cursor(tm
         await asyncio.sleep(0.03)
 
     outbox = FailedHeartbeat(
-        store, str(tmp_path / "outbox.sqlite3"), [slow], lock_timeout_seconds=0.01
+        store,
+        str(tmp_path / "outbox.sqlite3"),
+        [slow],
+        lock_timeout_seconds=0.01,
     )
 
     with pytest.raises(RuntimeError, match="renewal failed"):
         await outbox.export_pending()
 
     assert outbox.watermark("s") == 0
-    assert outbox._connection.execute("SELECT * FROM outbox_locks").fetchone() is None
+    assert (
+        outbox._connection.execute("SELECT * FROM outbox_locks").fetchone()
+        is None
+    )
     outbox.close()
 
 
@@ -318,7 +359,9 @@ async def test_concurrent_old_lock_table_migration_adds_owner_once(tmp_path):
 
     first, second = await asyncio.gather(build(), build())
 
-    columns = first._connection.execute("PRAGMA table_info(outbox_locks)").fetchall()
+    columns = first._connection.execute(
+        "PRAGMA table_info(outbox_locks)"
+    ).fetchall()
     assert [row["name"] for row in columns].count("owner_token") == 1
     first.close()
     second.close()
@@ -359,7 +402,11 @@ async def test_delivery_only_tail_advances_cursor_without_rescanning():
 @pytest.mark.parametrize("wrapper", ["fault", "observing"])
 async def test_fallback_capability_reads_history_once_per_export(wrapper):
     base = MinimalEventStore()
-    store = FaultInjectingEventStore(base) if wrapper == "fault" else ObservingEventStore(base, [])
+    store = (
+        FaultInjectingEventStore(base)
+        if wrapper == "fault"
+        else ObservingEventStore(base, [])
+    )
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, closed_turn())
     outbox = SQLiteOutbox(store, ":memory:", [])
@@ -387,7 +434,9 @@ async def test_open_turn_is_not_included_in_exported_cursor_prefix():
 
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS
+            ),
             finish,
         ]
     )

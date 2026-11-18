@@ -30,10 +30,16 @@ from nextloop.events.project import (
     valid_compaction,
 )
 from nextloop.events.repair import pending_final_messages, repair_events
-from nextloop.events.response import ResponseAction, decide_response, reject_batch
+from nextloop.events.response import (
+    ResponseAction,
+    decide_response,
+    reject_batch,
+)
 
 
-def event(event_type, *, seq=1, turn=1, step=1, surface=SurfaceOp.NONE, payload=None):
+def event(
+    event_type, *, seq=1, turn=1, step=1, surface=SurfaceOp.NONE, payload=None
+):
     return Event(
         session_id="s",
         seq=seq,
@@ -55,19 +61,27 @@ def message_event(content, *, seq=1, kind=None):
         message = Message(
             role="user",
             content=content,
-            provider_data={"working_context": {"action": kind, "scope": "turn"}},
+            provider_data={
+                "working_context": {"action": kind, "scope": "turn"}
+            },
         )
     from nextloop.events.project import message_to_data
 
     payload = {"message": message_to_data(message)}
     if kind:
         payload["working_context"] = {"action": kind, "scope": "turn"}
-    return event(EventType.USER_MESSAGE, seq=seq, surface=SurfaceOp.APPEND, payload=payload)
+    return event(
+        EventType.USER_MESSAGE,
+        seq=seq,
+        surface=SurfaceOp.APPEND,
+        payload=payload,
+    )
 
 
 def test_projection_preserves_prefix_and_folds_latest_working_context():
     config = LoopConfig(
-        system_prompt="sys", bootstrap_messages=(Message(role="user", content="agents"),)
+        system_prompt="sys",
+        bootstrap_messages=(Message(role="user", content="agents"),),
     )
     projection = project_events(
         [message_event("hello")],
@@ -77,12 +91,19 @@ def test_projection_preserves_prefix_and_folds_latest_working_context():
         config=config,
         tools=(),
     )
-    assert [m.content for m in projection.request.messages] == ["sys", "agents", "hello"]
+    assert [m.content for m in projection.request.messages] == [
+        "sys",
+        "agents",
+        "hello",
+    ]
     assert projection.compaction_reason is None
 
     folded = compaction_events(
         "summary",
-        [message_event("old", seq=1), message_event("remember", seq=2, kind="set")],
+        [
+            message_event("old", seq=1),
+            message_event("remember", seq=2, kind="set"),
+        ],
         turn=1,
         step=2,
     )
@@ -98,7 +119,12 @@ def test_projection_preserves_prefix_and_folds_latest_working_context():
 
 def test_response_decision_table_and_correction_bound():
     final = decide_response(
-        ModelResponse(content="done"), turn=1, step=1, attempt=1, corrections=0, max_corrections=2
+        ModelResponse(content="done"),
+        turn=1,
+        step=1,
+        attempt=1,
+        corrections=0,
+        max_corrections=2,
     )
     assert final.action == ResponseAction.FINAL_CANDIDATE
     assert final.events[0].surface_op == SurfaceOp.APPEND
@@ -106,7 +132,9 @@ def test_response_decision_table_and_correction_bound():
     call = ToolCall("c1", "read", "{}")
     mixed = decide_response(
         ModelResponse(
-            content="checking", tool_calls=(call,), finish_reason=FinishReason.TOOL_CALLS
+            content="checking",
+            tool_calls=(call,),
+            finish_reason=FinishReason.TOOL_CALLS,
         ),
         turn=1,
         step=1,
@@ -117,12 +145,22 @@ def test_response_decision_table_and_correction_bound():
     assert mixed.action == ResponseAction.RUN_TOOLS
 
     empty = decide_response(
-        ModelResponse(), turn=1, step=1, attempt=1, corrections=0, max_corrections=2
+        ModelResponse(),
+        turn=1,
+        step=1,
+        attempt=1,
+        corrections=0,
+        max_corrections=2,
     )
     assert empty.action == ResponseAction.NEXT_STEP
     assert empty.events[0].surface_op == SurfaceOp.NONE
     exhausted = decide_response(
-        ModelResponse(), turn=1, step=2, attempt=1, corrections=2, max_corrections=2
+        ModelResponse(),
+        turn=1,
+        step=2,
+        attempt=1,
+        corrections=2,
+        max_corrections=2,
     )
     assert exhausted.action == ResponseAction.FAILED
 
@@ -137,7 +175,11 @@ def test_response_decision_table_and_correction_bound():
     assert truncated.action == ResponseAction.NEXT_STEP
 
     rejected = reject_batch(
-        [{"message": "$.path is required"}], turn=1, step=1, corrections=0, max_corrections=2
+        [{"message": "$.path is required"}],
+        turn=1,
+        step=1,
+        corrections=0,
+        max_corrections=2,
     )
     assert rejected.action == ResponseAction.NEXT_STEP
     assert rejected.events[0].event_type == EventType.TOOL_BATCH_REJECTED
@@ -145,7 +187,9 @@ def test_response_decision_table_and_correction_bound():
 
 def test_outcome_variants_drive_turn_lifecycle_and_resources():
     call = ToolCall("c1", "write", "{}")
-    spec = ToolSpec("write", "write", {"type": "object"}, resources=("wiki_git",))
+    spec = ToolSpec(
+        "write", "write", {"type": "object"}, resources=("wiki_git",)
+    )
     concluded = settle_outcomes(
         [(call, spec, Completed("question", concludes_turn=True))],
         turn=1,
@@ -162,10 +206,19 @@ def test_outcome_variants_drive_turn_lifecycle_and_resources():
         pacing_step_interval=15,
     )
     assert settled.action == BatchAction.NEXT_STEP
-    assert "UNCERTAIN_EFFECT_SETTLED" in settled.events[0].payload["message"]["content"]
+    assert (
+        "UNCERTAIN_EFFECT_SETTLED"
+        in settled.events[0].payload["message"]["content"]
+    )
 
     hanging = settle_outcomes(
-        [(call, spec, UncertainHanging("still running", resource_locks=("wiki_git",)))],
+        [
+            (
+                call,
+                spec,
+                UncertainHanging("still running", resource_locks=("wiki_git",)),
+            )
+        ],
         turn=1,
         step=1,
         pacing_step_interval=15,
@@ -183,7 +236,10 @@ def test_outcome_variants_drive_turn_lifecycle_and_resources():
     assert cancelled.acquired_resources == frozenset({"wiki_git"})
 
     paced = settle_outcomes(
-        [(call, spec, Completed("ok"))], turn=1, step=15, pacing_step_interval=15
+        [(call, spec, Completed("ok"))],
+        turn=1,
+        step=15,
+        pacing_step_interval=15,
     )
     assert "Step 15 reached" in paced.events[0].payload["message"]["content"]
 
@@ -197,7 +253,13 @@ def test_repair_pairs_interrupted_tools_and_recovers_final_ids():
             EventType.ASSISTANT_MESSAGE,
             seq=3,
             surface=SurfaceOp.APPEND,
-            payload={"message": {"role": "assistant", "content": "", "tool_calls": [call_data]}},
+            payload={
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [call_data],
+                }
+            },
         ),
         event(
             EventType.TOOL_CALL,
@@ -245,10 +307,14 @@ async def test_memory_store_surface_and_idempotency():
 
 
 def test_canonical_bytes_are_cached_per_immutable_request():
-    request = CandidateRequest(session_id="s", turn=1, step=1, messages=(), tools=())
+    request = CandidateRequest(
+        session_id="s", turn=1, step=1, messages=(), tools=()
+    )
 
     first = request.canonical_bytes()
 
     assert first is request.canonical_bytes()
-    changed = replace(request, messages=(Message(role="user", content="different"),))
+    changed = replace(
+        request, messages=(Message(role="user", content="different"),)
+    )
     assert changed.canonical_bytes() != first

@@ -23,20 +23,27 @@ from nextloop.execute.stdio import _read_frame
         ([b'{"truncated":'], [b'{"truncated":', b""]),
     ],
 )
-async def test_frame_reader_eof_is_terminal(chunks: list[bytes], expected: list[bytes]) -> None:
+async def test_frame_reader_eof_is_terminal(
+    chunks: list[bytes], expected: list[bytes]
+) -> None:
     reader = asyncio.StreamReader()
     for chunk in chunks:
         reader.feed_data(chunk)
     reader.feed_eof()
     buffer = bytearray()
-    frames = [await asyncio.wait_for(_read_frame(reader, buffer), timeout=0.2) for _ in expected]
+    frames = [
+        await asyncio.wait_for(_read_frame(reader, buffer), timeout=0.2)
+        for _ in expected
+    ]
     assert frames == expected
     assert not buffer
     assert await _read_frame(reader, buffer) == b""
 
 
 @pytest.mark.parametrize("mode", ["valid", "truncated", "empty"])
-async def test_driver_start_eof_is_bounded_and_controlled(tmp_path: Path, mode: str) -> None:
+async def test_driver_start_eof_is_bounded_and_controlled(
+    tmp_path: Path, mode: str
+) -> None:
     worker = tmp_path / "eof_worker.py"
     worker.write_text(
         "import json, sys\n"
@@ -50,7 +57,9 @@ async def test_driver_start_eof_is_bounded_and_controlled(tmp_path: Path, mode: 
         "sys.stdout.flush()\n",
         encoding="utf-8",
     )
-    driver = StdioDriver(ToolConfig(driver="stdio", command=(sys.executable, str(worker))))
+    driver = StdioDriver(
+        ToolConfig(driver="stdio", command=(sys.executable, str(worker)))
+    )
     if mode == "truncated":
         with pytest.raises(StdioProtocolError, match="non-JSON"):
             await asyncio.wait_for(driver.start(), timeout=1)
@@ -73,6 +82,8 @@ async def test_python_worker_accepts_unterminated_final_frame() -> None:
     request = {"jsonrpc": "2.0", "id": "final", "method": "ping"}
     process.stdin.write(json.dumps(request).encode())
     process.stdin.write_eof()
-    response = json.loads(await asyncio.wait_for(process.stdout.readline(), timeout=1))
+    response = json.loads(
+        await asyncio.wait_for(process.stdout.readline(), timeout=1)
+    )
     assert response == {"jsonrpc": "2.0", "id": "final", "result": {}}
     assert await asyncio.wait_for(process.wait(), timeout=1) == 0

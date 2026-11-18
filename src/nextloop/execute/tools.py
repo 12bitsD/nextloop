@@ -47,35 +47,60 @@ def validate_calls(
     issues = []
     seen_ids: set[str] = set()
     for index, call in enumerate(calls):
+        # bits:allow(BCS007): Python has no brace blocks
         call_id = call.call_id or f"unidentified_call_{index}"
         if not call.call_id:
-            issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is empty"))
+            issues.append(
+                ValidationIssue(
+                    call_id, call.name, "Tool Call identity is empty"
+                )
+            )
         elif call.call_id in seen_ids:
-            issues.append(ValidationIssue(call_id, call.name, "Tool Call identity is duplicated"))
+            issues.append(
+                ValidationIssue(
+                    call_id, call.name, "Tool Call identity is duplicated"
+                )
+            )
         seen_ids.add(call.call_id)
         spec = specs.get(call.name)
         if spec is None:
-            issues.append(ValidationIssue(call_id, call.name, "Unknown Tool name"))
+            issues.append(
+                ValidationIssue(call_id, call.name, "Unknown Tool name")
+            )
             continue
         try:
             arguments = json.loads(call.arguments)
         except (json.JSONDecodeError, TypeError) as exc:
-            issues.append(ValidationIssue(call_id, call.name, f"Invalid argument JSON: {exc}"))
+            issues.append(
+                ValidationIssue(
+                    call_id, call.name, f"Invalid argument JSON: {exc}"
+                )
+            )
             continue
         if not isinstance(arguments, dict):
             issues.append(
-                ValidationIssue(call_id, call.name, "Tool arguments must be a JSON object")
+                ValidationIssue(
+                    call_id, call.name, "Tool arguments must be a JSON object"
+                )
             )
             continue
         validator = _validator_for_schema(
             json.dumps(spec.parameters, sort_keys=True, separators=(",", ":"))
         )
-        for error in sorted(validator.iter_errors(arguments), key=lambda item: list(item.path)):
+        for error in sorted(
+            validator.iter_errors(arguments), key=lambda item: list(item.path)
+        ):
+            # bits:allow(BCS007): Python has no brace blocks
             path = "$" + "".join(
-                f"[{part}]" if isinstance(part, int) else f".{part}" for part in error.path
+                f"[{part}]" if isinstance(part, int) else f".{part}"
+                for part in error.path
             )
-            issues.append(ValidationIssue(call_id, call.name, f"{path}: {error.message}"))
-        validated.append(ValidatedCall(call=call, spec=spec, arguments=arguments))
+            issues.append(
+                ValidationIssue(call_id, call.name, f"{path}: {error.message}")
+            )
+        validated.append(
+            ValidatedCall(call=call, spec=spec, arguments=arguments)
+        )
     return tuple(validated), tuple(issues)
 
 
@@ -87,7 +112,9 @@ class ToolRegistry:
     def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
         if spec.name in self._specs:
             raise ValueError(f"Duplicate Tool name: {spec.name}")
-        if spec.timeout_seconds is not None and not inspect.iscoroutinefunction(handler):
+        if spec.timeout_seconds is not None and not inspect.iscoroutinefunction(
+            handler
+        ):
             raise TypeError(
                 f"Tool {spec.name} requires an async handler when timeout is configured"
             )
@@ -115,18 +142,29 @@ class ToolRegistry:
         spec = self._specs[call.name]
         if cancel.is_set():
             return Cancelled(
-                settled=True, partial_content="Cancelled before Tool handler execution"
+                settled=True,
+                partial_content="Cancelled before Tool handler execution",
             )
         handler = self._handlers[call.name]
         try:
             operation = handler(
                 arguments,
-                ToolContext(session_id, turn, step, cancel, operation_id=call.operation_id),
+                ToolContext(
+                    session_id,
+                    turn,
+                    step,
+                    cancel,
+                    operation_id=call.operation_id,
+                ),
             )
             if inspect.isawaitable(operation):
-                cancellable = await_with_cancel(operation, cancel, asyncio.CancelledError)
+                cancellable = await_with_cancel(
+                    operation, cancel, asyncio.CancelledError
+                )
                 if spec.timeout_seconds is not None:
-                    cancellable = asyncio.wait_for(cancellable, timeout=spec.timeout_seconds)
+                    cancellable = asyncio.wait_for(
+                        cancellable, timeout=spec.timeout_seconds
+                    )
                 value = await cancellable
             else:
                 value = operation

@@ -64,18 +64,32 @@ async def test_openai_preview_deltas_match_final_response():
             {
                 "content": "Hel",
                 "tool_calls": [
-                    {"index": 0, "id": "c1", "function": {"name": "read", "arguments": '{"pa'}}
+                    {
+                        "index": 0,
+                        "id": "c1",
+                        "function": {"name": "read", "arguments": '{"pa'},
+                    }
                 ],
             }
         ),
         openai_chunk(
-            {"content": "lo", "tool_calls": [{"index": 0, "function": {"arguments": 'th":"x"}'}}]},
+            {
+                "content": "lo",
+                "tool_calls": [
+                    {"index": 0, "function": {"arguments": 'th":"x"}'}}
+                ],
+            },
             "tool_calls",
         ),
     ]
-    body = "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks) + "data: [DONE]\n\n"
+    body = (
+        "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks)
+        + "data: [DONE]\n\n"
+    )
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=body)
+        )
     )
     provider = OpenAIProvider(
         model_id="test-model",
@@ -89,9 +103,16 @@ async def test_openai_preview_deltas_match_final_response():
         request(), attempt=1, cancel=asyncio.Event(), emit=deltas.append
     )
 
-    assert "".join(item["delta"] for item in deltas if item["channel"] == "content") == "Hello"
+    assert (
+        "".join(
+            item["delta"] for item in deltas if item["channel"] == "content"
+        )
+        == "Hello"
+    )
     arguments = "".join(
-        item.get("arguments_delta", "") for item in deltas if item["channel"] == "tool_call"
+        item.get("arguments_delta", "")
+        for item in deltas
+        if item["channel"] == "tool_call"
     )
     assert arguments == response.tool_calls[0].arguments
     await client.aclose()
@@ -100,21 +121,42 @@ async def test_openai_preview_deltas_match_final_response():
 @pytest.mark.asyncio
 async def test_anthropic_preview_deltas_match_final_response():
     events = [
-        ("content_block_start", {"index": 0, "content_block": {"type": "text", "text": "Hello"}}),
         (
             "content_block_start",
-            {"index": 1, "content_block": {"type": "tool_use", "id": "c1", "name": "read"}},
+            {"index": 0, "content_block": {"type": "text", "text": "Hello"}},
+        ),
+        (
+            "content_block_start",
+            {
+                "index": 1,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "c1",
+                    "name": "read",
+                },
+            },
         ),
         (
             "content_block_delta",
-            {"index": 1, "delta": {"type": "input_json_delta", "partial_json": '{"path":"x"}'}},
+            {
+                "index": 1,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": '{"path":"x"}',
+                },
+            },
         ),
         ("message_delta", {"delta": {"stop_reason": "tool_use"}, "usage": {}}),
         ("message_stop", {}),
     ]
-    body = "".join(f"event: {name}\ndata: {json.dumps(payload)}\n\n" for name, payload in events)
+    body = "".join(
+        f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+        for name, payload in events
+    )
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=body))
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=body)
+        )
     )
     provider = AnthropicProvider(
         model_id="test-model",
@@ -128,9 +170,16 @@ async def test_anthropic_preview_deltas_match_final_response():
         request(), attempt=1, cancel=asyncio.Event(), emit=deltas.append
     )
 
-    assert "".join(item["delta"] for item in deltas if item["channel"] == "content") == "Hello"
+    assert (
+        "".join(
+            item["delta"] for item in deltas if item["channel"] == "content"
+        )
+        == "Hello"
+    )
     arguments = "".join(
-        item.get("arguments_delta", "") for item in deltas if item["channel"] == "tool_call"
+        item.get("arguments_delta", "")
+        for item in deltas
+        if item["channel"] == "tool_call"
     )
     assert arguments == response.tool_calls[0].arguments
     await client.aclose()
@@ -148,6 +197,7 @@ async def test_preview_overflow_uses_reset_without_blocking_producer():
     started = time.monotonic()
     channel.attempt_started(request(), 1, streaming=True)
     for _ in range(100):
+        # bits:allow(BCS007): Python has no brace blocks
         channel.delta(request(), 1, {"channel": "content", "delta": "x"})
     elapsed = time.monotonic() - started
     await channel.close()

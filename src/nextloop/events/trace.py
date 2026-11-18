@@ -46,7 +46,9 @@ class _UsageTotal:
     def build(self) -> ModelUsage | None:
         if not self.present:
             return None
-        return ModelUsage(self.input_tokens, self.output_tokens, self.cached_input_tokens)
+        return ModelUsage(
+            self.input_tokens, self.output_tokens, self.cached_input_tokens
+        )
 
 
 @dataclass
@@ -67,9 +69,13 @@ class _OpenTurn:
 class _SessionState:
     last_seq: int = 0
     open_turns: dict[int, _OpenTurn] = field(default_factory=dict)
-    open_attempts: dict[tuple[int, int, int, str], Event] = field(default_factory=dict)
+    open_attempts: dict[tuple[int, int, int, str], Event] = field(
+        default_factory=dict
+    )
     open_tools: dict[tuple[int, int, str], Event] = field(default_factory=dict)
-    proposed_tools: dict[tuple[int, int, str], Mapping[str, Any]] = field(default_factory=dict)
+    proposed_tools: dict[tuple[int, int, str], Mapping[str, Any]] = field(
+        default_factory=dict
+    )
 
 
 class TraceProjector:
@@ -99,9 +105,13 @@ class TraceProjector:
             self._fold(state, event)
             state.last_seq = max(state.last_seq, event.seq)
 
-    def _fold(self, state: _SessionState, event: Event) -> tuple[TraceRecord, ...]:
+    # bits:explain(BCS003): event projection; split risks parity; keep hot path
+    def _fold(
+        self, state: _SessionState, event: Event
+    ) -> tuple[TraceRecord, ...]:
         if (
-            event.event_type in {EventType.DELIVERY_COMMITTED, EventType.DELIVERY_UNKNOWN}
+            event.event_type
+            in {EventType.DELIVERY_COMMITTED, EventType.DELIVERY_UNKNOWN}
             and event.turn not in state.open_turns
         ):
             return ()
@@ -117,12 +127,19 @@ class TraceProjector:
         elif event.event_type == EventType.ASSISTANT_MESSAGE:
             for call in event.payload.get("message", {}).get("tool_calls", ()):
                 if isinstance(call, Mapping) and "call_id" in call:
-                    state.proposed_tools[(event.turn, event.step, str(call["call_id"]))] = call
+                    state.proposed_tools[
+                        (event.turn, event.step, str(call["call_id"]))
+                    ] = call
         elif event.event_type == EventType.ASSISTANT_ATTEMPT:
             return self._model_event(state, turn, event)
         elif event.event_type == EventType.TOOL_CALL:
-            state.open_tools[(event.turn, event.step, str(event.payload["call_id"]))] = event
-        elif event.event_type in (EventType.TOOL_RESULT, EventType.RECONCILIATION_RESULT):
+            state.open_tools[
+                (event.turn, event.step, str(event.payload["call_id"]))
+            ] = event
+        elif event.event_type in (
+            EventType.TOOL_RESULT,
+            EventType.RECONCILIATION_RESULT,
+        ):
             trace = self._tool_trace(state, event)
             turn.tool_traces.append(trace)
             return (trace,)
@@ -159,8 +176,12 @@ class TraceProjector:
         started_at = _string(payload.get("started_at"))
         ended_at = _string(payload.get("ended_at"))
         duration = _number(payload.get("duration_ms"))
-        duration, timing_source = _normalize_timing(duration, started_at, ended_at)
-        source_seqs = tuple(seq for seq in (started.seq if started else None, event.seq) if seq)
+        duration, timing_source = _normalize_timing(
+            duration, started_at, ended_at
+        )
+        source_seqs = tuple(
+            seq for seq in (started.seq if started else None, event.seq) if seq
+        )
         trace = ModelCallTrace(
             session_id=event.session_id,
             turn=event.turn,
@@ -194,7 +215,9 @@ class TraceProjector:
         proposed = state.proposed_tools.get(key, {})
         outcome = payload.get("outcome", {})
         assert isinstance(outcome, Mapping)
-        kind = _enum(outcome["kind"], get_args(ToolOutcomeKind), "tool outcome.kind")
+        kind = _enum(
+            outcome["kind"], get_args(ToolOutcomeKind), "tool outcome.kind"
+        )
         result = _tool_result(outcome)
         recovered = _boolean_field(payload, "recovered")
         started_at = _string(payload.get("started_at"))
@@ -207,19 +230,32 @@ class TraceProjector:
         duration, timing_source = _normalize_timing(
             duration, started_at, ended_at, preserve_zero=kind == "skipped"
         )
-        source_seqs = tuple(seq for seq in (started.seq if started else None, event.seq) if seq)
+        source_seqs = tuple(
+            seq for seq in (started.seq if started else None, event.seq) if seq
+        )
+        operation_id = None
+        if started and started.payload.get("operation_id"):
+            operation_id = str(started.payload["operation_id"])
+        elif proposed.get("operation_id"):
+            operation_id = str(proposed["operation_id"])
         return ToolCallTrace(
             session_id=event.session_id,
             turn=event.turn,
             step=event.step,
             call_id=call_id,
-            name=str(started.payload["name"]) if started else str(proposed.get("name", "")),
+            name=str(started.payload["name"])
+            if started
+            else str(proposed.get("name", "")),
             arguments=(
-                str(started.payload["arguments"]) if started else str(proposed.get("arguments", ""))
+                str(started.payload["arguments"])
+                if started
+                else str(proposed.get("arguments", ""))
             ),
             outcome_kind=cast(ToolOutcomeKind, kind),
             result=result,
-            error=result if kind == "uncertain_hanging" else _tool_error(outcome),
+            error=result
+            if kind == "uncertain_hanging"
+            else _tool_error(outcome),
             is_error=_boolean_field(outcome, "is_error"),
             concludes_turn=_boolean_field(outcome, "concludes_turn"),
             recovered=recovered,
@@ -230,35 +266,48 @@ class TraceProjector:
             assets=_strings(outcome.get("assets")),
             resource_locks=_strings(outcome.get("resource_locks")),
             source_seqs=source_seqs,
-            operation_id=(
-                str(started.payload["operation_id"])
-                if started and started.payload.get("operation_id")
-                else str(proposed["operation_id"])
-                if proposed.get("operation_id")
-                else None
-            ),
+            operation_id=operation_id,
             origin_turn=event.payload.get("origin_turn"),
             origin_step=event.payload.get("origin_step"),
         )
 
     def _close_turn(self, state: _SessionState, event: Event) -> TurnTrace:
         open_turn = state.open_turns.pop(event.turn)
-        status = _enum(event.payload["status"], get_args(TurnTraceStatus), "turn/end.status")
-        recovered = _boolean_field(event.payload, "recovered") or status == "interrupted"
+        status = _enum(
+            event.payload["status"],
+            get_args(TurnTraceStatus),
+            "turn/end.status",
+        )
+        recovered = (
+            _boolean_field(event.payload, "recovered")
+            or status == "interrupted"
+        )
         started_at = open_turn.start.occurred_at if open_turn.start else None
         ended_at = None if recovered else event.occurred_at
-        duration = _elapsed_ms(started_at, ended_at) if started_at and ended_at else None
+        duration = (
+            _elapsed_ms(started_at, ended_at)
+            if started_at and ended_at
+            else None
+        )
         timing_source = (
-            TimingSource.UNKNOWN if recovered or duration is None else TimingSource.EVENT_OBSERVED
+            TimingSource.UNKNOWN
+            if recovered or duration is None
+            else TimingSource.EVENT_OBSERVED
         )
         state.open_attempts = {
-            key: value for key, value in state.open_attempts.items() if key[0] != event.turn
+            key: value
+            for key, value in state.open_attempts.items()
+            if key[0] != event.turn
         }
         state.open_tools = {
-            key: value for key, value in state.open_tools.items() if key[0] != event.turn
+            key: value
+            for key, value in state.open_tools.items()
+            if key[0] != event.turn
         }
         state.proposed_tools = {
-            key: value for key, value in state.proposed_tools.items() if key[0] != event.turn
+            key: value
+            for key, value in state.proposed_tools.items()
+            if key[0] != event.turn
         }
         return TurnTrace(
             session_id=event.session_id,
@@ -316,7 +365,9 @@ def _number(value: Any) -> float | None:
 
 
 def _integer(value: Any) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+    return (
+        value if isinstance(value, int) and not isinstance(value, bool) else 0
+    )
 
 
 def _strings(value: Any) -> tuple[str, ...]:
@@ -330,6 +381,7 @@ def _normalize_timing(
     started_at: str | None,
     ended_at: str | None,
     *,
+    # bits:allow(BCS004): established API/test-double signature
     preserve_zero: bool = False,
 ) -> tuple[float | None, TimingSource]:
     if duration is not None and started_at is not None and ended_at is not None:

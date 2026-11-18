@@ -27,10 +27,30 @@ import asyncio, json, os, sys
 
 async def main():
     tools = [
-        {"name": "echo", "description": "Echo", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
-        {"name": "wait", "description": "Wait", "inputSchema": {"type": "object"}},
-        {"name": "crash", "description": "Crash", "inputSchema": {"type": "object"}},
-        {"name": "unsupported", "description": "Unsupported", "inputSchema": {"type": "object"}},
+        {
+            "name": "echo",
+            "description": "Echo",
+            "inputSchema": {
+                "type": "object", "properties": {
+                    "text": {"type": "string"}
+                },
+                "required": ["text"],
+            },
+        },
+        {"name": "wait",
+            "description": "Wait",
+            "inputSchema": {"type": "object"},
+        },
+        {
+            "name": "crash",
+            "description": "Crash",
+            "inputSchema": {"type": "object"},
+        },
+        {
+            "name": "unsupported",
+            "description": "Unsupported",
+            "inputSchema": {"type": "object"},
+        },
     ]
     while True:
         line = await asyncio.to_thread(sys.stdin.readline)
@@ -47,7 +67,11 @@ async def main():
             continue
         response = {"jsonrpc": "2.0", "id": request.get("id")}
         if method == "initialize":
-            response["result"] = {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "serverInfo": {"name": "fixture", "version": "1"}}
+            response["result"] = {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "fixture", "version": "1"},
+            }
         elif method == "tools/list":
             if request.get("params", {}).get("cursor") == "page2":
                 response["result"] = {"tools": tools[2:]}
@@ -60,13 +84,20 @@ async def main():
                 if os.environ.get("MCP_TEST_LOG"):
                     with open(os.environ["MCP_TEST_LOG"], "a") as stream:
                         stream.write(json.dumps(request["params"]) + "\n")
-                response["result"] = {"content": [{"type": "text", "text": arguments["text"]}], "structuredContent": {"echo": arguments["text"]}}
+                response["result"] = {
+                    "content": [{"type": "text", "text": arguments["text"]}],
+                    "structuredContent": {"echo": arguments["text"]},
+                }
             elif name == "wait":
                 continue
             elif name == "crash":
                 os._exit(17)
             elif name == "unsupported":
-                response["result"] = {"content": [{"type": "image", "data": "xx", "mimeType": "image/png"}]}
+                response["result"] = {
+                    "content": [
+                        {"type": "image", "data": "xx", "mimeType": "image/png"}
+                    ]
+                }
             else:
                 response["error"] = {"code": -32601, "message": "unknown tool"}
         else:
@@ -108,7 +139,12 @@ async def call(runtime, name, arguments, cancel=None, operation_id=None):
 async def test_mcp_paginated_catalog_call_and_result_mapping(server):
     runtime = McpStdioRuntime(config(server))
     await runtime.start()
-    assert {spec.name for spec in runtime.catalog()} == {"echo", "wait", "crash", "unsupported"}
+    assert {spec.name for spec in runtime.catalog()} == {
+        "echo",
+        "wait",
+        "crash",
+        "unsupported",
+    }
 
     outcome = await call(runtime, "echo", {"text": "hello"})
     assert isinstance(outcome, Completed)
@@ -122,11 +158,15 @@ async def test_mcp_paginated_catalog_call_and_result_mapping(server):
     await runtime.close()
 
 
-async def test_mcp_timeout_sends_request_id_and_locks_without_replay(server, tmp_path):
+async def test_mcp_timeout_sends_request_id_and_locks_without_replay(
+    server, tmp_path
+):
     log = tmp_path / "cancel.log"
     os.environ["MCP_TEST_LOG"] = str(log)
     try:
-        runtime = McpStdioRuntime(config(server, timeout_seconds=0.05, resources=("wait",)))
+        runtime = McpStdioRuntime(
+            config(server, timeout_seconds=0.05, resources=("wait",))
+        )
         await runtime.start()
         outcome = await call(runtime, "wait", {})
         assert isinstance(outcome, UncertainHanging)
@@ -137,6 +177,7 @@ async def test_mcp_timeout_sends_request_id_and_locks_without_replay(server, tmp
         assert isinstance(repeated, UncertainHanging)
         await runtime.close()
     finally:
+        # bits:allow(BCS011): isolated test process environment
         os.environ.pop("MCP_TEST_LOG", None)
 
 
@@ -164,7 +205,9 @@ async def test_harness_runs_mcp_as_an_ordinary_tool(server):
         server.parent,
         f'[[tools]]\ndriver = "mcp"\ncommand = ["{sys.executable}", "{server}"]\n',
     )
-    harness = Harness.load(config_path, provider=provider, delivery=FakeDelivery())
+    harness = Harness.load(
+        config_path, provider=provider, delivery=FakeDelivery()
+    )
 
     outcome = await harness.run("start")
     assert outcome.status == TurnStatus.SUCCEEDED
@@ -172,13 +215,17 @@ async def test_harness_runs_mcp_as_an_ordinary_tool(server):
     await harness.close()
 
 
-async def test_mcp_operation_id_and_effect_use_namespaced_metadata(server, tmp_path):
+async def test_mcp_operation_id_and_effect_use_namespaced_metadata(
+    server, tmp_path
+):
     log = tmp_path / "operation.log"
     os.environ["MCP_TEST_LOG"] = str(log)
     try:
         runtime = McpStdioRuntime(config(server, effect="idempotent"))
         await runtime.start()
-        outcome = await call(runtime, "echo", {"text": "hello"}, operation_id="op-mcp")
+        outcome = await call(
+            runtime, "echo", {"text": "hello"}, operation_id="op-mcp"
+        )
 
         assert isinstance(outcome, Completed)
         assert runtime.catalog()[0].effect == "idempotent"
@@ -189,4 +236,5 @@ async def test_mcp_operation_id_and_effect_use_namespaced_metadata(server, tmp_p
         }
         await runtime.close()
     finally:
+        # bits:allow(BCS011): isolated test process environment
         os.environ.pop("MCP_TEST_LOG", None)

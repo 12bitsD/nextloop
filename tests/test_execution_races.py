@@ -28,7 +28,9 @@ async def test_late_invalid_resume_does_not_fence_legal_active_turn(tmp_path):
             self.attach_started = asyncio.Event()
             self.allow_attach = asyncio.Event()
 
-        async def attach_writer_checked(self, session_id, check, *, force=False, initial_events=()):
+        async def attach_writer_checked(
+            self, session_id, check, *, force=False, initial_events=()
+        ):
             self.attach_started.set()
             await self.allow_attach.wait()
             return await super().attach_writer_checked(
@@ -39,9 +41,16 @@ async def test_late_invalid_resume_does_not_fence_legal_active_turn(tmp_path):
     tools = approval_tools(invoked)
     initial_store = SQLiteEventStore(path, owner_id="owner", lease_seconds=10)
     initial_provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
-    await AgentLoop().run(context(initial_store, initial_provider, tools, FakeDelivery()))
+    await AgentLoop().run(
+        context(initial_store, initial_provider, tools, FakeDelivery())
+    )
     operation_id = next(
         event.payload["items"][0]["operation_id"]
         for event in await initial_store.load_recovery("s")
@@ -60,7 +69,9 @@ async def test_late_invalid_resume_does_not_fence_legal_active_turn(tmp_path):
     legal_loop = AgentLoop()
     late_loop = AgentLoop()
     legal = legal_loop.resume(
-        context(legal_store, FakeProvider([finish_turn]), tools, FakeDelivery()),
+        context(
+            legal_store, FakeProvider([finish_turn]), tools, FakeDelivery()
+        ),
         decisions={operation_id: True},
     )
     await asyncio.sleep(0)

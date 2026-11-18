@@ -49,7 +49,9 @@ class StreamingProvider:
         self.error = error
 
     async def complete(self, request, *, attempt, cancel):
-        raise AssertionError("The streaming capability should be used without a PreviewSink")
+        raise AssertionError(
+            "The streaming capability should be used without a PreviewSink"
+        )
 
     async def complete_with_preview(self, request, *, attempt, cancel, emit):
         emit({"channel": "reasoning", "delta": "not user-visible output"})
@@ -117,7 +119,9 @@ def tools():
     return registry
 
 
-def context(store, provider, registry, delivery, text="hello", session_id="s", **kwargs):
+def context(
+    store, provider, registry, delivery, text="hello", session_id="s", **kwargs
+):
     return TurnContext(
         session_id=session_id,
         initial_input=text,
@@ -130,11 +134,17 @@ def context(store, provider, registry, delivery, text="hello", session_id="s", *
 
 
 async def run(store, responses, registry=None, delivery=None, **kwargs):
-    delivery = delivery or FakeDelivery()
+    owner = delivery or FakeDelivery()
     outcome = await AgentLoop().run(
-        context(store, fake_provider(responses), registry or tools(), delivery, **kwargs)
+        context(
+            store,
+            fake_provider(responses),
+            registry or tools(),
+            owner,
+            **kwargs,
+        )
     )
-    return outcome, delivery
+    return outcome, owner
 
 
 async def run_and_flush(store, responses, **kwargs):
@@ -201,17 +211,24 @@ async def test_live_history_and_tool_fields():
 async def test_ttft_is_measured_without_preview_and_exported():
     collector = Collector()
     store = observed(collector)
-    outcome = await AgentLoop().run(context(store, StreamingProvider(), tools(), FakeDelivery()))
+    outcome = await AgentLoop().run(
+        context(store, StreamingProvider(), tools(), FakeDelivery())
+    )
     await store.flush(1)
 
     assert outcome.status == TurnStatus.SUCCEEDED
-    model = next(record for record in collector.records if isinstance(record, ModelCallTrace))
+    model = next(
+        record
+        for record in collector.records
+        if isinstance(record, ModelCallTrace)
+    )
     assert model.ttft_ms is not None
     assert 0 < model.ttft_ms < model.duration_ms
     terminal = next(
         event
         for event in await store.load_recovery("s")
-        if event.event_type == EventType.ASSISTANT_ATTEMPT and event.payload["status"] == "success"
+        if event.event_type == EventType.ASSISTANT_ATTEMPT
+        and event.payload["status"] == "success"
     )
     assert terminal.payload["ttft_ms"] == model.ttft_ms
     stream = io.StringIO()
@@ -244,7 +261,11 @@ async def test_ttft_ignores_preview_failures_and_partial_stream_errors():
     await store.flush(1)
 
     assert outcome.status == TurnStatus.FAILED
-    model = next(record for record in collector.records if isinstance(record, ModelCallTrace))
+    model = next(
+        record
+        for record in collector.records
+        if isinstance(record, ModelCallTrace)
+    )
     assert model.status == "error"
     assert model.ttft_ms is not None
     assert 0 < model.ttft_ms < model.duration_ms
@@ -254,9 +275,18 @@ async def test_ttft_ignores_preview_failures_and_partial_stream_errors():
 async def test_retry_has_independent_attempts():
     collector = Collector()
     store = observed(collector)
-    await run_and_flush(store, [ProviderError("retry", retryable=True), response()])
-    models = [record for record in collector.records if isinstance(record, ModelCallTrace)]
-    assert [(model.attempt, model.status) for model in models] == [(1, "error"), (2, "success")]
+    await run_and_flush(
+        store, [ProviderError("retry", retryable=True), response()]
+    )
+    models = [
+        record
+        for record in collector.records
+        if isinstance(record, ModelCallTrace)
+    ]
+    assert [(model.attempt, model.status) for model in models] == [
+        (1, "error"),
+        (2, "success"),
+    ]
     assert models[0].retryable is True
     assert all(model.duration_ms >= 0 for model in models)
     await store.close()
@@ -277,12 +307,24 @@ async def test_compaction_and_inference_do_not_share_identity():
         output_reserve=0,
     )
     assert outcome.status == TurnStatus.SUCCEEDED
-    models = [record for record in collector.records if isinstance(record, ModelCallTrace)]
+    models = [
+        record
+        for record in collector.records
+        if isinstance(record, ModelCallTrace)
+    ]
     assert [(model.purpose, model.output) for model in models] == [
         ("compaction", "short"),
         ("inference", "done"),
     ]
-    assert len({(model.turn, model.step, model.attempt, model.purpose) for model in models}) == 2
+    assert (
+        len(
+            {
+                (model.turn, model.step, model.attempt, model.purpose)
+                for model in models
+            }
+        )
+        == 2
+    )
     turn = await store.get_turn("s", 1)
     assert turn is not None
     assert turn.compaction_count == 1
@@ -306,7 +348,11 @@ async def test_exclusive_failure_skips_later_tool_with_arguments():
         finish_reason=FinishReason.TOOL_CALLS,
     )
     await run_and_flush(store, [calls, response()], registry=registry)
-    results = [record for record in collector.records if isinstance(record, ToolCallTrace)]
+    results = [
+        record
+        for record in collector.records
+        if isinstance(record, ToolCallTrace)
+    ]
     assert len(results) == 2
     assert results[0].is_error is True
     skipped = results[1]
@@ -325,7 +371,9 @@ async def test_rejected_batch_has_no_tool_trace():
         finish_reason=FinishReason.TOOL_CALLS,
     )
     await run_and_flush(store, [invalid, response()])
-    assert not any(isinstance(record, ToolCallTrace) for record in collector.records)
+    assert not any(
+        isinstance(record, ToolCallTrace) for record in collector.records
+    )
     turn = await store.get_turn("s", 1)
     assert turn is not None and turn.rejected_batch_count == 1
     await store.close()
@@ -380,7 +428,9 @@ async def test_close_timeout_and_idempotence():
         async def export(self, trace):
             await asyncio.Event().wait()
 
-    store = ObservingEventStore(InMemoryEventStore(), [HangingExporter()], close_timeout=0.05)
+    store = ObservingEventStore(
+        InMemoryEventStore(), [HangingExporter()], close_timeout=0.05
+    )
     await run(store, [response()])
     await asyncio.wait_for(store.close(), timeout=0.5)
     await store.close()
@@ -390,6 +440,7 @@ async def test_idempotent_append_and_multi_session():
     collector = Collector()
     store = observed(collector)
     for session_id in ("s1", "s2"):
+        # bits:allow(BCS007): Python has no brace blocks
         epoch, seq, _ = await store.attach_writer(session_id)
         drafts = [
             NewEvent(event_type=EventType.TURN_START, turn=1, step=0),
@@ -448,8 +499,14 @@ async def test_recovery_seeds_open_state_after_advancing_watermark():
     recovered_store = ObservingEventStore(raw, [collector])
     await AgentLoop().recover("s", recovered_store, FakeDelivery())
     await recovered_store.flush(1)
-    tool = next(record for record in collector.records if isinstance(record, ToolCallTrace))
-    turn = next(record for record in collector.records if isinstance(record, TurnTrace))
+    tool = next(
+        record
+        for record in collector.records
+        if isinstance(record, ToolCallTrace)
+    )
+    turn = next(
+        record for record in collector.records if isinstance(record, TurnTrace)
+    )
     assert tool.recovered is True
     assert tool.duration_ms is None
     assert tool.timing_source == TimingSource.UNKNOWN
@@ -503,7 +560,9 @@ async def test_exporter_exception_does_not_change_turn_or_delivery():
     assert outcome.status == TurnStatus.SUCCEEDED
     assert len(delivery.messages) == 1
     events = await store.load_recovery("s")
-    endings = [event for event in events if event.event_type == EventType.TURN_END]
+    endings = [
+        event for event in events if event.event_type == EventType.TURN_END
+    ]
     assert len(endings) == 1
     assert endings[0].payload["status"] == "succeeded"
     await store.close()
@@ -519,7 +578,9 @@ async def test_module_exporter_and_runtime_exporter(
     config_path = tmp_path / "harness.toml"
     write_harness_config(config_path, "trace_sink:collect")
     runtime_collector = Collector()
-    harness = Harness.load(config_path, session_id="s", exporter=runtime_collector)
+    harness = Harness.load(
+        config_path, session_id="s", exporter=runtime_collector
+    )
     assert isinstance(harness.store, ObservingEventStore)
     await run(harness.store, [response()])
     await harness.close()
@@ -533,7 +594,9 @@ async def test_module_exporter_and_runtime_exporter(
 async def test_blocking_sync_exporter_does_not_block_loop_and_still_exports():
     exporter = SlowSyncExporter()
     store = ObservingEventStore(InMemoryEventStore(), [exporter])
-    outcome, delivery = await asyncio.wait_for(run(store, [response()]), timeout=0.2)
+    outcome, delivery = await asyncio.wait_for(
+        run(store, [response()]), timeout=0.2
+    )
     assert outcome.status == TurnStatus.SUCCEEDED
     assert len(delivery.messages) == 1
     await store.close()
@@ -602,7 +665,11 @@ async def test_live_recovery_read_does_not_duplicate_open_turn():
             turn=1,
             step=1,
             attempt=1,
-            payload={"status": "started", "purpose": "inference", "started_at": started_at},
+            payload={
+                "status": "started",
+                "purpose": "inference",
+                "started_at": started_at,
+            },
         ),
         NewEvent(
             event_type=EventType.ASSISTANT_ATTEMPT,
@@ -623,7 +690,12 @@ async def test_live_recovery_read_does_not_duplicate_open_turn():
             event_type=EventType.TOOL_CALL,
             turn=1,
             step=1,
-            payload={"call_id": "call-1", "name": "echo", "arguments": "{}", "resources": []},
+            payload={
+                "call_id": "call-1",
+                "name": "echo",
+                "arguments": "{}",
+                "resources": [],
+            },
         ),
         NewEvent(
             event_type=EventType.TOOL_RESULT,
@@ -648,7 +720,14 @@ async def test_live_recovery_read_does_not_duplicate_open_turn():
         "s",
         epoch,
         seq + 1,
-        [NewEvent(event_type=EventType.TURN_END, turn=1, step=1, payload={"status": "succeeded"})],
+        [
+            NewEvent(
+                event_type=EventType.TURN_END,
+                turn=1,
+                step=1,
+                payload={"status": "succeeded"},
+            )
+        ],
     )
     await store.flush(1)
     turn = await store.get_turn("s", 1)
@@ -660,7 +739,9 @@ async def test_live_recovery_read_does_not_duplicate_open_turn():
     assert len(turn.tool_calls) == 1
     assert turn.model_calls[0].output == "safe"
     assert turn.tool_calls[0].result == "safe"
-    assert project_traces(await store.load_recovery("s")) == tuple(collector.records)
+    assert project_traces(await store.load_recovery("s")) == tuple(
+        collector.records
+    )
     await store.close()
 
 
@@ -684,7 +765,11 @@ def test_malformed_boolean_and_enum_fields_fail_explicitly():
         project_traces([bad_tool])
 
     bad_turn = trace_event(
-        EventType.TURN_END, 2, 1, 1, {"status": "succeeded", "recovered": "false"}
+        EventType.TURN_END,
+        2,
+        1,
+        1,
+        {"status": "succeeded", "recovered": "false"},
     )
     with pytest.raises(ValueError, match="recovered"):
         project_traces([bad_turn])
@@ -726,7 +811,13 @@ def test_valid_false_fields_and_final_content_are_preserved():
             1,
             {"final_message_id": "final-1", "content": "safe"},
         ),
-        trace_event(EventType.TURN_END, 4, 1, 1, {"status": "succeeded", "recovered": False}),
+        trace_event(
+            EventType.TURN_END,
+            4,
+            1,
+            1,
+            {"status": "succeeded", "recovered": False},
+        ),
     ]
     tool, turn = project_traces(events)
     assert tool.is_error is False
@@ -784,7 +875,9 @@ async def test_in_flight_record_is_counted_once_when_close_abandons_it():
             await asyncio.Event().wait()
 
     exporter = HangingExporter()
-    store = ObservingEventStore(InMemoryEventStore(), [exporter], close_timeout=0.02)
+    store = ObservingEventStore(
+        InMemoryEventStore(), [exporter], close_timeout=0.02
+    )
     epoch, seq, _ = await store.attach_writer("s")
     await store.append(
         "s",
@@ -793,7 +886,10 @@ async def test_in_flight_record_is_counted_once_when_close_abandons_it():
         [
             NewEvent(event_type=EventType.TURN_START, turn=1, step=0),
             NewEvent(
-                event_type=EventType.TURN_END, turn=1, step=0, payload={"status": "succeeded"}
+                event_type=EventType.TURN_END,
+                turn=1,
+                step=0,
+                payload={"status": "succeeded"},
             ),
         ],
     )
@@ -848,13 +944,18 @@ async def test_slow_sync_exporter_does_not_block_steer_or_cancel():
 
     registry._handlers["echo"] = wait_for_release
     loop = AgentLoop()
-    running = asyncio.create_task(loop.run(context(store, provider, registry, FakeDelivery())))
+    running = asyncio.create_task(
+        loop.run(context(store, provider, registry, FakeDelivery()))
+    )
     await asyncio.wait_for(started.wait(), timeout=0.2)
     assert await loop.steer("s", "STEER_OK") is True
     release.set()
     outcome = await asyncio.wait_for(running, timeout=0.2)
     assert outcome.status == TurnStatus.SUCCEEDED
-    assert any("STEER_OK" in message.content for message in provider.requests[-1].messages)
+    assert any(
+        "STEER_OK" in message.content
+        for message in provider.requests[-1].messages
+    )
 
     cancel_started = asyncio.Event()
 
@@ -865,7 +966,9 @@ async def test_slow_sync_exporter_does_not_block_steer_or_cancel():
 
     registry._handlers["echo"] = wait_for_cancel
     provider = fake_provider([echo_call()])
-    running = asyncio.create_task(loop.run(context(store, provider, registry, FakeDelivery())))
+    running = asyncio.create_task(
+        loop.run(context(store, provider, registry, FakeDelivery()))
+    )
     await asyncio.wait_for(cancel_started.wait(), timeout=0.2)
     assert await loop.cancel("s") is True
     outcome = await asyncio.wait_for(running, timeout=0.2)

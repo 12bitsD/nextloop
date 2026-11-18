@@ -8,14 +8,18 @@ T = TypeVar("T")
 
 
 async def await_with_cancel(
-    awaitable: Awaitable[T], cancel: asyncio.Event, cancelled: type[BaseException]
+    awaitable: Awaitable[T],
+    cancel: asyncio.Event,
+    cancelled: type[BaseException],
 ) -> T:
     if cancel.is_set():
         raise cancelled()
     operation = asyncio.ensure_future(awaitable)
     cancellation = asyncio.create_task(cancel.wait())
     try:
-        done, _ = await asyncio.wait({operation, cancellation}, return_when=asyncio.FIRST_COMPLETED)
+        done, _ = await asyncio.wait(
+            {operation, cancellation}, return_when=asyncio.FIRST_COMPLETED
+        )
         if cancellation in done and not operation.done():
             operation.cancel()
             await asyncio.gather(operation, return_exceptions=True)

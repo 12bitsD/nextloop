@@ -27,14 +27,18 @@ def page_parts(content):
     header, body = content.split("\n", 1)
     fields = dict(
         part.split("=", 1)
-        for part in header.removeprefix("[Tool result page: ").removesuffix("]").split()
+        for part in header.removeprefix("[Tool result page: ")
+        .removesuffix("]")
+        .split()
     )
     return fields, body
 
 
 def test_result_projection_is_bounded_and_utf8_safe():
     content = "牢大" * 200
-    projected = project_result_content(content, ToolResultMode.PREVIEW, "evt_test", 256)
+    projected = project_result_content(
+        content, ToolResultMode.PREVIEW, "evt_test", 256
+    )
 
     assert projected.startswith("[Tool result preview:")
     assert "event_id=evt_test" in projected
@@ -43,7 +47,9 @@ def test_result_projection_is_bounded_and_utf8_safe():
     assert content[:20] in projected
     assert content[-20:] in projected
 
-    paged = project_result_content(content, ToolResultMode.PAGED, "evt_test", 256)
+    paged = project_result_content(
+        content, ToolResultMode.PAGED, "evt_test", 256
+    )
     assert "next_offset=" in paged
     assert "..." not in paged
 
@@ -53,11 +59,15 @@ async def test_large_result_can_be_read_back_in_pages():
     full = "abcdef" * 100
     store = InMemoryEventStore()
     tools = with_result_reads(
-        registry(read_handler=lambda arguments, ctx: full), store, page_bytes=256
+        registry(read_handler=lambda arguments, ctx: full),
+        store,
+        page_bytes=256,
     )
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call(),), finish_reason=FinishReason.TOOL_CALLS
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -73,9 +83,13 @@ async def test_large_result_can_be_read_back_in_pages():
     )
 
     assert outcome.status == TurnStatus.SUCCEEDED
-    assert len(provider.requests[1].messages[-1].content.encode("utf-8")) < len(full)
+    assert len(provider.requests[1].messages[-1].content.encode("utf-8")) < len(
+        full
+    )
     result = next(
-        item for item in await store.load_recovery("s") if item.event_type == EventType.TOOL_RESULT
+        item
+        for item in await store.load_recovery("s")
+        if item.event_type == EventType.TOOL_RESULT
     )
     assert result.payload["outcome"]["content"] == full
     assert result.event_id in provider.requests[1].messages[-1].content
@@ -83,7 +97,12 @@ async def test_large_result_can_be_read_back_in_pages():
     chunks = []
     offset = 0
     while True:
-        arguments = {"event_id": result.event_id, "offset": offset, "limit": 256}
+        # bits:allow(BCS007): Python has no brace blocks
+        arguments = {
+            "event_id": result.event_id,
+            "offset": offset,
+            "limit": 256,
+        }
         page = await tools.execute(
             ToolCall("read", "read_tool_result", json.dumps(arguments)),
             arguments,
@@ -112,7 +131,11 @@ async def test_full_terminal_overflow_commits_result_but_never_delivers():
             )
         ]
     )
-    tools = registry(write_handler=lambda arguments, ctx: Completed("x" * 300, concludes_turn=True))
+    tools = registry(
+        write_handler=lambda arguments, ctx: Completed(
+            "x" * 300, concludes_turn=True
+        )
+    )
 
     outcome = await AgentLoop().run(
         context(
@@ -120,7 +143,9 @@ async def test_full_terminal_overflow_commits_result_but_never_delivers():
             provider,
             tools,
             delivery,
-            config=config(tool_result_bytes=128, tool_result_full_max_bytes=128),
+            config=config(
+                tool_result_bytes=128, tool_result_full_max_bytes=128
+            ),
         )
     )
 
@@ -128,11 +153,14 @@ async def test_full_terminal_overflow_commits_result_but_never_delivers():
     assert outcome.error == "tool_result_full_limit"
     assert delivery.messages == []
     results = [
-        item for item in await store.load_recovery("s") if item.event_type == EventType.TOOL_RESULT
+        item
+        for item in await store.load_recovery("s")
+        if item.event_type == EventType.TOOL_RESULT
     ]
     assert results[0].payload["outcome"]["content"] == "x" * 300
     assert not any(
-        item.event_type == EventType.FINAL_MESSAGE for item in await store.load_recovery("s")
+        item.event_type == EventType.FINAL_MESSAGE
+        for item in await store.load_recovery("s")
     )
 
 

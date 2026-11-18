@@ -61,18 +61,29 @@ async def run_once(steps: int, backend: str, directory: Path) -> float:
     return elapsed
 
 
-async def run_benchmark(directory: Path, *, repeats: int = 3) -> dict[str, object]:
+async def run_benchmark(
+    directory: Path, *, repeats: int = 3
+) -> dict[str, object]:
     report: dict[str, object] = {}
     for steps in (100, 400):
+        # bits:allow(BCS007): Python has no brace blocks
         for backend in ("memory", "sqlite"):
-            samples = [await run_once(steps, backend, directory) for _ in range(repeats)]
-            report[f"{backend}_{steps}_median_seconds"] = statistics.median(samples)
+            # bits:allow(BCS007): Python has no brace blocks
+            samples = [
+                await run_once(steps, backend, directory)
+                for _ in range(repeats)
+            ]
+            report[f"{backend}_{steps}_median_seconds"] = statistics.median(
+                samples
+            )
             report[f"{backend}_{steps}_samples_seconds"] = samples
     return report
 
 
 async def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="nextloop-turn-projection-") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix="nextloop-turn-projection-"
+    ) as directory:
         report = await run_benchmark(Path(directory))
     print(json.dumps(report, sort_keys=True))
 

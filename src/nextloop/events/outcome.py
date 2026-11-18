@@ -89,7 +89,10 @@ def outcome_text(call: ToolCall, outcome: ToolOutcome) -> str:
     if isinstance(outcome, Skipped):
         return "[skipped]\n" + outcome.reason
     if isinstance(outcome, Cancelled):
-        return f"[cancelled settled={str(outcome.settled).lower()}]\n" + outcome.partial_content
+        return (
+            f"[cancelled settled={str(outcome.settled).lower()}]\n"
+            + outcome.partial_content
+        )
     if isinstance(outcome, UncertainSettled):
         return "[UNCERTAIN_EFFECT_SETTLED]\n" + outcome.content
     return "[UNCERTAIN_EFFECT_HANGING]\n" + outcome.content
@@ -126,7 +129,9 @@ def result_page(content: str, offset: int, limit: int) -> ResultPage:
     )
 
 
-def project_result_content(content: str, mode: ToolResultMode, event_id: str, limit: int) -> str:
+def project_result_content(
+    content: str, mode: ToolResultMode, event_id: str, limit: int
+) -> str:
     data = content.encode("utf-8")
     total = len(data)
     if total <= limit or mode == ToolResultMode.FULL:
@@ -159,6 +164,7 @@ def outcome_event(
     step: int,
     suffix: str = "",
     timing: ToolExecutionTiming | None = None,
+    # bits:allow(BCS004): established API/test-double signature
     recovered: bool = False,
     spec: ToolSpec | None = None,
     result_bytes: int = DEFAULT_TOOL_RESULT_BYTES,
@@ -170,8 +176,12 @@ def outcome_event(
         and spec is not None
         and spec.result_mode != ToolResultMode.FULL
     ):
-        content = project_result_content(outcome.content, spec.result_mode, event_id, result_bytes)
-        content = ("[tool error]\n" if outcome.is_error else "") + content + suffix
+        content = project_result_content(
+            outcome.content, spec.result_mode, event_id, result_bytes
+        )
+        content = (
+            ("[tool error]\n" if outcome.is_error else "") + content + suffix
+        )
     else:
         content = outcome_text(call, outcome) + suffix
     message = Message(
@@ -216,6 +226,7 @@ def reconciliation_event(
     step: int,
     release_resources: tuple[str, ...] = (),
     timing: ToolExecutionTiming | None = None,
+    # bits:allow(BCS004): established API/test-double signature
     recovered: bool = False,
     spec: ToolSpec | None = None,
     result_bytes: int = DEFAULT_TOOL_RESULT_BYTES,
@@ -240,7 +251,8 @@ def reconciliation_event(
     message.update(role="user", tool_call_id=None, name=None)
     message["content"] = (
         f"[Reconciliation Result operation_id={call.operation_id} "
-        f"origin_turn={origin_turn} origin_step={origin_step}]\n" + str(message["content"])
+        f"origin_turn={origin_turn} origin_step={origin_step}]\n"
+        + str(message["content"])
     )
     payload.update(
         message=message,
@@ -248,9 +260,12 @@ def reconciliation_event(
         origin_turn=origin_turn,
         origin_step=origin_step,
     )
-    return replace(event, event_type=EventType.RECONCILIATION_RESULT, payload=payload)
+    return replace(
+        event, event_type=EventType.RECONCILIATION_RESULT, payload=payload
+    )
 
 
+# bits:explain(BCS003): event projection; split risks parity; keep hot path
 def settle_outcomes(
     outcomes: Sequence[tuple[ToolCall, ToolSpec, ToolOutcome]],
     *,
@@ -269,6 +284,7 @@ def settle_outcomes(
     cancelled = False
     overflow = False
     for index, (call, spec, outcome) in enumerate(outcomes):
+        # bits:allow(BCS007): Python has no brace blocks
         suffix = ""
         if (
             index == len(outcomes) - 1
@@ -292,12 +308,14 @@ def settle_outcomes(
             )
         )
         if isinstance(outcome, Completed):
-            if (spec.result_mode == ToolResultMode.FULL or outcome.concludes_turn) and len(
-                outcome.content.encode("utf-8")
-            ) > full_max_bytes:
+            if (
+                spec.result_mode == ToolResultMode.FULL
+                or outcome.concludes_turn
+            ) and len(outcome.content.encode("utf-8")) > full_max_bytes:
                 overflow = True
             released.update(outcome.release_resources)
             for message in outcome.additional_messages:
+                # bits:allow(BCS007): Python has no brace blocks
                 marker = message.provider_data.get("working_context")
                 payload: dict[str, Any] = {"message": message_to_data(message)}
                 if isinstance(marker, Mapping):
@@ -320,7 +338,9 @@ def settle_outcomes(
         elif isinstance(outcome, UncertainHanging):
             acquired.update(outcome.resource_locks)
     acquired.difference_update(released)
-    has_hanging = any(isinstance(outcome, UncertainHanging) for _, _, outcome in outcomes)
+    has_hanging = any(
+        isinstance(outcome, UncertainHanging) for _, _, outcome in outcomes
+    )
     if blocked_resources or has_hanging:
         action = BatchAction.BLOCKED
     elif cancelled:

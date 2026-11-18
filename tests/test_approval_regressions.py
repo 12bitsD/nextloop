@@ -34,17 +34,23 @@ async def test_non_boolean_approval_decisions_fail_closed(invalid):
     store = InMemoryEventStore()
     loop = AgentLoop()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     await loop.run(context(store, provider, tools, FakeDelivery()))
-    operation_id = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
     before = await store.load_recovery("s")
 
     with pytest.raises(InvariantViolation, match="boolean"):
         await loop.resume(
-            context(store, provider, tools, FakeDelivery()), decisions={operation_id: invalid}
+            context(store, provider, tools, FakeDelivery()),
+            decisions={operation_id: invalid},
         )
 
     assert await store.load_recovery("s") == before
@@ -58,24 +64,34 @@ async def test_direct_resume_after_dispatch_requires_recovery():
     base = InMemoryEventStore()
     loop = AgentLoop()
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     await loop.run(context(base, provider, tools, FakeDelivery()))
-    operation_id = approval_events(await base.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await base.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
     store = FaultInjectingEventStore(base, fail_at=3, after_commit=True)
     with pytest.raises(InjectedCrash):
         await loop.resume(
-            context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(store, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         )
 
     with pytest.raises(InvariantViolation, match="dispatch already started"):
         await loop.resume(
-            context(base, provider, tools, FakeDelivery()), decisions={operation_id: True}
+            context(base, provider, tools, FakeDelivery()),
+            decisions={operation_id: True},
         )
 
-    assert len(approval_events(await base.load_recovery("s"), EventType.TOOL_CALL)) == 1
+    assert (
+        len(approval_events(await base.load_recovery("s"), EventType.TOOL_CALL))
+        == 1
+    )
     assert invoked == []
 
 
@@ -87,7 +103,10 @@ async def test_expiry_is_rechecked_after_waiting_for_actor_lock():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="expired"),
         ]
     )
@@ -105,7 +124,9 @@ async def test_expiry_is_rechecked_after_waiting_for_actor_lock():
     await actor.run_lock.acquire()
     try:
         resumed = asyncio.create_task(
-            loop.resume(context(store, provider, tools, FakeDelivery()), reject_all=True)
+            loop.resume(
+                context(store, provider, tools, FakeDelivery()), reject_all=True
+            )
         )
         await asyncio.sleep(0.1)
     finally:
@@ -114,8 +135,12 @@ async def test_expiry_is_rechecked_after_waiting_for_actor_lock():
 
     assert outcome.status == "succeeded"
     assert invoked == []
-    assert not approval_events(await store.load_recovery("s"), EventType.APPROVAL_GRANTED)
-    rejected = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REJECTED)[0]
+    assert not approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_GRANTED
+    )
+    rejected = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REJECTED
+    )[0]
     assert rejected.payload["cause"] == "approval_expired"
 
 
@@ -134,11 +159,20 @@ async def test_approval_precedes_budget_and_resource_rejections():
         lambda arguments, ctx: invoked.append(arguments),
     )
     provider = FakeProvider(
-        [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            )
+        ]
     )
     outcome = await AgentLoop().run(
         context(
-            InMemoryEventStore(), provider, tools, FakeDelivery(), config=config(max_tool_calls=0)
+            InMemoryEventStore(),
+            provider,
+            tools,
+            FakeDelivery(),
+            config=config(max_tool_calls=0),
         )
     )
     assert outcome.status == "approval_pending"
@@ -174,8 +208,13 @@ async def test_pre_suspension_steer_is_projected_after_tool_results():
 
     class SteerStore(InMemoryEventStore):
         async def append(self, session_id, writer_epoch, expected_seq, events):
-            committed = await super().append(session_id, writer_epoch, expected_seq, events)
-            if any(event.event_type == EventType.APPROVAL_REQUESTED for event in committed):
+            committed = await super().append(
+                session_id, writer_epoch, expected_seq, events
+            )
+            if any(
+                event.event_type == EventType.APPROVAL_REQUESTED
+                for event in committed
+            ):
                 accepted = await super().append(
                     session_id,
                     writer_epoch,
@@ -198,29 +237,39 @@ async def test_pre_suspension_steer_is_projected_after_tool_results():
     store = SteerStore()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
     await loop.run(context(store, provider, tools, FakeDelivery()))
-    operation_id = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
 
     resumed = await loop.resume(
-        context(store, provider, tools, FakeDelivery()), decisions={operation_id: True}
+        context(store, provider, tools, FakeDelivery()),
+        decisions={operation_id: True},
     )
 
     assert resumed.status == "succeeded"
     messages = provider.requests[1].messages
-    result_index = next(index for index, message in enumerate(messages) if message.role == "tool")
+    result_index = next(
+        index
+        for index, message in enumerate(messages)
+        if message.role == "tool"
+    )
     steer_index = next(
         index
         for index, message in enumerate(messages)
         if message.content == "accepted before suspension"
     )
     initial_index = max(
-        index for index, message in enumerate(messages) if message.content == "do the task"
+        index
+        for index, message in enumerate(messages)
+        if message.content == "do the task"
     )
     assert result_index < steer_index < initial_index
 
@@ -234,25 +283,39 @@ async def test_approved_batch_preserves_parallel_and_exclusive_order():
         ("write", ToolExecutionMode.EXCLUSIVE),
         ("read-last", ToolExecutionMode.PARALLEL),
     ):
+        # bits:allow(BCS007): Python has no brace blocks
         tools.register(
-            ToolSpec(name, name, {"type": "object"}, mode=mode, approval=ApprovalPolicy("v1")),
-            lambda arguments, ctx, name=name: invoked.append(name) or Completed(name),
+            ToolSpec(
+                name,
+                name,
+                {"type": "object"},
+                mode=mode,
+                approval=ApprovalPolicy("v1"),
+            ),
+            lambda arguments, ctx, name=name: (
+                invoked.append(name) or Completed(name)
+            ),
         )
     store = InMemoryEventStore()
     loop = AgentLoop()
-    calls = tuple(ToolCall(name, name, "{}") for name in ("read-first", "write", "read-last"))
+    calls = tuple(
+        ToolCall(name, name, "{}")
+        for name in ("read-first", "write", "read-last")
+    )
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=calls, finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=calls, finish_reason=FinishReason.TOOL_CALLS
+            ),
             ModelResponse(content="done"),
         ]
     )
     await loop.run(context(store, provider, tools, FakeDelivery()))
     operation_ids = [
         item["operation_id"]
-        for item in approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-            0
-        ].payload["items"]
+        for item in approval_events(
+            await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+        )[0].payload["items"]
     ]
 
     resumed = await loop.resume(
@@ -272,17 +335,26 @@ async def test_resume_uses_fresh_tool_step_model_and_deadline_budgets():
     loop = AgentLoop()
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
     pending = await loop.run(
-        context(store, provider, tools, FakeDelivery(), config=config(max_tool_calls=0))
+        context(
+            store,
+            provider,
+            tools,
+            FakeDelivery(),
+            config=config(max_tool_calls=0),
+        )
     )
     assert pending.status == "approval_pending"
-    operation_id = approval_events(await store.load_recovery("s"), EventType.APPROVAL_REQUESTED)[
-        0
-    ].payload["items"][0]["operation_id"]
+    operation_id = approval_events(
+        await store.load_recovery("s"), EventType.APPROVAL_REQUESTED
+    )[0].payload["items"][0]["operation_id"]
 
     resumed = await loop.resume(
         context(

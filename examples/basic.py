@@ -18,7 +18,9 @@ class ScriptedProvider:
     async def complete(self, request, *, attempt, cancel):
         if request.step == 1:
             return ModelResponse(
-                tool_calls=(ToolCall("read-1", "read", '{"path":"README.md"}'),),
+                tool_calls=(
+                    ToolCall("read-1", "read", '{"path":"README.md"}'),
+                ),
                 finish_reason=FinishReason.TOOL_CALLS,
             )
         assert request.messages[-1].role == "tool"
@@ -49,7 +51,9 @@ async def main():
         TurnContext(
             session_id="example",
             initial_input="Read README.md",
-            config=LoopConfig(system_prompt="Complete the requested Tool round trip."),
+            config=LoopConfig(
+                system_prompt="Complete the requested Tool round trip."
+            ),
             store=InMemoryEventStore(),
             provider=ScriptedProvider(),
             tools=tools,

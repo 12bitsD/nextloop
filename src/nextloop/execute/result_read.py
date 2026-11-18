@@ -24,12 +24,18 @@ from .tools import ToolContext, ToolRegistry
 
 
 def with_result_reads(
-    runtime: ToolRuntime, store: EventStore, page_bytes: int = DEFAULT_TOOL_RESULT_BYTES
+    runtime: ToolRuntime,
+    store: EventStore,
+    page_bytes: int = DEFAULT_TOOL_RESULT_BYTES,
 ) -> ToolRuntime:
     if page_bytes < TOOL_RESULT_MIN_BYTES:
-        raise ValueError("Tool Result page budget is too small for preview metadata")
+        raise ValueError(
+            "Tool Result page budget is too small for preview metadata"
+        )
     catalog = runtime.catalog()
-    if catalog and all(spec.result_mode == ToolResultMode.FULL for spec in catalog):
+    if catalog and all(
+        spec.result_mode == ToolResultMode.FULL for spec in catalog
+    ):
         return runtime
     reader = ToolRegistry()
     reader.register(_read_spec(page_bytes), _read_handler(store))
@@ -62,7 +68,9 @@ def _read_spec(page_bytes: int) -> ToolSpec:
 def _read_handler(
     store: EventStore,
 ) -> Callable[[Mapping[str, Any], ToolContext], Awaitable[Completed]]:
-    async def read(arguments: Mapping[str, Any], context: ToolContext) -> Completed:
+    async def read(
+        arguments: Mapping[str, Any], context: ToolContext
+    ) -> Completed:
         event_id = str(arguments["event_id"])
         offset = int(arguments.get("offset", 0))
         limit = int(arguments["limit"])
@@ -71,7 +79,11 @@ def _read_handler(
         event = await read_event(store, context.session_id, event_id)
         events = (event,) if event is not None else ()
         for event in events:
-            if event.event_id != event_id or event.event_type != EventType.TOOL_RESULT:
+            # bits:allow(BCS007): Python has no brace blocks
+            if (
+                event.event_id != event_id
+                or event.event_type != EventType.TOOL_RESULT
+            ):
                 continue
             content = event.payload.get("outcome", {}).get("content")
             if not isinstance(content, str):
@@ -83,7 +95,9 @@ def _read_handler(
                 data[:offset].decode("utf-8")
             except UnicodeDecodeError:
                 return _error("invalid_offset", event_id)
-            page = result_page(content, offset, max(1, limit - TOOL_RESULT_METADATA_BYTES))
+            page = result_page(
+                content, offset, max(1, limit - TOOL_RESULT_METADATA_BYTES)
+            )
             header = (
                 f"[Tool result page: event_id={event_id} offset={offset} "
                 f"total_bytes={page.total_bytes} next_offset={page.next_offset}]\n"

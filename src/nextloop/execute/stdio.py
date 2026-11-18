@@ -28,13 +28,22 @@ from .stdio_transport import (
 
 MAX_INLINE_CONTENT_BYTES = 1024 * 1024
 _read_frame = read_frame
-__all__ = ["MAX_FRAME_BYTES", "MAX_INLINE_CONTENT_BYTES", "StdioDriver", "StdioProtocolError"]
+__all__ = [
+    "MAX_FRAME_BYTES",
+    "MAX_INLINE_CONTENT_BYTES",
+    "StdioDriver",
+    "StdioProtocolError",
+]
 
 
 class StdioDriver(StdioTransport):
-    def __init__(self, config: ToolConfig, *, sensitive_env: Sequence[str] = ()) -> None:
+    def __init__(
+        self, config: ToolConfig, *, sensitive_env: Sequence[str] = ()
+    ) -> None:
         if config.driver != "stdio" or not config.command:
-            raise ValueError("StdioDriver requires a stdio ToolConfig with a command")
+            raise ValueError(
+                "StdioDriver requires a stdio ToolConfig with a command"
+            )
         super().__init__(config, sensitive_env=sensitive_env)
 
     async def start(self) -> None:
@@ -44,14 +53,19 @@ class StdioDriver(StdioTransport):
             if self._specs:
                 return
             if self._broken:
-                raise StdioProtocolError("stdio worker is unavailable after a crash")
+                raise StdioProtocolError(
+                    "stdio worker is unavailable after a crash"
+                )
             try:
                 await self._spawn()
                 response = await self._request(
                     "initialize",
                     {
                         "protocolVersion": STDIO_PROTOCOL_VERSION,
-                        "clientInfo": {"name": "nextloop", "version": API_VERSION},
+                        "clientInfo": {
+                            "name": "nextloop",
+                            "version": API_VERSION,
+                        },
                     },
                     request_timeout=10.0,
                 )
@@ -59,7 +73,9 @@ class StdioDriver(StdioTransport):
                     raise StdioProtocolError(
                         "stdio worker returned an unsupported protocol version"
                     )
-                listed = await self._request("tools/list", {}, request_timeout=10.0)
+                listed = await self._request(
+                    "tools/list", {}, request_timeout=10.0
+                )
                 self._specs = self._parse_specs(listed.get("tools"))
             except BaseException:
                 await wait_for_cleanup(asyncio.create_task(self._terminate()))
@@ -75,7 +91,9 @@ class StdioDriver(StdioTransport):
         step: int,
         cancel: asyncio.Event,
     ) -> ToolOutcome:
-        return await self._execute_with_cancel(call, arguments, session_id, turn, step, cancel)
+        return await self._execute_with_cancel(
+            call, arguments, session_id, turn, step, cancel
+        )
 
     def _call_params(
         self,
@@ -100,7 +118,9 @@ class StdioDriver(StdioTransport):
             },
         }
 
-    def _response_outcome(self, response: Mapping[str, Any], call: ToolCall) -> ToolOutcome:
+    def _response_outcome(
+        self, response: Mapping[str, Any], call: ToolCall
+    ) -> ToolOutcome:
         if "error" in response:
             raise StdioProtocolError(f"tools/call: {response['error']}")
         result = response.get("result")
@@ -118,12 +138,16 @@ class StdioDriver(StdioTransport):
             self._closed = True
             process = self._process
             try:
-                if process is not None and process.returncode is None and not self._broken:
+                if (
+                    process is not None
+                    and process.returncode is None
+                    and not self._broken
+                ):
                     try:
                         await self._request("shutdown", {}, request_timeout=2.0)
                         await asyncio.wait_for(process.wait(), timeout=1.0)
-                    except (Exception, TimeoutError):
-                        pass
+                    except (Exception, TimeoutError) as exc:
+                        _ = exc
             finally:
                 await self._terminate()
 
@@ -132,11 +156,15 @@ class StdioDriver(StdioTransport):
             {
                 "jsonrpc": "2.0",
                 "method": "notifications/cancelled",
-                "params": {"name": remote_name, "reason": f"nextloop cancelled {request_id}"},
+                "params": {
+                    "name": remote_name,
+                    "reason": f"nextloop cancelled {request_id}",
+                },
             },
             send_timeout=0.05,
         )
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     def _parse_specs(self, raw: Any) -> tuple[ToolSpec, ...]:
         worker = " ".join(self.config.command)
         if not isinstance(raw, list):
@@ -145,6 +173,7 @@ class StdioDriver(StdioTransport):
             )
         specs = []
         for item in raw:
+            # bits:allow(BCS007): Python has no brace blocks
             try:
                 if not isinstance(item, dict):
                     raise TypeError("Tool specification must be an object")
@@ -164,7 +193,9 @@ class StdioDriver(StdioTransport):
                     raise TypeError("resources must be an array of strings")
                 jsonschema.Draft202012Validator.check_schema(parameters)
                 remote_timeout = item.get("timeout_seconds")
-                if remote_timeout is not None and not is_positive_number(remote_timeout):
+                if remote_timeout is not None and not is_positive_number(
+                    remote_timeout
+                ):
                     raise TypeError("timeout_seconds must be a positive number")
                 timeout = self.config.timeout_seconds or remote_timeout
                 name = (
@@ -179,15 +210,29 @@ class StdioDriver(StdioTransport):
                         parameters=parameters,
                         mode=ToolExecutionMode(item.get("mode", "exclusive")),
                         resources=tuple(resources),
-                        timeout_seconds=float(timeout) if timeout is not None else None,
+                        timeout_seconds=float(timeout)
+                        if timeout is not None
+                        else None,
                         effect=ToolEffect(
-                            item.get("effect", self.config.effect or ToolEffect.NON_IDEMPOTENT)
+                            item.get(
+                                "effect",
+                                self.config.effect or ToolEffect.NON_IDEMPOTENT,
+                            )
                         ),
                     )
                 )
                 self._remote_names[name] = remote_name
-            except (KeyError, TypeError, ValueError, jsonschema.SchemaError) as exc:
-                tool_name = item.get("name", "<unknown>") if isinstance(item, dict) else "<unknown>"
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+                jsonschema.SchemaError,
+            ) as exc:
+                tool_name = (
+                    item.get("name", "<unknown>")
+                    if isinstance(item, dict)
+                    else "<unknown>"
+                )
                 raise StdioProtocolError(
                     f"stdio worker {worker}: invalid Tool '{tool_name}': {exc}"
                 ) from exc
@@ -205,7 +250,9 @@ class StdioDriver(StdioTransport):
         }
         unknown = set(response) - allowed
         if unknown:
-            raise StdioProtocolError(f"Unknown Tool result field: {sorted(unknown)[0]}")
+            raise StdioProtocolError(
+                f"Unknown Tool result field: {sorted(unknown)[0]}"
+            )
         content = response.get("content", "")
         if not isinstance(content, str):
             raise StdioProtocolError("Tool result content must be a string")
@@ -214,13 +261,19 @@ class StdioDriver(StdioTransport):
                 "Inline Tool content exceeds 1MiB; return an asset reference instead"
             )
         for field in ("is_error", "concludes_turn"):
+            # bits:allow(BCS007): Python has no brace blocks
             if not isinstance(response.get(field, False), bool):
                 raise StdioProtocolError(f"Tool result {field} must be boolean")
         references: dict[str, tuple[str, ...]] = {}
         for field in ("assets", "release_resources"):
+            # bits:allow(BCS007): Python has no brace blocks
             value = response.get(field, [])
-            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-                raise StdioProtocolError(f"Tool result {field} must be an array of strings")
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) for item in value
+            ):
+                raise StdioProtocolError(
+                    f"Tool result {field} must be an array of strings"
+                )
             references[field] = tuple(value)
         return Completed(
             content,

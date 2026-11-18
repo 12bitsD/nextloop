@@ -7,18 +7,28 @@ from pathlib import Path
 
 import pytest
 
-from nextloop import Cancelled, StdioDriver, ToolCall, ToolConfig, UncertainHanging
+from nextloop import (
+    Cancelled,
+    StdioDriver,
+    ToolCall,
+    ToolConfig,
+    UncertainHanging,
+)
 
 ROOT = Path(__file__).parents[1]
 WORKER = ROOT / "examples/workers/python_worker.py"
 
 
 def driver_for(command: tuple[str, ...], grace: float = 0.03) -> StdioDriver:
-    return StdioDriver(ToolConfig(driver="stdio", command=command, cancel_grace_seconds=grace))
+    return StdioDriver(
+        ToolConfig(driver="stdio", command=command, cancel_grace_seconds=grace)
+    )
 
 
 @pytest.mark.parametrize("stage", ["initialize", "tools/list"])
-async def test_start_cancellation_reclaims_process_and_reader(tmp_path: Path, stage: str) -> None:
+async def test_start_cancellation_reclaims_process_and_reader(
+    tmp_path: Path, stage: str
+) -> None:
     worker = tmp_path / "delayed_start.py"
     worker.write_text(
         "import json, sys, time\n"
@@ -47,7 +57,10 @@ async def test_start_cancellation_reclaims_process_and_reader(tmp_path: Path, st
 
 
 @pytest.mark.parametrize("ignore_sigterm", [False, True])
-async def test_repeated_task_cancel_during_cleanup(tmp_path: Path, ignore_sigterm: bool) -> None:
+async def test_repeated_task_cancel_during_cleanup(
+    tmp_path: Path,
+    ignore_sigterm: bool,  # bits:allow(BCS004): established API
+) -> None:
     if ignore_sigterm:
         worker = tmp_path / "ignore_term.py"
         worker.write_text(
@@ -67,6 +80,7 @@ async def test_repeated_task_cancel_during_cleanup(tmp_path: Path, ignore_sigter
     else:
         command = (sys.executable, str(WORKER))
     for _ in range(10):
+        # bits:allow(BCS007): Python has no brace blocks
         driver = driver_for(command, grace=0.08)
         await driver.start()
         process = driver._process
@@ -91,13 +105,17 @@ async def test_repeated_task_cancel_during_cleanup(tmp_path: Path, ignore_sigter
         outcome = await asyncio.wait_for(operation, timeout=2)
         assert isinstance(outcome, Cancelled) and not outcome.settled
         assert not operation.cancelled() and operation.cancelling() == 0
-        assert outcome.resource_locks == (("locked",) if ignore_sigterm else ("python-wait",))
+        assert outcome.resource_locks == (
+            ("locked",) if ignore_sigterm else ("python-wait",)
+        )
         assert process.returncode is not None and reader.done()
         assert driver._broken and not driver._pending
         await driver.close()
 
 
-async def test_backpressured_call_and_cancel_notification_are_bounded(tmp_path: Path) -> None:
+async def test_backpressured_call_and_cancel_notification_are_bounded(
+    tmp_path: Path,
+) -> None:
     worker = tmp_path / "backpressure.py"
     worker.write_text(
         "import json, sys, time\n"
@@ -112,6 +130,7 @@ async def test_backpressured_call_and_cancel_notification_are_bounded(tmp_path: 
         encoding="utf-8",
     )
     for _ in range(5):
+        # bits:allow(BCS007): Python has no brace blocks
         driver = driver_for((sys.executable, str(worker)), grace=0.01)
         driver.config = ToolConfig(
             driver="stdio",
@@ -168,7 +187,8 @@ async def test_asyncio_timeout_cancellation_is_balanced() -> None:
 
 @pytest.mark.parametrize("repeated", [False, True])
 async def test_close_cancellation_during_shutdown_reclaims_worker(
-    tmp_path: Path, repeated: bool
+    tmp_path: Path,
+    repeated: bool,  # bits:allow(BCS004): established API
 ) -> None:
     worker = tmp_path / "delayed_shutdown.py"
     worker.write_text(

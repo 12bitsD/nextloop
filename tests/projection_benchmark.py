@@ -54,6 +54,7 @@ def benchmark_events(steps: int = STEPS) -> tuple[NewEvent, ...]:
 
     add(EventType.TURN_START)
     for step in range(1, steps + 1):
+        # bits:allow(BCS007): Python has no brace blocks
         call_id = f"call-{step}"
         add(EventType.STEP_START, step=step)
         add(
@@ -92,14 +93,21 @@ def benchmark_events(steps: int = STEPS) -> tuple[NewEvent, ...]:
                 "message": {
                     "role": "assistant",
                     "content": f"thought-{step}",
-                    "tool_calls": [{"call_id": call_id, "name": "read", "arguments": "{}"}],
+                    "tool_calls": [
+                        {"call_id": call_id, "name": "read", "arguments": "{}"}
+                    ],
                 }
             },
         )
         add(
             EventType.TOOL_CALL,
             step=step,
-            payload={"call_id": call_id, "name": "read", "arguments": "{}", "resources": []},
+            payload={
+                "call_id": call_id,
+                "name": "read",
+                "arguments": "{}",
+                "resources": [],
+            },
         )
         add(
             EventType.TOOL_RESULT,
@@ -124,7 +132,11 @@ def benchmark_events(steps: int = STEPS) -> tuple[NewEvent, ...]:
                 "duration_ms": 1.0,
             },
         )
-        add(EventType.STEP_END, step=step, payload={"status": "tool_batch_completed"})
+        add(
+            EventType.STEP_END,
+            step=step,
+            payload={"status": "tool_batch_completed"},
+        )
         if step == steps // 2:
             add(
                 EventType.COMPACTION,
@@ -157,7 +169,11 @@ def projection(events: Sequence[Event]) -> bytes:
         session_id="benchmark",
         turn=2,
         step=1,
-        config=LoopConfig(system_prompt="benchmark", context_window=100_000_000, output_reserve=0),
+        config=LoopConfig(
+            system_prompt="benchmark",
+            context_window=100_000_000,
+            output_reserve=0,
+        ),
         tools=(),
     ).request.canonical_bytes()
 
@@ -187,7 +203,9 @@ async def run_benchmark(directory: Path) -> dict[str, object]:
         memory_surface = await memory.load_surface("benchmark")
         sqlite_surface = await sqlite.load_surface("benchmark")
 
-        memory_request, conversation_ms = timed(lambda: projection(memory_surface))
+        memory_request, conversation_ms = timed(
+            lambda: projection(memory_surface)
+        )
         sqlite_request = projection(sqlite_surface)
         traces, trace_ms = timed(lambda: project_traces(events))
 
@@ -200,21 +218,33 @@ async def run_benchmark(directory: Path) -> dict[str, object]:
 
         incremental_traces, incremental_ms = timed(incremental, repeats=1)
         sqlite_traces = project_traces(sqlite_events)
-        turn = next(record for record in traces if isinstance(record, TurnTrace))
+        turn = next(
+            record for record in traces if isinstance(record, TurnTrace)
+        )
         assert len(events) >= 10_000
-        assert [event.event_id for event in events] == [event.event_id for event in sqlite_events]
+        assert [event.event_id for event in events] == [
+            event.event_id for event in sqlite_events
+        ]
         assert memory_request == sqlite_request
         assert all(
             canary in memory_request
-            for canary in (b"first half complete", b"thought-1500", b"result-1500")
+            for canary in (
+                b"first half complete",
+                b"thought-1500",
+                b"result-1500",
+            )
         )
         assert turn.final_content == "done"
         assert turn.model_calls[-1].output == "thought-1500"
         assert turn.tool_calls[-1].arguments == "{}"
         assert turn.tool_calls[-1].result == "result-1500"
         assert incremental_traces == traces
-        assert [record for record in traces if not isinstance(record, TurnTrace)] == [
-            record for record in sqlite_traces if not isinstance(record, TurnTrace)
+        assert [
+            record for record in traces if not isinstance(record, TurnTrace)
+        ] == [
+            record
+            for record in sqlite_traces
+            if not isinstance(record, TurnTrace)
         ]
         return {
             "events": len(events),
@@ -233,7 +263,9 @@ async def run_benchmark(directory: Path) -> dict[str, object]:
 
 
 async def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="nextloop-projection-") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix="nextloop-projection-"
+    ) as directory:
         report = await run_benchmark(Path(directory))
     print(json.dumps(report, sort_keys=True))
 

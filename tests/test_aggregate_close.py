@@ -41,7 +41,8 @@ def configs(worker: Path) -> tuple[ToolConfig, ...]:
 
 @pytest.mark.parametrize("repeated", [False, True])
 async def test_composite_close_cancellation_cleans_every_driver(
-    tmp_path: Path, repeated: bool
+    tmp_path: Path,
+    repeated: bool,  # bits:allow(BCS004): established API
 ) -> None:
     worker = delayed_worker(tmp_path)
     for _ in range(5):
@@ -59,19 +60,28 @@ async def test_composite_close_cancellation_cleans_every_driver(
             closing.cancel()
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(closing, timeout=2)
-        assert all(process is not None and process.returncode is not None for process in processes)
+        assert all(
+            process is not None and process.returncode is not None
+            for process in processes
+        )
         assert all(reader is not None and reader.done() for reader in readers)
         assert all(driver._closed for driver in runtime._stdio)
 
 
 async def test_composite_close_without_cancellation(tmp_path: Path) -> None:
-    runtime = CompositeToolRuntime.from_configs(configs(delayed_worker(tmp_path)))
+    runtime = CompositeToolRuntime.from_configs(
+        configs(delayed_worker(tmp_path))
+    )
     await runtime.start()
     await asyncio.wait_for(runtime.close(), timeout=2)
-    assert all(driver._closed and driver._process is None for driver in runtime._stdio)
+    assert all(
+        driver._closed and driver._process is None for driver in runtime._stdio
+    )
 
 
-async def test_harness_close_cancellation_closes_store_and_drivers(tmp_path: Path) -> None:
+async def test_harness_close_cancellation_closes_store_and_drivers(
+    tmp_path: Path,
+) -> None:
     worker = delayed_worker(tmp_path)
     config = tmp_path / "harness.toml"
     config.write_text(
@@ -106,4 +116,7 @@ async def test_harness_close_cancellation_closes_store_and_drivers(tmp_path: Pat
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(closing, timeout=2)
         assert store.closed
-        assert all(process is not None and process.returncode is not None for process in processes)
+        assert all(
+            process is not None and process.returncode is not None
+            for process in processes
+        )

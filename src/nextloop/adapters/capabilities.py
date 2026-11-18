@@ -10,7 +10,9 @@ HistoryCheck = Callable[[Sequence[Event]], None]
 
 @runtime_checkable
 class EventPointReader(Protocol):
-    async def get_event(self, session_id: str, event_id: str) -> Event | None: ...
+    async def get_event(
+        self, session_id: str, event_id: str
+    ) -> Event | None: ...
 
 
 @runtime_checkable
@@ -31,6 +33,7 @@ class CheckedAttachEventStore(Protocol):
         session_id: str,
         check: HistoryCheck,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool = False,
         initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]: ...
@@ -70,6 +73,7 @@ async def attach_writer_with_check(
     session_id: str,
     check: HistoryCheck,
     *,
+    # bits:allow(BCS004): established API/test-double signature
     force: bool = False,
     initial_events: Sequence[NewEvent] = (),
 ) -> tuple[int, int, int, Sequence[Event]]:
@@ -77,12 +81,18 @@ async def attach_writer_with_check(
     if callable(checked_attach):
         return cast(
             tuple[int, int, int, Sequence[Event]],
-            await checked_attach(session_id, check, force=force, initial_events=initial_events),
+            await checked_attach(
+                session_id, check, force=force, initial_events=initial_events
+            ),
         )
     history = await store.load_recovery(session_id)
     check(history)
-    epoch, last_seq, last_turn = await store.attach_writer(session_id, force=force)
+    epoch, last_seq, last_turn = await store.attach_writer(
+        session_id, force=force
+    )
     if initial_events:
-        committed = await store.append(session_id, epoch, last_seq + 1, initial_events)
+        committed = await store.append(
+            session_id, epoch, last_seq + 1, initial_events
+        )
         last_seq, last_turn = committed[-1].seq, committed[-1].turn
     return epoch, last_seq, last_turn, history

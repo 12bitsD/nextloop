@@ -25,11 +25,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = CliArgumentParser(
         prog="nextloop", description="Inspect and smoke-test a nextloop Harness"
     )
-    parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    parser.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
-    check = commands.add_parser("check", help="validate configuration and worker handshakes")
+    check = commands.add_parser(
+        "check", help="validate configuration and worker handshakes"
+    )
     check.add_argument("harness")
-    tools = commands.add_parser("tools", help="inspect or explicitly call a Tool")
+    tools = commands.add_parser(
+        "tools", help="inspect or explicitly call a Tool"
+    )
     tools_commands = tools.add_subparsers(dest="tools_command", required=True)
     tools_list = tools_commands.add_parser("list")
     tools_list.add_argument("harness")
@@ -38,7 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
     tools_call.add_argument("arguments")
     tools_call.add_argument("harness")
     skills = commands.add_parser("skills", help="inspect Skills")
-    skills_commands = skills.add_subparsers(dest="skills_command", required=True)
+    skills_commands = skills.add_subparsers(
+        dest="skills_command", required=True
+    )
     skills_list = skills_commands.add_parser("list")
     skills_list.add_argument("harness")
     skills_view = skills_commands.add_parser("view")
@@ -54,13 +62,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     json_output = "--json" in arguments
     if json_output:
-        arguments = ["--json", *(item for item in arguments if item != "--json")]
+        arguments = [
+            "--json",
+            *(item for item in arguments if item != "--json"),
+        ]
     try:
         args = build_parser().parse_args(arguments)
         result = asyncio.run(_dispatch(args))
     except (NextloopError, ValueError, OSError) as exc:
         if json_output:
-            print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+            print(
+                json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+            )
         else:
             print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -96,7 +109,9 @@ async def _dispatch(args: argparse.Namespace) -> Any:
             call = ToolCall("cli_call", args.name, args.arguments)
             _, issues = harness.tools.validate([call])
             if issues:
-                raise NextloopError("; ".join(issue.message for issue in issues))
+                raise NextloopError(
+                    "; ".join(issue.message for issue in issues)
+                )
             import asyncio
 
             tool_outcome = await harness.tools.execute(
@@ -112,9 +127,14 @@ async def _dispatch(args: argparse.Namespace) -> Any:
             await harness.check()
             assert harness.skills is not None
             if args.skills_command == "list":
-                return [dataclasses.asdict(spec) for spec in harness.skills.list()]
+                return [
+                    dataclasses.asdict(spec) for spec in harness.skills.list()
+                ]
             document = harness.skills.load(args.name)
-            return {"spec": dataclasses.asdict(document.spec), "body": document.body}
+            return {
+                "spec": dataclasses.asdict(document.spec),
+                "body": document.body,
+            }
         if args.command == "smoke":
             outcome = await harness.run(args.input)
             return _turn_outcome(outcome)
@@ -134,6 +154,7 @@ def _turn_outcome(outcome: TurnOutcome) -> dict[str, Any]:
     }
 
 
+# bits:explain(BCS003): config dispatch; split duplicates validation; keep API
 def _print_human(args: argparse.Namespace, result: Any) -> None:
     if args.command == "check":
         print("Harness OK")
@@ -141,14 +162,18 @@ def _print_human(args: argparse.Namespace, result: Any) -> None:
         print("Skills: " + (", ".join(result["skills"]) or "none"))
     elif args.command == "tools" and args.tools_command == "list":
         for item in result:
+            # bits:allow(BCS007): Python has no brace blocks
             print(f"{item['name']}\t{item['mode']}\t{item['description']}")
     elif args.command == "skills" and args.skills_command == "list":
         for item in result:
+            # bits:allow(BCS007): Python has no brace blocks
             print(f"{item['name']}\t{item['description']}")
     elif args.command == "skills":
         print(result["body"])
     elif isinstance(result, dict) and "status" in result:
-        print(f"{result['status']}: {result.get('error') or result.get('final_message_id')}")
+        print(
+            f"{result['status']}: {result.get('error') or result.get('final_message_id')}"
+        )
     else:
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 

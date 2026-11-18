@@ -21,14 +21,19 @@ def make_approval_request(
 ) -> ApprovalRequest | None:
     if not any(
         item.spec.approval is not None
-        and (item.spec.approval.predicate is None or item.spec.approval.predicate(item.arguments))
+        and (
+            item.spec.approval.predicate is None
+            or item.spec.approval.predicate(item.arguments)
+        )
         for item in calls
     ):
         return None
     expiries = [
-        datetime.now(UTC) + timedelta(seconds=item.spec.approval.expires_after_seconds)
+        datetime.now(UTC)
+        + timedelta(seconds=item.spec.approval.expires_after_seconds)
         for item in calls
-        if item.spec.approval is not None and item.spec.approval.expires_after_seconds is not None
+        if item.spec.approval is not None
+        and item.spec.approval.expires_after_seconds is not None
     ]
     return ApprovalRequest(
         approval_id=new_id("approval"),
@@ -40,9 +45,14 @@ def make_approval_request(
                 call_id=item.call.call_id,
                 name=item.call.name,
                 canonical_arguments=json.dumps(
-                    item.arguments, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                    item.arguments,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
                 ),
-                policy_version=item.spec.approval.version if item.spec.approval else "",
+                policy_version=item.spec.approval.version
+                if item.spec.approval
+                else "",
                 schema_version=EVENT_SCHEMA_VERSION,
             )
             for item in calls
@@ -96,16 +106,21 @@ def approval_decision_event(
     return NewEvent(event_type, turn=turn, step=step, payload=payload)
 
 
+# bits:explain(BCS003): event projection; split risks parity; keep hot path
 def pending_approval(events: Sequence[Event]) -> ApprovalRequest | None:
     pending: ApprovalRequest | None = None
     completed: set[str] = set()
     for event in events:
+        # bits:allow(BCS007): Python has no brace blocks
         if event.event_type == EventType.APPROVAL_REQUESTED:
             pending = _request_from_event(event)
             completed.clear()
         elif pending is None:
             continue
-        elif event.event_type in (EventType.APPROVAL_REJECTED, EventType.APPROVAL_CANCELLED):
+        elif event.event_type in (
+            EventType.APPROVAL_REJECTED,
+            EventType.APPROVAL_CANCELLED,
+        ):
             if event.payload.get("approval_id") == pending.approval_id:
                 pending = None
                 completed.clear()

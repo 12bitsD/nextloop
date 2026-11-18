@@ -19,6 +19,7 @@ async def run_once(event_count: int) -> dict[str, object]:
     channel = PreviewChannel(Sink(), max_queue_size=event_count + 1)
     started = time.perf_counter()
     for _ in range(event_count):
+        # bits:allow(BCS007): Python has no brace blocks
         channel.delta(request(), 1, {"channel": "content", "delta": "x"})
     await channel.close()
     return {

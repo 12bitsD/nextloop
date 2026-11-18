@@ -64,7 +64,13 @@ async def test_invalid_usage_fails_closed_without_delivery(invalid):
     outcome = await AgentLoop().run(
         context(
             store,
-            FakeProvider([ModelResponse(content="bad", usage=ModelUsage(input_tokens=invalid))]),
+            FakeProvider(
+                [
+                    ModelResponse(
+                        content="bad", usage=ModelUsage(input_tokens=invalid)
+                    )
+                ]
+            ),
             registry(),
             delivery,
             config=config(max_input_tokens=10),
@@ -118,10 +124,13 @@ async def test_preview_overflow_keeps_latest_control_event():
     channel.attempt_started(request(), 1, streaming=True)
     await asyncio.sleep(0.02)
     for _ in range(20):
+        # bits:allow(BCS007): Python has no brace blocks
         channel.delta(request(), 1, {"channel": "content", "delta": "x"})
     sink.release.set()
     await asyncio.sleep(0.05)
-    channel.attempt_ended(request(), 1, status="response", response=ModelResponse(content="done"))
+    channel.attempt_ended(
+        request(), 1, status="response", response=ModelResponse(content="done")
+    )
     await channel.close()
 
     kinds = [event.kind for event in sink.events]
@@ -185,7 +194,9 @@ async def test_exporter_optional_lifecycle_and_ownership():
             self.calls.append("close")
 
     owned = Exporter()
-    store = ObservingEventStore(InMemoryEventStore(), [owned], close_exporters=[owned])
+    store = ObservingEventStore(
+        InMemoryEventStore(), [owned], close_exporters=[owned]
+    )
     await store.flush()
     await store.close()
     assert owned.calls == ["flush", "flush", "close"]

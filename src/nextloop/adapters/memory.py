@@ -72,8 +72,15 @@ class InMemoryEventStore:
         if session_id in self._deleted:
             raise SessionDeletedError(f"Session is deleted: {session_id}")
 
-    async def attach_writer(self, session_id: str, *, force: bool = False) -> tuple[int, int, int]:
-        epoch, last_seq, last_turn, _ = await self._attach_writer(session_id, force=force)
+    async def attach_writer(
+        self,
+        session_id: str,
+        *,
+        force: bool = False,  # bits:allow(BCS004): established API
+    ) -> tuple[int, int, int]:
+        epoch, last_seq, last_turn, _ = await self._attach_writer(
+            session_id, force=force
+        )
         return epoch, last_seq, last_turn
 
     async def attach_writer_checked(
@@ -81,6 +88,7 @@ class InMemoryEventStore:
         session_id: str,
         check: HistoryCheck,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool = False,
         initial_events: Sequence[NewEvent] = (),
     ) -> tuple[int, int, int, Sequence[Event]]:
@@ -92,6 +100,7 @@ class InMemoryEventStore:
         self,
         session_id: str,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool,
         check: HistoryCheck | None = None,
         initial_events: Sequence[NewEvent] = (),
@@ -101,7 +110,8 @@ class InMemoryEventStore:
             history: Sequence[Event] = ()
             if check is not None:
                 history = tuple(
-                    upcast_event(copy.deepcopy(event)) for event in self._events[session_id]
+                    upcast_event(copy.deepcopy(event))
+                    for event in self._events[session_id]
                 )
                 check(history)
             if self.lease_seconds is not None:
@@ -112,7 +122,9 @@ class InMemoryEventStore:
                     and lease.expires_at > self._clock()
                     and not force
                 ):
-                    raise WriterLeaseError("Another owner holds an unexpired Session lease")
+                    raise WriterLeaseError(
+                        "Another owner holds an unexpired Session lease"
+                    )
                 self._leases[session_id] = _Lease(
                     self._owner_id or "",
                     self._epochs[session_id] + 1,
@@ -138,10 +150,17 @@ class InMemoryEventStore:
                     )
                     for offset, draft in enumerate(initial_events)
                 ]
-                if any(event.event_id in self._event_ids[session_id] for event in committed):
-                    raise InvariantViolation("Event ID reused with different content")
+                if any(
+                    event.event_id in self._event_ids[session_id]
+                    for event in committed
+                ):
+                    raise InvariantViolation(
+                        "Event ID reused with different content"
+                    )
                 events.extend(committed)
-                self._event_ids[session_id].update((event.event_id, event) for event in committed)
+                self._event_ids[session_id].update(
+                    (event.event_id, event) for event in committed
+                )
             last_turn = max((event.turn for event in events), default=0)
             return self._epochs[session_id], len(events), last_turn, history
 
@@ -170,7 +189,9 @@ class InMemoryEventStore:
                 self._ensure_active(session_id)
                 raise InvariantViolation("Writer leases are not configured")
             self._check_writer_locked(session_id, writer_epoch)
-            self._leases[session_id].expires_at = self._clock() + self.lease_seconds
+            self._leases[session_id].expires_at = (
+                self._clock() + self.lease_seconds
+            )
 
     async def has_writer(self, session_id: str) -> bool:
         async with self._lock:
@@ -181,7 +202,10 @@ class InMemoryEventStore:
                 lease = self._leases[session_id]
             except KeyError:
                 return False
-            return lease.owner_id == self._owner_id and lease.expires_at > self._clock()
+            return (
+                lease.owner_id == self._owner_id
+                and lease.expires_at > self._clock()
+            )
 
     async def append(
         self,
@@ -200,7 +224,9 @@ class InMemoryEventStore:
             committed = []
             for offset, draft in enumerate(events):
                 if draft.event_id in known_ids or draft.event_id in batch_ids:
-                    raise InvariantViolation("Event ID reused with different content")
+                    raise InvariantViolation(
+                        "Event ID reused with different content"
+                    )
                 batch_ids.add(draft.event_id)
                 event = Event(
                     session_id=session_id,
@@ -225,29 +251,43 @@ class InMemoryEventStore:
             self._ensure_active(session_id)
             events = self._events[session_id]
             epoch_seq = max(
-                (event.seq for event in events if event.surface_op == SurfaceOp.EPOCH),
+                (
+                    event.seq
+                    for event in events
+                    if event.surface_op == SurfaceOp.EPOCH
+                ),
                 default=1,
             )
             return tuple(
                 upcast_event(copy.deepcopy(event))
                 for event in events
-                if event.seq >= epoch_seq and is_surface_event(event.event_type, event.surface_op)
+                if event.seq >= epoch_seq
+                and is_surface_event(event.event_type, event.surface_op)
             )
 
     async def load_recovery(self, session_id: str) -> Sequence[Event]:
         async with self._lock:
             self._ensure_active(session_id)
-            return tuple(upcast_event(copy.deepcopy(event)) for event in self._events[session_id])
+            return tuple(
+                upcast_event(copy.deepcopy(event))
+                for event in self._events[session_id]
+            )
 
     @staticmethod
-    def _idempotent(existing: list[Event], drafts: Sequence[NewEvent]) -> Sequence[Event]:
+    def _idempotent(
+        existing: list[Event], drafts: Sequence[NewEvent]
+    ) -> Sequence[Event]:
         return verify_idempotent_append(existing, drafts)
 
     async def get_event(self, session_id: str, event_id: str) -> Event | None:
         async with self._lock:
             self._ensure_active(session_id)
             event = self._event_ids[session_id].get(event_id)
-            return upcast_event(copy.deepcopy(event)) if event is not None else None
+            return (
+                upcast_event(copy.deepcopy(event))
+                if event is not None
+                else None
+            )
 
     async def last_seq(self, session_id: str) -> int:
         async with self._lock:

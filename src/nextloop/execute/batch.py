@@ -47,6 +47,7 @@ class BatchExecutor:
         self.max_parallel = max_parallel
         self.admit = admit
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     async def execute(
         self,
         calls: Sequence[ToolCall],
@@ -59,13 +60,16 @@ class BatchExecutor:
         commit: Callable[[Sequence[NewEvent]], Awaitable[None]],
         check_writer: Callable[[], Awaitable[None]],
         intent_events: Sequence[NewEvent] = (),
+        # bits:allow(BCS004): established API/test-double signature
         approval_checked: bool = False,
     ) -> BatchResult:
         validated, issues = self.registry.validate(calls)
         if issues:
             return BatchResult(issues=issues)
         approval = (
-            None if approval_checked else make_approval_request(validated, turn=turn, step=step)
+            None
+            if approval_checked
+            else make_approval_request(validated, turn=turn, step=step)
         )
         if approval is not None:
             await commit([*intent_events, approval_requested_event(approval)])
@@ -83,7 +87,10 @@ class BatchExecutor:
                     (
                         item.call,
                         item.spec,
-                        Skipped("Blocked by unresolved resources: " + ", ".join(sorted(blocked))),
+                        Skipped(
+                            "Blocked by unresolved resources: "
+                            + ", ".join(sorted(blocked))
+                        ),
                     )
                     for item in validated
                 ),
@@ -103,47 +110,78 @@ class BatchExecutor:
         while index < len(validated):
             if cancel.is_set() or truncated:
                 outcomes.extend(
-                    self._skip(validated[index:], "Cancelled or truncated before dispatch")
+                    self._skip(
+                        validated[index:],
+                        "Cancelled or truncated before dispatch",
+                    )
                 )
                 break
             current = validated[index]
             if current.spec.mode.value == "exclusive":
                 outcome, timing = await self._run_one(
-                    current, session_id, turn, step, cancel, commit, check_writer
+                    current,
+                    session_id,
+                    turn,
+                    step,
+                    cancel,
+                    commit,
+                    check_writer,
                 )
                 outcomes.append((current.call, current.spec, outcome))
                 timings[current.call.call_id] = timing
                 index += 1
                 if self._closes_batch(current.spec, outcome):
                     outcomes.extend(
-                        self._skip(validated[index:], "Truncated after exclusive Tool outcome")
+                        self._skip(
+                            validated[index:],
+                            "Truncated after exclusive Tool outcome",
+                        )
                     )
                     break
                 continue
 
             group = []
-            while index < len(validated) and validated[index].spec.mode.value == "parallel":
+            while (
+                index < len(validated)
+                and validated[index].spec.mode.value == "parallel"
+            ):
                 group.append(validated[index])
                 index += 1
             for start in range(0, len(group), self.max_parallel):
                 chunk = group[start : start + self.max_parallel]
                 if cancel.is_set() or truncated:
                     outcomes.extend(
-                        self._skip(chunk, "Cancelled or truncated before parallel dispatch")
+                        self._skip(
+                            chunk,
+                            "Cancelled or truncated before parallel dispatch",
+                        )
                     )
                     continue
                 chunk_results = await asyncio.gather(
                     *(
-                        self._run_one(item, session_id, turn, step, cancel, commit, check_writer)
+                        self._run_one(
+                            item,
+                            session_id,
+                            turn,
+                            step,
+                            cancel,
+                            commit,
+                            check_writer,
+                        )
                         for item in chunk
                     )
                 )
                 chunk_outcomes = []
-                for item, (outcome, timing) in zip(chunk, chunk_results, strict=True):
+                for item, (outcome, timing) in zip(
+                    chunk, chunk_results, strict=True
+                ):
                     outcomes.append((item.call, item.spec, outcome))
                     timings[item.call.call_id] = timing
                     chunk_outcomes.append(outcome)
-                if any(self._requires_batch_stop(outcome) for outcome in chunk_outcomes):
+                if any(
+                    self._requires_batch_stop(outcome)
+                    for outcome in chunk_outcomes
+                ):
                     truncated = True
                     outcomes.extend(
                         self._skip(
@@ -205,9 +243,9 @@ class BatchExecutor:
 
     @staticmethod
     def _requires_batch_stop(outcome: ToolOutcome) -> bool:
-        return isinstance(outcome, (Cancelled, UncertainSettled, UncertainHanging)) or (
-            isinstance(outcome, Completed) and outcome.concludes_turn
-        )
+        return isinstance(
+            outcome, (Cancelled, UncertainSettled, UncertainHanging)
+        ) or (isinstance(outcome, Completed) and outcome.concludes_turn)
 
     @classmethod
     def _closes_batch(cls, spec: ToolSpec, outcome: ToolOutcome) -> bool:

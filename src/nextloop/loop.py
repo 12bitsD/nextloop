@@ -29,7 +29,11 @@ from .driver import (
 from .events.approval import approval_decision_event, pending_approval
 from .events.codec import is_uncertain_result
 from .events.pending import completed_input_outcome, pending_inputs
-from .events.repair import active_resource_locks, pending_final_messages, repair_events
+from .events.repair import (
+    active_resource_locks,
+    pending_final_messages,
+    repair_events,
+)
 
 
 class AgentLoop:
@@ -46,7 +50,10 @@ class AgentLoop:
         async with self._frame(context) as frame:
             history = frame.history
             replayed = completed_input_outcome(
-                history, context.session_id, context.input_id, context.initial_input
+                history,
+                context.session_id,
+                context.input_id,
+                context.initial_input,
             )
             if replayed is not None:
                 return replayed
@@ -56,16 +63,21 @@ class AgentLoop:
             await frame.begin()
             return await TurnDriver(frame).run()
 
-    async def steer(self, session_id: str, content: str, *, input_id: str | None = None) -> bool:
+    async def steer(
+        self, session_id: str, content: str, *, input_id: str | None = None
+    ) -> bool:
         result = await self.steer_result(session_id, content, input_id=input_id)
         if result.status == SteerStatus.INVALID_INPUT and input_id is not None:
             raise ValueError("input_id must be non-empty")
         return result.status == SteerStatus.ACCEPTED
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     async def steer_result(
         self, session_id: str, content: str, *, input_id: str | None = None
     ) -> SteerResult:
-        if (input_id is not None and not input_id.strip()) or not content.strip():
+        if (
+            input_id is not None and not input_id.strip()
+        ) or not content.strip():
             return SteerResult(SteerStatus.INVALID_INPUT, input_id)
         execution = self._active.get(session_id)
         if execution is not None:
@@ -73,14 +85,21 @@ class AgentLoop:
                 if execution.final_committed:
                     return SteerResult(SteerStatus.TURN_CLOSED, input_id)
                 try:
-                    await execution.context.store.check_writer(session_id, execution.writer_epoch)
+                    await execution.context.store.check_writer(
+                        session_id, execution.writer_epoch
+                    )
                 except InvariantViolation:
                     return SteerResult(SteerStatus.NOT_WRITER, input_id)
                 if input_id in execution.accepted_inputs:
                     if execution.accepted_inputs[input_id] != content:
-                        raise InvariantViolation("input_id reused with different content")
+                        raise InvariantViolation(
+                            "input_id reused with different content"
+                        )
                     return SteerResult(SteerStatus.ACCEPTED, input_id)
-                if len(execution.actor.inbox) >= execution.context.config.max_pending_inputs:
+                if (
+                    len(execution.actor.inbox)
+                    >= execution.context.config.max_pending_inputs
+                ):
                     return SteerResult(SteerStatus.QUEUE_FULL, input_id)
                 accepted_id = input_id or new_id("in")
                 await execution.append_locked(
@@ -89,7 +108,10 @@ class AgentLoop:
                             EventType.INPUT_ACCEPTED,
                             turn=execution.turn,
                             step=execution.step,
-                            payload={"input_id": accepted_id, "content": content},
+                            payload={
+                                "input_id": accepted_id,
+                                "content": content,
+                            },
                         )
                     ]
                 )
@@ -149,15 +171,21 @@ class AgentLoop:
             )
             return True
 
-    async def _lease_writer_available(self, store: EventStore, session_id: str) -> bool:
+    async def _lease_writer_available(
+        self, store: EventStore, session_id: str
+    ) -> bool:
         if getattr(store, "lease_seconds", None) is None:
             return True
         return await store.has_writer(session_id)
 
-    async def pending_inputs(self, session_id: str, store: EventStore) -> tuple[PendingInput, ...]:
+    async def pending_inputs(
+        self, session_id: str, store: EventStore
+    ) -> tuple[PendingInput, ...]:
         return pending_inputs(await store.load_recovery(session_id))
 
-    async def resource_locks(self, session_id: str, store: EventStore) -> frozenset[str]:
+    async def resource_locks(
+        self, session_id: str, store: EventStore
+    ) -> frozenset[str]:
         return active_resource_locks(await store.load_recovery(session_id))
 
     async def release_resource(
@@ -172,11 +200,15 @@ class AgentLoop:
         if not resource.strip() or not actor.strip() or not evidence.strip():
             raise ValueError("resource, actor, and evidence must be non-empty")
         if session_id in self._active:
-            raise RuntimeError("Cannot release resource on a Session with an active Turn")
+            raise RuntimeError(
+                "Cannot release resource on a Session with an active Turn"
+            )
         session_actor = self._actors.setdefault(session_id, SessionActor())
         async with session_actor.run_lock:
             if session_id in self._active:
-                raise RuntimeError("Cannot release resource on a Session with an active Turn")
+                raise RuntimeError(
+                    "Cannot release resource on a Session with an active Turn"
+                )
             history = await store.load_recovery(session_id)
             if resource not in active_resource_locks(history):
                 return False
@@ -190,7 +222,11 @@ class AgentLoop:
                         EventType.RESOURCE_RELEASED,
                         turn=last_turn,
                         step=0,
-                        payload={"resource": resource, "actor": actor, "evidence": evidence},
+                        payload={
+                            "resource": resource,
+                            "actor": actor,
+                            "evidence": evidence,
+                        },
                     )
                 ],
             )
@@ -201,20 +237,31 @@ class AgentLoop:
         context: TurnContext,
         *,
         decisions: Mapping[str, bool] | None = None,
+        # bits:allow(BCS004): established API/test-double signature
         reject_all: bool = False,
         new_input: str | None = None,
     ) -> TurnOutcome:
         if not context.input_id.strip():
             raise ValueError("input_id must be non-empty")
         self._stores[context.session_id] = context.store
+        run_context = context
         if new_input is not None:
-            context = replace(context, initial_input=new_input)
-        if pending_approval(await context.store.load_recovery(context.session_id)) is None:
+            run_context = replace(context, initial_input=new_input)
+        if (
+            pending_approval(
+                await run_context.store.load_recovery(run_context.session_id)
+            )
+            is None
+        ):
             raise InvariantViolation("No pending approval")
-        async with self._frame(context) as frame:
-            return await run_approval_resume(frame, decisions=decisions, reject_all=reject_all)
+        async with self._frame(run_context) as frame:
+            return await run_approval_resume(
+                frame, decisions=decisions, reject_all=reject_all
+            )
 
-    async def retry_operation(self, context: TurnContext, operation_id: str) -> TurnOutcome:
+    async def retry_operation(
+        self, context: TurnContext, operation_id: str
+    ) -> TurnOutcome:
         if not context.input_id.strip():
             raise ValueError("input_id must be non-empty")
         self._stores[context.session_id] = context.store
@@ -225,7 +272,9 @@ class AgentLoop:
             and is_uncertain_result(event)
             for event in history
         ):
-            raise InvariantViolation("Operation must have a recovered uncertain result")
+            raise InvariantViolation(
+                "Operation must have a recovered uncertain result"
+            )
         if has_successful_reconciliation(history, operation_id):
             raise InvariantViolation("Operation is already reconciled")
         async with self._frame(context) as frame:
@@ -237,6 +286,7 @@ class AgentLoop:
         store: EventStore,
         delivery: DeliveryOwner,
         *,
+        # bits:allow(BCS004): established API/test-double signature
         force: bool = False,
     ) -> RecoveryOutcome:
         self._stores[session_id] = store
@@ -245,8 +295,12 @@ class AgentLoop:
         actor = self._actors.setdefault(session_id, SessionActor())
         async with actor.run_lock:
             if session_id in self._active:
-                raise RuntimeError("Cannot recover a Session with an active Turn")
-            writer_epoch, last_seq, _ = await store.attach_writer(session_id, force=force)
+                raise RuntimeError(
+                    "Cannot recover a Session with an active Turn"
+                )
+            writer_epoch, last_seq, _ = await store.attach_writer(
+                session_id, force=force
+            )
             events = list(await store.load_recovery(session_id))
             repaired = repair_events(events)
             seq = last_seq
@@ -255,13 +309,17 @@ class AgentLoop:
                 nonlocal seq
                 if not new_events:
                     return
-                committed = await store.append(session_id, writer_epoch, seq + 1, new_events)
+                committed = await store.append(
+                    session_id, writer_epoch, seq + 1, new_events
+                )
                 seq = committed[-1].seq
 
             await append(repaired.events)
             delivered = []
             delivery_unknown = []
             for message in pending_final_messages(events):
+                # bits:allow(BCS007): Python has no brace blocks
+                final_message_id = message.final_message_id
                 try:
                     await delivery.deliver(message)
                     await append(
@@ -271,7 +329,7 @@ class AgentLoop:
                                 turn=message.turn,
                                 step=message.step,
                                 payload={
-                                    "final_message_id": message.final_message_id,
+                                    "final_message_id": final_message_id,
                                     "recovered": True,
                                 },
                             )
@@ -286,7 +344,7 @@ class AgentLoop:
                                 turn=message.turn,
                                 step=message.step,
                                 payload={
-                                    "final_message_id": message.final_message_id,
+                                    "final_message_id": final_message_id,
                                     "error": str(exc),
                                     "recovered": True,
                                 },

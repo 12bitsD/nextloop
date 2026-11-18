@@ -58,7 +58,11 @@ def result(operation_id="op-1"):
             "operation_id": operation_id,
             "origin_turn": 1,
             "origin_step": 1,
-            "message": {"role": "tool", "content": "done", "tool_call_id": "call-1"},
+            "message": {
+                "role": "tool",
+                "content": "done",
+                "tool_call_id": "call-1",
+            },
             "outcome": {"kind": "completed", "content": "done"},
         },
     )

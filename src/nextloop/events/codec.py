@@ -17,14 +17,19 @@ from ..contracts import (
 )
 from .upcast import validate_event_schema
 
-SURFACE_LOG_INCLUDED_TYPES = (EventType.TOOL_BATCH_REJECTED, EventType.INPUT_ACCEPTED)
+SURFACE_LOG_INCLUDED_TYPES = (
+    EventType.TOOL_BATCH_REJECTED,
+    EventType.INPUT_ACCEPTED,
+)
 SURFACE_LOG_INCLUDED_SQL = ", ".join(
     f"'{event_type.value}'" for event_type in SURFACE_LOG_INCLUDED_TYPES
 )
 
 
 def is_surface_event(event_type: EventType, surface_op: SurfaceOp) -> bool:
-    return surface_op != SurfaceOp.NONE or event_type in SURFACE_LOG_INCLUDED_TYPES
+    return (
+        surface_op != SurfaceOp.NONE or event_type in SURFACE_LOG_INCLUDED_TYPES
+    )
 
 
 def is_uncertain_result(event: Event) -> bool:
@@ -35,7 +40,9 @@ def is_uncertain_result(event: Event) -> bool:
     )
 
 
-def with_origin(event: NewEvent, turn: int, step: int, kind: str | None = None) -> NewEvent:
+def with_origin(
+    event: NewEvent, turn: int, step: int, kind: str | None = None
+) -> NewEvent:
     payload = {**event.payload, "origin_turn": turn, "origin_step": step}
     if kind is not None:
         payload["origin_kind"] = kind
@@ -48,12 +55,17 @@ def verify_idempotent_append(
     by_id = {event.event_id: event for event in existing}
     committed = []
     for draft in drafts:
+        # bits:allow(BCS007): Python has no brace blocks
         event = by_id.get(draft.event_id)
         if event is None:
-            raise InvariantViolation("Expected sequence does not match Session tail")
+            raise InvariantViolation(
+                "Expected sequence does not match Session tail"
+            )
         validate_event_schema(event)
         if event.payload == {"_nextloop_erased": True}:
-            raise PayloadErasedError(f"Event payload is erased: {event.event_id}")
+            raise PayloadErasedError(
+                f"Event payload is erased: {event.event_id}"
+            )
         if (
             event.event_type != draft.event_type
             or event.turn != draft.turn
@@ -113,6 +125,7 @@ class ProjectionFacts:
     working_context: Message | None
 
 
+# bits:explain(BCS003): event projection; split risks parity; keep hot path
 def fold_projection_facts(events: Sequence[Event]) -> ProjectionFacts:
     rejected_steps: set[tuple[int, int]] = set()
     pending: dict[str, PendingInput] = {}
@@ -137,7 +150,9 @@ def fold_projection_facts(events: Sequence[Event]) -> ProjectionFacts:
             if isinstance(marker, Mapping):
                 action = marker.get("action")
                 if action == "set":
-                    working_context = message_from_data(event.payload["message"])
+                    working_context = message_from_data(
+                        event.payload["message"]
+                    )
                 elif action in ("clear", "expired"):
                     working_context = None
         elif event.event_type == EventType.TOOL_BATCH_REJECTED:

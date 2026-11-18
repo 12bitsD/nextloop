@@ -33,7 +33,9 @@ class TrackingTools(ToolRegistry):
         self.closed = True
 
 
-async def test_harness_injects_adapters_without_closing_caller_dependencies(tmp_path):
+async def test_harness_injects_adapters_without_closing_caller_dependencies(
+    tmp_path,
+):
     store = TrackingStore()
     tools = TrackingTools()
     tools.register(

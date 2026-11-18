@@ -10,10 +10,16 @@ from nextloop.execute.stdio_transport import StdioProtocolError
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("replacement", ['{"type": "text"}', '{"type": "text", "text": None}'])
+@pytest.mark.parametrize(
+    "replacement", ['{"type": "text"}', '{"type": "text", "text": None}']
+)
 async def test_mcp_rejects_missing_or_null_text(tmp_path, replacement):
     server = tmp_path / "server.py"
-    server.write_text(SERVER.replace('{"type": "text", "text": arguments["text"]}', replacement, 1))
+    server.write_text(
+        SERVER.replace(
+            '{"type": "text", "text": arguments["text"]}', replacement, 1
+        )
+    )
     runtime = McpStdioRuntime(config(server))
     await runtime.start()
 
@@ -73,7 +79,9 @@ async def test_mcp_catalog_page_limit_and_deadline(tmp_path, monkeypatch):
         ("MCP_MAX_CATALOG_BYTES", 1, "byte limit"),
     ],
 )
-async def test_mcp_catalog_time_and_size_limits(tmp_path, monkeypatch, constant, value, message):
+async def test_mcp_catalog_time_and_size_limits(
+    tmp_path, monkeypatch, constant, value, message
+):
     monkeypatch.setattr(mcp, constant, value)
     server = tmp_path / "server.py"
     server.write_text(SERVER)

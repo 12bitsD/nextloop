@@ -22,7 +22,9 @@ target = "cli_tools:register"
 
 
 def test_cli_commands(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     (tmp_path / "cli_tools.py").write_text(
         "from nextloop import ToolSpec\n"
@@ -33,20 +35,32 @@ def test_cli_commands(
     )
     skill = tmp_path / "skills" / "demo" / "SKILL.md"
     skill.parent.mkdir(parents=True)
-    skill.write_text("---\nname: demo\ndescription: Demo\n---\nRead only.\n", encoding="utf-8")
+    skill.write_text(
+        "---\nname: demo\ndescription: Demo\n---\nRead only.\n",
+        encoding="utf-8",
+    )
     config = tmp_path / "harness.toml"
     config.write_text(BASE + '[skills]\npaths = ["skills"]\n', encoding="utf-8")
     monkeypatch.syspath_prepend(str(tmp_path))
 
     assert main(["--json", "check", str(config)]) == 0
     checked = json.loads(capsys.readouterr().out)
-    assert checked["ok"] and checked["tools"] == ["echo", "skill_view", "read_tool_result"]
-    assert checked["warnings"] == ["tools[0].effect is unset; defaulting to NON_IDEMPOTENT"]
+    assert checked["ok"] and checked["tools"] == [
+        "echo",
+        "skill_view",
+        "read_tool_result",
+    ]
+    assert checked["warnings"] == [
+        "tools[0].effect is unset; defaulting to NON_IDEMPOTENT"
+    ]
     assert main(["--json", "tools", "list", str(config)]) == 0
     listed = json.loads(capsys.readouterr().out)[0]
     assert listed["name"] == "echo"
     assert listed["effect"] == "non_idempotent"
-    assert main(["--json", "tools", "call", "echo", '{"text":"ok"}', str(config)]) == 0
+    assert (
+        main(["--json", "tools", "call", "echo", '{"text":"ok"}', str(config)])
+        == 0
+    )
     assert json.loads(capsys.readouterr().out)["content"] == "ok"
     assert main(["--json", "skills", "list", str(config)]) == 0
     assert json.loads(capsys.readouterr().out)[0]["name"] == "demo"

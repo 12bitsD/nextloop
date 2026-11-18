@@ -6,7 +6,9 @@ import httpx
 
 
 class AsyncClientOwner:
-    def __init__(self, external: httpx.AsyncClient | None, timeout_seconds: float) -> None:
+    def __init__(
+        self, external: httpx.AsyncClient | None, timeout_seconds: float
+    ) -> None:
         self._external = external
         self._timeout_seconds = timeout_seconds
         self._owned: httpx.AsyncClient | None = None
@@ -18,7 +20,9 @@ class AsyncClientOwner:
         if self._owned is None:
             async with self._lock:
                 if self._owned is None:
-                    self._owned = httpx.AsyncClient(timeout=self._timeout_seconds)
+                    self._owned = httpx.AsyncClient(
+                        timeout=self._timeout_seconds
+                    )
         return self._owned
 
     async def close(self) -> None:

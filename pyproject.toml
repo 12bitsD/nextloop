@@ -63,11 +63,12 @@ markers = [
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 80
 cache-dir = ".local/cache/ruff"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM"]
+ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

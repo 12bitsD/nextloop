@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..contracts import EventType, InvariantViolation, Message, NewEvent, SurfaceOp
+from ..contracts import (
+    EventType,
+    InvariantViolation,
+    Message,
+    NewEvent,
+    SurfaceOp,
+)
 from .project import message_to_data
 
 
@@ -22,7 +28,9 @@ def user_input_events(
             surface_op=SurfaceOp.APPEND,
             payload={
                 "input_id": input_id,
-                "message": message_to_data(Message(role="user", content=content)),
+                "message": message_to_data(
+                    Message(role="user", content=content)
+                ),
             },
         )
         for input_id, content in unique.values()

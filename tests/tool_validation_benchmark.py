@@ -8,10 +8,15 @@ from nextloop.execute.tools import validate_calls
 
 
 def run_once(count: int = 5000) -> dict[str, object]:
-    spec = ToolSpec("read", "Read", {"type": "object", "properties": {"path": {"type": "string"}}})
+    spec = ToolSpec(
+        "read",
+        "Read",
+        {"type": "object", "properties": {"path": {"type": "string"}}},
+    )
     call = ToolCall("c", "read", json.dumps({"path": "a.txt"}))
     started = time.perf_counter()
     for _ in range(count):
+        # bits:allow(BCS007): Python has no brace blocks
         validated, issues = validate_calls([call], {"read": spec})
         assert not issues and len(validated) == 1
     return {"calls": count, "seconds": time.perf_counter() - started}

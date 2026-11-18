@@ -49,6 +49,7 @@ class ModelCaller:
         self.record_usage = record_usage
         self.preview = preview
 
+    # bits:explain(BCS003): turn state machine; split risks order; preserve I/O
     async def call(
         self,
         request: CandidateRequest,
@@ -58,16 +59,23 @@ class ModelCaller:
     ) -> ModelCallResult:
         events: list[NewEvent] = []
         for attempt in range(1, self.config.max_provider_attempts + 1):
+            # bits:allow(BCS007): Python has no brace blocks
             if cancel.is_set():
                 return ModelCallResult(events=tuple(events), cancelled=True)
             if self.before_attempt is not None:
                 reason = self.before_attempt()
                 if reason is not None:
-                    return ModelCallResult(events=tuple(events), budget_reason=reason)
+                    return ModelCallResult(
+                        events=tuple(events), budget_reason=reason
+                    )
             preview = self.preview if purpose == "inference" else None
-            streaming_complete = getattr(self.provider, "complete_with_preview", None)
+            streaming_complete = getattr(
+                self.provider, "complete_with_preview", None
+            )
             if preview is not None:
-                preview.attempt_started(request, attempt, streaming=callable(streaming_complete))
+                preview.attempt_started(
+                    request, attempt, streaming=callable(streaming_complete)
+                )
             started_at = utc_now()
             started = time.monotonic()
             first_output = None
@@ -90,7 +98,13 @@ class ModelCaller:
                     preview.delta(request, attempt, delta)
 
             events.append(
-                self._event(request, attempt, "started", purpose=purpose, started_at=started_at)
+                self._event(
+                    request,
+                    attempt,
+                    "started",
+                    purpose=purpose,
+                    started_at=started_at,
+                )
             )
             try:
                 if callable(streaming_complete):
@@ -106,7 +120,9 @@ class ModelCaller:
                     )
                 else:
                     response = await await_with_cancel(
-                        self.provider.complete(request, attempt=attempt, cancel=cancel),
+                        self.provider.complete(
+                            request, attempt=attempt, cancel=cancel
+                        ),
                         cancel,
                         _CancelledByUser,
                     )
@@ -165,7 +181,9 @@ class ModelCaller:
                 if not will_retry:
                     return ModelCallResult(events=tuple(events), error=exc)
                 if await self.has_steer():
-                    return ModelCallResult(events=tuple(events), rebuild_for_steer=True)
+                    return ModelCallResult(
+                        events=tuple(events), rebuild_for_steer=True
+                    )
                 delay = self.config.retry_backoff_seconds * (2 ** (attempt - 1))
                 if delay and await _sleep_or_cancel(delay, cancel):
                     return ModelCallResult(events=tuple(events), cancelled=True)
@@ -185,7 +203,9 @@ class ModelCaller:
                     )
                 )
                 if preview is not None:
-                    preview.attempt_ended(request, attempt, status="error", error=str(error))
+                    preview.attempt_ended(
+                        request, attempt, status="error", error=str(error)
+                    )
                 return ModelCallResult(events=tuple(events), error=error)
             events.append(
                 self._timed_event(
@@ -203,14 +223,22 @@ class ModelCaller:
                 )
             )
             if preview is not None:
-                preview.attempt_ended(request, attempt, status="response", response=response)
-            budget_reason = self.record_usage(response.usage) if self.record_usage else None
+                preview.attempt_ended(
+                    request, attempt, status="response", response=response
+                )
+            budget_reason = (
+                self.record_usage(response.usage) if self.record_usage else None
+            )
             return ModelCallResult(
-                events=tuple(events), response=response, budget_reason=budget_reason
+                events=tuple(events),
+                response=response,
+                budget_reason=budget_reason,
             )
         return ModelCallResult(
             events=tuple(events),
-            error=ProviderError("Provider retry loop exited without a response"),
+            error=ProviderError(
+                "Provider retry loop exited without a response"
+            ),
         )
 
     def _timed_event(
@@ -257,7 +285,9 @@ class ModelCaller:
         )
 
 
-def _ttft_payload(started: float, first_output: float | None) -> dict[str, float]:
+def _ttft_payload(
+    started: float, first_output: float | None
+) -> dict[str, float]:
     if first_output is None:
         return {}
     return {"ttft_ms": round((first_output - started) * 1000, 3)}

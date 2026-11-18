@@ -46,7 +46,12 @@ async def test_reconciliation_budget_failure_closes_step_without_dispatch():
         return Completed("duplicate")
 
     tools.register(
-        ToolSpec("write", "Retry a write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT),
+        ToolSpec(
+            "write",
+            "Retry a write",
+            {"type": "object"},
+            effect=ToolEffect.IDEMPOTENT,
+        ),
         write,
     )
     store = InMemoryEventStore()
@@ -55,7 +60,12 @@ async def test_reconciliation_budget_failure_closes_step_without_dispatch():
         context(
             store,
             FakeProvider(
-                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+                [
+                    ModelResponse(
+                        tool_calls=(call("write"),),
+                        finish_reason=FinishReason.TOOL_CALLS,
+                    )
+                ]
             ),
             tools,
             FakeDelivery(),
@@ -85,10 +95,18 @@ async def test_reconciliation_budget_failure_closes_step_without_dispatch():
     events = await store.load_recovery("s")
     retry_events = [event for event in events if event.turn == outcome.turn]
     assert [
-        event.event_type for event in retry_events if event.event_type == EventType.TOOL_CALL
+        event.event_type
+        for event in retry_events
+        if event.event_type == EventType.TOOL_CALL
     ] == []
-    assert sum(event.event_type == EventType.STEP_START for event in retry_events) == 1
-    assert sum(event.event_type == EventType.STEP_END for event in retry_events) == 1
+    assert (
+        sum(event.event_type == EventType.STEP_START for event in retry_events)
+        == 1
+    )
+    assert (
+        sum(event.event_type == EventType.STEP_END for event in retry_events)
+        == 1
+    )
     assert retry_events[-1].payload["reason"] == "budget_exceeded"
 
 
@@ -104,7 +122,12 @@ async def test_successful_reconciliation_closes_its_only_step():
         return Completed("done")
 
     tools.register(
-        ToolSpec("write", "Retry a write", {"type": "object"}, effect=ToolEffect.IDEMPOTENT),
+        ToolSpec(
+            "write",
+            "Retry a write",
+            {"type": "object"},
+            effect=ToolEffect.IDEMPOTENT,
+        ),
         write,
     )
     store = InMemoryEventStore()
@@ -113,7 +136,12 @@ async def test_successful_reconciliation_closes_its_only_step():
         context(
             store,
             FakeProvider(
-                [ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS)]
+                [
+                    ModelResponse(
+                        tool_calls=(call("write"),),
+                        finish_reason=FinishReason.TOOL_CALLS,
+                    )
+                ]
             ),
             tools,
             FakeDelivery(),
@@ -143,12 +171,26 @@ async def test_successful_reconciliation_closes_its_only_step():
         context(store, FakeProvider([]), tools, FakeDelivery()), operation_id
     )
 
-    retry_events = [event for event in await store.load_recovery("s") if event.turn == outcome.turn]
+    retry_events = [
+        event
+        for event in await store.load_recovery("s")
+        if event.turn == outcome.turn
+    ]
     assert outcome.status == TurnStatus.SUCCEEDED
-    assert sum(event.event_type == EventType.STEP_START for event in retry_events) == 1
-    assert sum(event.event_type == EventType.STEP_END for event in retry_events) == 1
-    assert [item.input_id for item in await loop.pending_inputs("s", store)] == ["later"]
-    assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+    assert (
+        sum(event.event_type == EventType.STEP_START for event in retry_events)
+        == 1
+    )
+    assert (
+        sum(event.event_type == EventType.STEP_END for event in retry_events)
+        == 1
+    )
+    assert [
+        item.input_id for item in await loop.pending_inputs("s", store)
+    ] == ["later"]
+    assert (
+        await loop.steer_result("s", "closed")
+    ).status == SteerStatus.TURN_CLOSED
 
 
 @pytest.mark.asyncio
@@ -162,12 +204,17 @@ async def test_resume_steer_continuation_does_not_leak_preview_worker():
         return Completed("intermediate", concludes_turn=True)
 
     tools.register(
-        ToolSpec("write", "Write", {"type": "object"}, approval=ApprovalPolicy("v1")),
+        ToolSpec(
+            "write", "Write", {"type": "object"}, approval=ApprovalPolicy("v1")
+        ),
         write,
     )
     provider = FakeProvider(
         [
-            ModelResponse(tool_calls=(call("write"),), finish_reason=FinishReason.TOOL_CALLS),
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
             ModelResponse(content="done"),
         ]
     )
@@ -191,7 +238,9 @@ async def test_resume_steer_continuation_does_not_leak_preview_worker():
     assert pending.status == TurnStatus.APPROVAL_PENDING
     assert outcome.status == TurnStatus.SUCCEEDED
     assert preview_tasks() == baseline
-    assert (await loop.steer_result("s", "closed")).status == SteerStatus.TURN_CLOSED
+    assert (
+        await loop.steer_result("s", "closed")
+    ).status == SteerStatus.TURN_CLOSED
 
 
 @pytest.mark.asyncio
@@ -199,7 +248,9 @@ async def test_resume_steer_continuation_does_not_leak_preview_worker():
 async def test_resume_and_retry_reject_empty_input_id_before_commit(method):
     store = InMemoryEventStore()
     loop = AgentLoop()
-    ctx = context(store, FakeProvider([]), registry(), FakeDelivery(), input_id=" ")
+    ctx = context(
+        store, FakeProvider([]), registry(), FakeDelivery(), input_id=" "
+    )
 
     with pytest.raises(ValueError, match="input_id"):
         if method == "resume":

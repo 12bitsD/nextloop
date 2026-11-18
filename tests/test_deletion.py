@@ -93,7 +93,9 @@ async def test_delete_is_reentrant_and_fences_reads_and_writers(store):
 
 
 @pytest.mark.asyncio
-async def test_deleting_tombstone_fails_closed_and_resumes_after_reopen(tmp_path):
+async def test_deleting_tombstone_fails_closed_and_resumes_after_reopen(
+    tmp_path,
+):
     path = str(tmp_path / "events.sqlite3")
     store = SQLiteEventStore(path)
     await seed(store, "s", "sensitive")
@@ -169,7 +171,9 @@ async def test_sqlite_and_outbox_purge_content_canaries(tmp_path, journal_mode):
 
 
 @pytest.mark.asyncio
-async def test_cleanup_crash_after_logical_delete_is_reentrant(tmp_path, monkeypatch):
+async def test_cleanup_crash_after_logical_delete_is_reentrant(
+    tmp_path, monkeypatch
+):
     path = str(tmp_path / "events.sqlite3")
     canary = "nextloop-crash-canary-91ac"
     store = SQLiteEventStore(path)
@@ -200,7 +204,7 @@ async def test_cleanup_crash_after_logical_delete_is_reentrant(tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_observing_delete_purges_only_deleted_session_after_failed_cleanup():
+async def test_delete_purges_only_deleted_session_after_failed_cleanup():
     class FailedCleanupStore(InMemoryEventStore):
         async def delete_session(self, session_id: str) -> None:
             await super().delete_session(session_id)
@@ -238,7 +242,9 @@ async def test_observing_delete_purges_only_deleted_session_after_failed_cleanup
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ["success", "retry", "gap"])
-async def test_outbox_delete_cannot_be_resurrected_by_inflight_export(tmp_path, outcome):
+async def test_outbox_delete_cannot_be_resurrected_by_inflight_export(
+    tmp_path, outcome
+):
     store = InMemoryEventStore()
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, closed_turn())
@@ -266,7 +272,13 @@ async def test_outbox_delete_cannot_be_resurrected_by_inflight_export(tmp_path, 
     with pytest.raises(WriterLeaseError):
         await exporting
 
-    for table in ("outbox_cursor", "outbox_attempts", "outbox_gaps", "outbox_locks"):
+    for table in (
+        "outbox_cursor",
+        "outbox_attempts",
+        "outbox_gaps",
+        "outbox_locks",
+    ):
+        # bits:allow(BCS007): Python has no brace blocks
         assert (
             outbox._connection.execute(
                 f"SELECT COUNT(*) FROM {table} WHERE session_id = 's'"
@@ -277,7 +289,9 @@ async def test_outbox_delete_cannot_be_resurrected_by_inflight_export(tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_concurrent_delete_cannot_turn_snapshot_read_into_empty_history(tmp_path):
+async def test_concurrent_delete_cannot_turn_snapshot_read_into_empty_history(
+    tmp_path,
+):
     path = str(tmp_path / "events.sqlite3")
     store = SQLiteEventStore(path)
     await seed(store, "s", "snapshot-content")
@@ -291,7 +305,9 @@ async def test_concurrent_delete_cannot_turn_snapshot_read_into_empty_history(tm
         assert resume_read.wait(timeout=2)
 
     store._ensure_active_locked = pause_after_check
-    reading = asyncio.create_task(asyncio.to_thread(lambda: asyncio.run(store.load_recovery("s"))))
+    reading = asyncio.create_task(
+        asyncio.to_thread(lambda: asyncio.run(store.load_recovery("s")))
+    )
     assert await asyncio.to_thread(checked.wait)
     other = SQLiteEventStore(path)
     deletion = asyncio.create_task(
@@ -304,7 +320,9 @@ async def test_concurrent_delete_cannot_turn_snapshot_read_into_empty_history(tm
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_tombstones'"
         ).fetchone()
         row = (
-            probe.execute("SELECT state FROM session_tombstones WHERE session_id = 's'").fetchone()
+            probe.execute(
+                "SELECT state FROM session_tombstones WHERE session_id = 's'"
+            ).fetchone()
             if table is not None
             else None
         )

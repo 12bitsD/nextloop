@@ -21,7 +21,9 @@ class PreviewChannel:
         if max_queue_size <= 0:
             raise ValueError("max_queue_size must be positive")
         self._sink = sink
-        self._queue: asyncio.Queue[PreviewEvent] = asyncio.Queue(maxsize=max_queue_size)
+        self._queue: asyncio.Queue[PreviewEvent] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
         self._worker_task = asyncio.create_task(self._worker())
         self._stream_id = new_id("preview")
         self._seq = 0
@@ -32,7 +34,13 @@ class PreviewChannel:
         self._disabled = False
         self.dropped_count = 0
 
-    def attempt_started(self, request: CandidateRequest, attempt: int, *, streaming: bool) -> None:
+    def attempt_started(
+        self,
+        request: CandidateRequest,
+        attempt: int,
+        *,
+        streaming: bool,  # bits:allow(BCS004): established API
+    ) -> None:
         self._response = None
         self._content.clear()
         self._refusal.clear()
@@ -44,7 +52,9 @@ class PreviewChannel:
             {"mode": "provider_delta" if streaming else "response_snapshot"},
         )
 
-    def delta(self, request: CandidateRequest, attempt: int, delta: Mapping[str, Any]) -> None:
+    def delta(
+        self, request: CandidateRequest, attempt: int, delta: Mapping[str, Any]
+    ) -> None:
         channel = delta.get("channel")
         if channel in ("content", "refusal"):
             target = self._content if channel == "content" else self._refusal
@@ -60,7 +70,9 @@ class PreviewChannel:
             current["arguments"] += str(delta.get("arguments_delta", ""))
         self._put(request, attempt, PreviewKind.DELTA, dict(delta))
 
-    def snapshot(self, request: CandidateRequest, attempt: int, response: ModelResponse) -> None:
+    def snapshot(
+        self, request: CandidateRequest, attempt: int, response: ModelResponse
+    ) -> None:
         self._response = response
         self._put(request, attempt, PreviewKind.SNAPSHOT, snapshot=response)
 
@@ -71,6 +83,7 @@ class PreviewChannel:
         *,
         status: str,
         response: ModelResponse | None = None,
+        # bits:allow(BCS004): established API/test-double signature
         will_retry: bool = False,
         error: str | None = None,
     ) -> None:
@@ -119,17 +132,23 @@ class PreviewChannel:
     ) -> None:
         if self._disabled:
             return
-        event = self._event(request, attempt, kind, delta, snapshot, decision_event_ids)
+        event = self._event(
+            request, attempt, kind, delta, snapshot, decision_event_ids
+        )
         try:
             self._queue.put_nowait(event)
             return
         except asyncio.QueueFull:
-            pass
-        self._drop_queued_deltas()
+            self._drop_queued_deltas()
         if kind != PreviewKind.DELTA and snapshot is not None:
             self._put_control(event)
             return
-        reset = self._event(request, attempt, PreviewKind.RESET, snapshot=self._current_snapshot())
+        reset = self._event(
+            request,
+            attempt,
+            PreviewKind.RESET,
+            snapshot=self._current_snapshot(),
+        )
         if not self._put_control(reset):
             return
         if kind != PreviewKind.DELTA and not self._put_control(event):

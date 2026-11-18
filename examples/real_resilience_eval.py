@@ -33,6 +33,7 @@ from nextloop import (
     with_result_reads,
 )
 
+# bits:allow(BCS011): read-only case table or explicit provider
 LONG_CASES = [
     (
         "long-single-turn",
@@ -117,12 +118,20 @@ def context(session_id, prompt, store, provider, tools, delivery, **overrides):
 async def event_summary(store, session_id):
     events = await store.load_recovery(session_id)
     starts = {
-        (event.turn, event.step) for event in events if event.event_type == EventType.STEP_START
+        (event.turn, event.step)
+        for event in events
+        if event.event_type == EventType.STEP_START
     }
-    ends = {(event.turn, event.step) for event in events if event.event_type == EventType.STEP_END}
+    ends = {
+        (event.turn, event.step)
+        for event in events
+        if event.event_type == EventType.STEP_END
+    }
     return {
         "event_count": len(events),
-        "event_types": dict(Counter(event.event_type.value for event in events)),
+        "event_types": dict(
+            Counter(event.event_type.value for event in events)
+        ),
         "model_ttft_ms": [
             trace.ttft_ms
             for trace in project_traces(events)
@@ -139,11 +148,16 @@ async def run_long_cases(provider):
         provider.case_id = case_id
         store = InMemoryEventStore()
         started = time.monotonic()
-        result = await evaluate_case(provider, case_id, prompts, config=config(), store=store)
+        result = await evaluate_case(
+            provider, case_id, prompts, config=config(), store=store
+        )
         result["events"] = await event_summary(store, case_id)
         result["wall_seconds"] = round(time.monotonic() - started, 3)
         result["passed"] = (
-            all(outcome.get("status") == "succeeded" for outcome in result["outcomes"])
+            all(
+                outcome.get("status") == "succeeded"
+                for outcome in result["outcomes"]
+            )
             and len(result["tool_invocations"]) >= expected_tools
             and not result["events"]["unclosed_steps"]
             and not result["events"]["unexpected_step_ends"]
@@ -158,7 +172,11 @@ async def run_paged_result(provider):
     provider.case_id = case_id
     store = InMemoryEventStore()
     first = await evaluate_case(
-        provider, case_id, ["Use read_file to read big.txt."], config=config(), store=store
+        provider,
+        case_id,
+        ["Use read_file to read big.txt."],
+        config=config(),
+        store=store,
     )
     result_event = next(
         event
@@ -185,13 +203,15 @@ async def run_paged_result(provider):
         event
         for event in await store.load_recovery(case_id)
         if event.event_type == EventType.TOOL_RESULT
-        and "Tool result page:" in str(event.payload.get("outcome", {}).get("content", ""))
+        and "Tool result page:"
+        in str(event.payload.get("outcome", {}).get("content", ""))
     ]
     return {
         "case_id": case_id,
         "outcomes": first["outcomes"] + second["outcomes"],
         "turn_timings": first["turn_timings"] + second["turn_timings"],
-        "tool_invocations": first["tool_invocations"] + second["tool_invocations"],
+        "tool_invocations": first["tool_invocations"]
+        + second["tool_invocations"],
         "delivered": first["delivered"] + second["delivered"],
         "events": await event_summary(store, case_id),
         "paged_calls": len(calls),
@@ -209,7 +229,8 @@ async def run_compaction(provider):
     outcome = await AgentLoop().run(
         context(
             case_id,
-            "Review this long task background, then summarize the current objective: " + "x" * 6000,
+            "Review this long task background, then summarize the current objective: "
+            + "x" * 6000,
             store,
             provider,
             tools,
@@ -244,9 +265,14 @@ async def run_provider_retry(provider):
     case_id = "provider-retry"
     provider.fail_once_cases.add(case_id)
     result = await evaluate_case(
-        provider, case_id, ["Reply with PROVIDER_RETRY_OK without tools."], config=config()
+        provider,
+        case_id,
+        ["Reply with PROVIDER_RETRY_OK without tools."],
+        config=config(),
     )
-    records = [record for record in provider.records if record["case_id"] == case_id]
+    records = [
+        record for record in provider.records if record["case_id"] == case_id
+    ]
     result["provider_errors"] = sum("error" in record for record in records)
     result["passed"] = (
         result["provider_errors"] == 1
@@ -275,13 +301,26 @@ async def run_delivery_recovery(provider):
     loop = AgentLoop()
     tools = with_result_reads(build_tools([]), store)
     outcome = await loop.run(
-        context(case_id, "Reply with DELIVERY_OK without tools.", store, provider, tools, delivery)
+        context(
+            case_id,
+            "Reply with DELIVERY_OK without tools.",
+            store,
+            provider,
+            tools,
+            delivery,
+        )
     )
     calls_before = len(provider.records)
     recovered = await loop.recover(case_id, store, delivery)
     return {
         "case_id": case_id,
-        "outcomes": [{"status": outcome.status.value, "turn": outcome.turn, "step": outcome.step}],
+        "outcomes": [
+            {
+                "status": outcome.status.value,
+                "turn": outcome.turn,
+                "step": outcome.step,
+            }
+        ],
         "tool_invocations": [],
         "delivered": [message.content for message in delivery.messages],
         "events": await event_summary(store, case_id),
@@ -315,7 +354,9 @@ async def run_approval(provider):
             approval=ApprovalPolicy("eval-v1"),
         ),
         lambda arguments, ctx: (
-            invocations.append({"name": "protected_write", "arguments": dict(arguments)})
+            invocations.append(
+                {"name": "protected_write", "arguments": dict(arguments)}
+            )
             or Completed("protected write completed")
         ),
     )
@@ -338,14 +379,29 @@ async def run_approval(provider):
     )
     operation_id = approval.payload["items"][0]["operation_id"]
     resumed = await loop.resume(
-        context(case_id, "Resume approved operation", store, provider, tools, delivery),
+        context(
+            case_id,
+            "Resume approved operation",
+            store,
+            provider,
+            tools,
+            delivery,
+        ),
         decisions={operation_id: True},
     )
     return {
         "case_id": case_id,
         "outcomes": [
-            {"status": pending.status.value, "turn": pending.turn, "step": pending.step},
-            {"status": resumed.status.value, "turn": resumed.turn, "step": resumed.step},
+            {
+                "status": pending.status.value,
+                "turn": pending.turn,
+                "step": pending.step,
+            },
+            {
+                "status": resumed.status.value,
+                "turn": resumed.turn,
+                "step": resumed.step,
+            },
         ],
         "tool_invocations": invocations,
         "delivered": [message.content for message in delivery.messages],
@@ -412,13 +468,24 @@ async def run_uncertain_retry(provider):
     )
     operation_id = uncertain.payload["operation_id"]
     reconciled = await loop.retry_operation(
-        context(case_id, "Reconcile operation", store, provider, tools, delivery), operation_id
+        context(
+            case_id, "Reconcile operation", store, provider, tools, delivery
+        ),
+        operation_id,
     )
     return {
         "case_id": case_id,
         "outcomes": [
-            {"status": blocked.status.value, "turn": blocked.turn, "step": blocked.step},
-            {"status": reconciled.status.value, "turn": reconciled.turn, "step": reconciled.step},
+            {
+                "status": blocked.status.value,
+                "turn": blocked.turn,
+                "step": blocked.step,
+            },
+            {
+                "status": reconciled.status.value,
+                "turn": reconciled.turn,
+                "step": reconciled.step,
+            },
         ],
         "tool_invocations": invocations,
         "delivered": [message.content for message in delivery.messages],
@@ -480,16 +547,26 @@ async def run_cancellation(provider):
     events = await event_summary(store, case_id)
     return {
         "case_id": case_id,
-        "outcomes": [{"status": outcome.status.value, "turn": outcome.turn, "step": outcome.step}],
+        "outcomes": [
+            {
+                "status": outcome.status.value,
+                "turn": outcome.turn,
+                "step": outcome.step,
+            }
+        ],
         "tool_invocations": invocations,
         "delivered": [message.content for message in delivery.messages],
         "events": events,
         "cancel_accepted": accepted,
-        "passed": accepted and outcome.status == "cancelled" and not events["unclosed_steps"],
+        "passed": accepted
+        and outcome.status == "cancelled"
+        and not events["unclosed_steps"],
     }
 
 
+# bits:explain(BCS003): ordered eval; split loses diagnostics; keep call order
 async def main():
+    # bits:allow(BCS011): read-only case table or explicit provider
     provider = RecordingProvider(
         model_id="kimi-k2.8-highspeed",
         base_url="https://free-tokens.msh.team/v1",
@@ -512,6 +589,7 @@ async def main():
             run_uncertain_retry,
             run_cancellation,
         ):
+            # bits:allow(BCS007): Python has no brace blocks
             try:
                 result = await scenario(provider)
             except Exception as exc:
@@ -526,11 +604,17 @@ async def main():
         await provider.close()
     records = provider.records
     successful = [record for record in records if record["usage"] is not None]
-    total_input = sum(record["usage"]["input_tokens"] or 0 for record in successful)
-    total_cached = sum(record["usage"]["cached_input_tokens"] or 0 for record in successful)
+    total_input = sum(
+        record["usage"]["input_tokens"] or 0 for record in successful
+    )
+    total_cached = sum(
+        record["usage"]["cached_input_tokens"] or 0 for record in successful
+    )
     latencies = sorted(record["elapsed_seconds"] for record in successful)
     trace_ttft = sorted(
-        value for case in cases for value in case.get("events", {}).get("model_ttft_ms", ())
+        value
+        for case in cases
+        for value in case.get("events", {}).get("model_ttft_ms", ())
     )
     summary = {
         "model": "kimi-k2.8-highspeed",
@@ -538,25 +622,43 @@ async def main():
         "passed_cases": sum(case["passed"] for case in cases),
         "model_call_count": len(successful),
         "injected_provider_errors": len(records) - len(successful),
-        "tool_call_count": sum(len(case.get("tool_invocations", [])) for case in cases),
+        "tool_call_count": sum(
+            len(case.get("tool_invocations", [])) for case in cases
+        ),
         "input_tokens": total_input,
         "cached_input_tokens": total_cached,
-        "cache_ratio": round(total_cached / total_input, 4) if total_input else 0,
-        "output_tokens": sum(record["usage"]["output_tokens"] or 0 for record in successful),
-        "provider_seconds": round(sum(record["elapsed_seconds"] for record in records), 3),
+        "cache_ratio": round(total_cached / total_input, 4)
+        if total_input
+        else 0,
+        "output_tokens": sum(
+            record["usage"]["output_tokens"] or 0 for record in successful
+        ),
+        "provider_seconds": round(
+            sum(record["elapsed_seconds"] for record in records), 3
+        ),
         "wall_seconds": round(time.monotonic() - started, 3),
-        "median_provider_seconds": latencies[len(latencies) // 2] if latencies else 0,
-        "p95_provider_seconds": latencies[max(0, int(len(latencies) * 0.95) - 1)]
+        "median_provider_seconds": latencies[len(latencies) // 2]
+        if latencies
+        else 0,
+        "p95_provider_seconds": latencies[
+            max(0, int(len(latencies) * 0.95) - 1)
+        ]
         if latencies
         else 0,
         "timing": timing_summary(cases, records),
         "trace_ttft": {
             "samples": len(trace_ttft),
-            "median_ms": trace_ttft[len(trace_ttft) // 2] if trace_ttft else None,
-            "p95_ms": trace_ttft[max(0, int(len(trace_ttft) * 0.95) - 1)] if trace_ttft else None,
+            "median_ms": trace_ttft[len(trace_ttft) // 2]
+            if trace_ttft
+            else None,
+            "p95_ms": trace_ttft[max(0, int(len(trace_ttft) * 0.95) - 1)]
+            if trace_ttft
+            else None,
         },
     }
-    destination = Path("docs/research/real-eval-2026-11-13/resilience-results.json")
+    destination = Path(
+        "docs/research/real-eval-2026-11-13/resilience-results.json"
+    )
     await asyncio.to_thread(
         destination.write_text,
         json.dumps(
@@ -566,7 +668,10 @@ async def main():
         )
         + "\n",
     )
-    print(json.dumps({"summary": summary, "results": str(destination)}, indent=2), flush=True)
+    print(
+        json.dumps({"summary": summary, "results": str(destination)}, indent=2),
+        flush=True,
+    )
 
 
 def progress(result):

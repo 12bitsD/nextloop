@@ -23,7 +23,9 @@ from nextloop.execute.stdio import MAX_FRAME_BYTES, _read_frame
 ROOT = Path(__file__).parents[1]
 
 
-def config(command: tuple[str, ...], resources: tuple[str, ...] = ()) -> ToolConfig:
+def config(
+    command: tuple[str, ...], resources: tuple[str, ...] = ()
+) -> ToolConfig:
     return ToolConfig(
         driver="stdio",
         command=command,
@@ -32,7 +34,9 @@ def config(command: tuple[str, ...], resources: tuple[str, ...] = ()) -> ToolCon
     )
 
 
-async def execute(driver: StdioDriver, arguments: dict[str, object] | None = None):
+async def execute(
+    driver: StdioDriver, arguments: dict[str, object] | None = None
+):
     return await driver.execute(
         ToolCall("1", "inspect", "{}"),
         arguments or {},
@@ -88,11 +92,15 @@ async def test_asset_reference_and_small_content_are_preserved() -> None:
         cancel=asyncio.Event(),
     )
     assert isinstance(outcome, Completed)
-    assert outcome.content == "Asset available" and outcome.assets == ("/tmp/result.bin",)
+    assert outcome.content == "Asset available" and outcome.assets == (
+        "/tmp/result.bin",
+    )
     await driver.close()
 
 
-async def test_oversized_request_and_response_frames_are_controlled(tmp_path: Path) -> None:
+async def test_oversized_request_and_response_frames_are_controlled(
+    tmp_path: Path,
+) -> None:
     worker = ROOT / "examples/workers/python_worker.py"
     driver = StdioDriver(config((sys.executable, str(worker)), ("frame",)))
     outcome = await driver.execute(
@@ -118,6 +126,7 @@ async def test_harness_worker_does_not_inherit_provider_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     worker = tmp_path / "env_worker.py"
+    # bits:allow(BCS011): isolated test process environment
     worker.write_text(
         "import json, os, sys\n"
         "for line in sys.stdin:\n"
@@ -187,7 +196,9 @@ async def test_lazy_start_honors_cancel_event(tmp_path: Path) -> None:
     await driver.close()
 
 
-async def test_close_waits_for_gated_process_creation(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_close_waits_for_gated_process_creation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import nextloop.execute.stdio as stdio
 
     original = asyncio.create_subprocess_exec
@@ -211,7 +222,11 @@ async def test_close_waits_for_gated_process_creation(monkeypatch: pytest.Monkey
         release.set()
         await starting
         await closing
-        assert driver._closed and driver._process is None and driver._reader is None
+        assert (
+            driver._closed
+            and driver._process is None
+            and driver._reader is None
+        )
         with pytest.raises(StdioProtocolError, match="closed"):
             await driver.start()
         entered.clear()
@@ -263,5 +278,7 @@ async def test_real_drain_timeout_preserves_backpressure() -> None:
     process = Process()
     driver._process = process  # type: ignore[assignment]
     with pytest.raises(ConnectionError, match="backpressured"):
-        await driver._send({"jsonrpc": "2.0", "method": "ping"}, send_timeout=0.01)
+        await driver._send(
+            {"jsonrpc": "2.0", "method": "ping"}, send_timeout=0.01
+        )
     assert not process.waited

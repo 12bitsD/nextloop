@@ -5,7 +5,9 @@ from collections.abc import AsyncIterator
 import httpx
 
 
-async def data_events(response: httpx.Response) -> AsyncIterator[tuple[str, str]]:
+async def data_events(
+    response: httpx.Response,
+) -> AsyncIterator[tuple[str, str]]:
     event = "message"
     data: list[str] = []
     async for line in response.aiter_lines():

@@ -11,10 +11,14 @@ from nextloop.execute.tools import validate_calls
 
 def test_schema_cache_does_not_mix_different_schemas():
     string_spec = ToolSpec(
-        "read", "Read", {"type": "object", "properties": {"path": {"type": "string"}}}
+        "read",
+        "Read",
+        {"type": "object", "properties": {"path": {"type": "string"}}},
     )
     integer_spec = ToolSpec(
-        "read", "Read", {"type": "object", "properties": {"path": {"type": "integer"}}}
+        "read",
+        "Read",
+        {"type": "object", "properties": {"path": {"type": "integer"}}},
     )
     call = ToolCall("c", "read", json.dumps({"path": "a.txt"}))
 

@@ -32,18 +32,24 @@ async def test_point_reads_keep_snapshot_during_delete(tmp_path, operation):
     store = SQLiteEventStore(path)
     other = SQLiteEventStore(path)
     for index in range(200):
+        # bits:allow(BCS007): Python has no brace blocks
         session_id = f"s{index}"
         epoch, _, _ = await store.attach_writer(session_id)
         committed = await store.append(
-            session_id, epoch, 1, [NewEvent(EventType.TURN_START, turn=1, step=0)]
+            session_id,
+            epoch,
+            1,
+            [NewEvent(EventType.TURN_START, turn=1, step=0)],
         )
         arguments = (committed[0].event_id,) if operation == "get_event" else ()
-        reading = asyncio.create_task(getattr(store, operation)(session_id, *arguments))
+        reading = asyncio.create_task(
+            getattr(store, operation)(session_id, *arguments)
+        )
         deleting = asyncio.create_task(other.delete_session(session_id))
         try:
             result = await reading
         except SessionDeletedError:
-            pass
+            result = None
         else:
             if operation == "get_event":
                 assert result is not None

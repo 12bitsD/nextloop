@@ -9,11 +9,17 @@ from nextloop import Harness, InMemoryEventStore, SQLiteOutbox, project_traces
 from nextloop.testing import InjectedCrash
 
 _example = runpy.run_path("examples/observability_adapter.py")
+# bits:allow(BCS011): read-only example API aliases
 MetadataExporter = _example["MetadataExporter"]
+# bits:allow(BCS011): read-only example API aliases
 ScriptedProvider = _example["ScriptedProvider"]
+# bits:allow(BCS011): read-only example API aliases
 make_spec = _example["make_spec"]
+# bits:allow(BCS011): read-only example API aliases
 make_tools = _example["make_tools"]
+# bits:allow(BCS011): read-only example API aliases
 record_key = _example["record_key"]
+# bits:allow(BCS011): read-only example API aliases
 run_demo = _example["run_demo"]
 
 
@@ -31,7 +37,9 @@ async def test_observability_adapter_integration(tmp_path):
         "turn",
     ]
 
-    model_calls = [record for record in result["online"] if record["type"] == "model_call"]
+    model_calls = [
+        record for record in result["online"] if record["type"] == "model_call"
+    ]
     assert all(record["ttft_ms"] is not None for record in model_calls)
     assert all(record["model"] == "scripted-model" for record in model_calls)
 

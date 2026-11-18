@@ -16,7 +16,9 @@ from nextloop.execute.result_read import _read_handler, _read_spec
 @pytest.mark.parametrize("limit", [1, 32, 128])
 def test_unrepresentable_preview_budget_is_rejected(limit):
     with pytest.raises(ValueError, match="metadata"):
-        project_result_content("x" * 3000, ToolResultMode.PREVIEW, "evt_test", limit)
+        project_result_content(
+            "x" * 3000, ToolResultMode.PREVIEW, "evt_test", limit
+        )
 
 
 @pytest.mark.parametrize("mode", [ToolResultMode.PREVIEW, ToolResultMode.PAGED])
@@ -29,7 +31,9 @@ def test_projection_respects_total_model_visible_budget(mode, limit):
 @pytest.mark.asyncio
 async def test_full_page_read_stays_within_full_limit():
     full = "x" * 512
-    original = outcome_event(ToolCall("c", "read", "{}"), Completed(full), turn=1, step=1)
+    original = outcome_event(
+        ToolCall("c", "read", "{}"), Completed(full), turn=1, step=1
+    )
     store = InMemoryEventStore()
     epoch, _, _ = await store.attach_writer("s")
     await store.append("s", epoch, 1, [original])
@@ -39,7 +43,13 @@ async def test_full_page_read_stays_within_full_limit():
         type("Context", (), {"session_id": "s"})(),
     )
     decision = settle_outcomes(
-        [(ToolCall("read", "read_tool_result", "{}"), _read_spec(256), response)],
+        [
+            (
+                ToolCall("read", "read_tool_result", "{}"),
+                _read_spec(256),
+                response,
+            )
+        ],
         turn=1,
         step=2,
         pacing_step_interval=0,
