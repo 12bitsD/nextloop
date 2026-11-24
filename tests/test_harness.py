@@ -313,22 +313,16 @@ async def test_all_runtime_validation_entry_points_match() -> None:
 
 
 @pytest.mark.parametrize(
-    ("fragment", "message"),
+    "fragment",
     [
-        (
-            '[provider.default_parameters]\nmodel = "other"',
-            "provider.default_parameters.model",
-        ),
-        (
-            "[loop.compaction_parameters]\nstream = false",
-            "loop.compaction_parameters.stream",
-        ),
+        '[provider.default_parameters]\nmodel = "other"',
+        "[loop.compaction_parameters]\nstream = false",
     ],
 )
 def test_reserved_model_parameters_fail_at_load(
-    tmp_path: Path, fragment: str, message: str
+    tmp_path: Path, fragment: str
 ) -> None:
-    with pytest.raises(HarnessError, match=message):
+    with pytest.raises(HarnessError, match="reserved"):
         load_harness_spec(write_config(tmp_path, fragment))
 
 

@@ -108,13 +108,11 @@ class ProviderError(NextloopError):
         # bits:allow(BCS004): established API/test-double signature
         partial_output: bool = False,
         code: str | None = None,
-        param: str | None = None,
     ) -> None:
         super().__init__(message)
         self.retryable = retryable
         self.partial_output = partial_output
         self.code = code
-        self.param = param
 
 
 class SurfaceOp(StrEnum):

@@ -18,11 +18,7 @@ from ..contracts import (
     merge_parameters,
 )
 from ._http import AsyncClientOwner
-from ._parameters import (
-    build_wire_parameters,
-    check_reserved_parameters,
-    parameter_error,
-)
+from ._parameters import build_wire_parameters, check_reserved_parameters
 from ._sse import data_events, read_error_text
 
 
@@ -120,8 +116,11 @@ class OpenAIProvider:
             ) as response:
                 if response.status_code >= 400:
                     error_text = await read_error_text(response)
-                    raise parameter_error(
-                        response.status_code, error_text, "OpenAI"
+                    raise ProviderError(
+                        f"OpenAI HTTP {response.status_code}: {error_text}",
+                        retryable=response.status_code in (408, 409, 429)
+                        or response.status_code >= 500,
+                        code=str(response.status_code),
                     )
                 async for event, data in data_events(response):
                     # bits:allow(BCS007): Python has no brace blocks

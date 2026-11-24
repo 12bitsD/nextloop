@@ -17,7 +17,6 @@ from nextloop.adapters._parameters import (
     build_wire_parameters,
     check_reserved_parameters,
     merge_parameters,
-    parameter_error,
 )
 
 
@@ -45,76 +44,7 @@ def test_reserved_runtime_parameters_are_rejected(key):
         check_reserved_parameters({key: "x"})
     with pytest.raises(ProviderError, match="reserved") as caught:
         build_wire_parameters({}, {key: "x"})
-    assert caught.value.param == key
     assert caught.value.retryable is False
-
-
-def test_parameter_error_extracts_openai_param_and_code():
-    body = json.dumps(
-        {
-            "error": {
-                "message": "Unrecognized request argument supplied: top_k",
-                "type": "invalid_request_error",
-                "param": "top_k",
-                "code": "unsupported_parameter",
-            }
-        }
-    )
-
-    error = parameter_error(400, body, "OpenAI")
-
-    assert isinstance(error, ProviderError)
-    assert error.param == "top_k"
-    assert error.code == "unsupported_parameter"
-    assert error.retryable is False
-    assert error.partial_output is False
-    assert "top_k" in str(error)
-
-
-def test_parameter_error_extracts_anthropic_and_vllm_shapes():
-    anthropic_body = json.dumps(
-        {
-            "type": "error",
-            "error": {
-                "type": "invalid_request_error",
-                "message": "temperature is not supported with thinking",
-            },
-        }
-    )
-    anthropic_error = parameter_error(400, anthropic_body, "Anthropic")
-    assert anthropic_error.code == "invalid_request_error"
-    assert anthropic_error.retryable is False
-    assert "temperature is not supported" in str(anthropic_error)
-
-    vllm_body = json.dumps(
-        {
-            "detail": [
-                {
-                    "loc": ["body", "top_k"],
-                    "msg": "Extra inputs are not permitted",
-                    "type": "extra_forbidden",
-                }
-            ]
-        }
-    )
-    vllm_error = parameter_error(422, vllm_body, "OpenAI")
-    assert vllm_error.param == "top_k"
-    assert vllm_error.retryable is False
-    assert "top_k" in str(vllm_error)
-
-
-def test_parameter_error_preserves_status_code_and_retryable_for_non_json():
-    rate_limit = parameter_error(429, '{"error": "rate limited"}', "OpenAI")
-    assert rate_limit.code == "429"
-    assert rate_limit.retryable is True
-    assert rate_limit.param is None
-
-    server_error = parameter_error(
-        500, "x" * 100 + "\n[truncated]", "Anthropic"
-    )
-    assert server_error.code == "500"
-    assert server_error.retryable is True
-    assert "[truncated]" in str(server_error)
 
 
 def _sse_done_body() -> str:
@@ -224,10 +154,10 @@ async def test_server_parameter_rejection_is_forwarded_without_retry():
 
     assert len(seen) == 1
     assert seen[0]["temperature"] == -1
-    assert caught.value.param == "temperature"
-    assert caught.value.code == "invalid_value"
+    assert caught.value.code == "400"
     assert caught.value.retryable is False
     assert "greater than or equal to 0" in str(caught.value)
+    assert '"param":"temperature"' in str(caught.value)
     await client.aclose()
 
 
@@ -313,7 +243,6 @@ async def test_reserved_request_parameters_fail_before_http_request():
         await provider.complete(req, attempt=1, cancel=asyncio.Event())
 
     assert caught.value.retryable is False
-    assert caught.value.param == "stream"
     assert calls == []
     await client.aclose()
 

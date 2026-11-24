@@ -11,10 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
-from .adapters._parameters import (
-    ParameterValidationError,
-    check_reserved_parameters,
-)
+from .adapters._parameters import check_reserved_parameters
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
 from .adapters.observing import (
@@ -771,9 +768,8 @@ def _check_reserved_parameters(
 ) -> None:
     try:
         check_reserved_parameters(raw)
-    except ParameterValidationError as exc:
-        field = f"{prefix}.{exc.param}" if exc.param else prefix
-        _fail(source, field, str(exc))
+    except ValueError as exc:
+        _fail(source, prefix, str(exc))
 
 
 # bits:explain(BCS003): config dispatch; split duplicates validation; keep API
