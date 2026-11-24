@@ -310,3 +310,39 @@ async def test_all_runtime_validation_entry_points_match() -> None:
         issue.to_dict() for issue in composite.validate(calls)[1]
     ] == expected
     assert [issue.to_dict() for issue in stdio.validate(calls)[1]] == expected
+
+
+@pytest.mark.parametrize(
+    ("fragment", "message"),
+    [
+        (
+            "[provider.default_parameters]\ntemperature = -0.5",
+            "provider.default_parameters.temperature",
+        ),
+        (
+            "[loop.parameters]\ntop_k = 0",
+            "loop.parameters.top_k",
+        ),
+        (
+            "[loop.compaction_parameters]\nstream = false",
+            "loop.compaction_parameters.stream",
+        ),
+    ],
+)
+def test_invalid_model_parameters_fail_at_load(
+    tmp_path: Path, fragment: str, message: str
+) -> None:
+    with pytest.raises(HarnessError, match=message):
+        load_harness_spec(write_config(tmp_path, fragment))
+
+
+def test_load_loop_model_parameters(tmp_path: Path) -> None:
+    spec = load_harness_spec(
+        write_config(
+            tmp_path,
+            "[loop.parameters]\ntemperature = 0.4\ntop_k = 20\n"
+            "[loop.compaction_parameters]\ntemperature = 0\n",
+        )
+    )
+    assert spec.loop.parameters == {"temperature": 0.4, "top_k": 20}
+    assert spec.loop.compaction_parameters == {"temperature": 0}

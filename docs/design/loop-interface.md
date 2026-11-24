@@ -64,7 +64,11 @@ Initial input and steer IDs must be non-empty. After success, the same initial I
 
 - `complete(request, *, attempt, cancel) -> ModelResponse`
 - Configure `openai` or `anthropic`, the model, URL, credentials, and defaults outside the Loop.
+- `CandidateRequest.parameters` carries per-call model parameters merged from `LoopConfig.parameters`, any `Harness.run(parameters=...)` override, and—for Compaction—`LoopConfig.compaction_parameters`. Built-in Providers merge these over `default_parameters`, drop keys explicitly set to `None`, validate common sampling ranges, and map `stop` to `stop_sequences` for Anthropic. Custom Providers receive `request.parameters` directly and own their wire mapping.
+- On HTTP 400/422 parameter rejection, built-in Providers raise `ProviderError(retryable=False, param=...)` naming the rejected parameter when the upstream error identifies it, so the Turn fails immediately without consuming retry attempts.
 - Never store connection configuration in Trajectory, execute Tools, or hide a retry loop.
+
+**Migration note (unreleased):** `LoopConfig` adds optional `parameters` and `compaction_parameters` mappings, `CandidateRequest` adds an optional `parameters` mapping, and `ProviderError` adds optional `param`. All default to empty/`None`; existing constructors, `ModelProvider.complete` signatures, Event Schema 1.1, and the 101 frozen root exports are unchanged.
 
 ### 3. ToolRuntime
 

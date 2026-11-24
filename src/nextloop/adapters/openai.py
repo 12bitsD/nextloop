@@ -15,8 +15,14 @@ from ..contracts import (
     ModelUsage,
     ProviderError,
     ToolCall,
+    merge_parameters,
 )
 from ._http import AsyncClientOwner
+from ._parameters import (
+    build_wire_parameters,
+    parameter_error,
+    validate_parameters,
+)
 from ._sse import data_events, read_error_text
 
 
@@ -34,7 +40,8 @@ class OpenAIProvider:
         self.model_id = model_id
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        self.default_parameters = dict(default_parameters or {})
+        validate_parameters(default_parameters or {})
+        self.default_parameters = merge_parameters(default_parameters)
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client
         self._clients = AsyncClientOwner(http_client, timeout_seconds)
@@ -69,8 +76,11 @@ class OpenAIProvider:
         cancel: asyncio.Event,
         emit: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> ModelResponse:
+        parameters = build_wire_parameters(
+            self.default_parameters, request.parameters, "openai"
+        )
         body = {
-            **self.default_parameters,
+            **parameters,
             "model": self.model_id,
             "messages": [
                 self._message(message) for message in request.messages
@@ -110,11 +120,8 @@ class OpenAIProvider:
             ) as response:
                 if response.status_code >= 400:
                     error_text = await read_error_text(response)
-                    raise ProviderError(
-                        f"OpenAI HTTP {response.status_code}: {error_text}",
-                        retryable=response.status_code in (408, 409, 429)
-                        or response.status_code >= 500,
-                        code=str(response.status_code),
+                    raise parameter_error(
+                        response.status_code, error_text, "OpenAI"
                     )
                 async for event, data in data_events(response):
                     # bits:allow(BCS007): Python has no brace blocks

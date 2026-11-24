@@ -14,6 +14,12 @@ driver = "memory"
 system_prompt = "You are a helpful assistant. Use declared Tools when useful."
 max_parallel_tools = 4
 
+# Omit sampling parameters by default to inherit the model's tuned defaults.
+# Example override for non-thinking coding/tool runs:
+# [loop.parameters]
+# temperature = 0.6
+# max_tokens = 16384
+
 [[tools]]
 driver = "python"
 target = "python_tools:register"

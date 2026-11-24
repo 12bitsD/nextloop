@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Removed implicit model parameter defaults from built-in Providers: `AnthropicProvider` no longer injects a fallback `max_tokens` (previously 4096), matching `OpenAIProvider`. Both Providers now default to empty parameters so the Loop stays clean and callers opt in explicitly. Note: Anthropic's API requires `max_tokens`, so Anthropic callers must set it explicitly via `default_parameters` or `parameters`. Documented provider default behavior and per-workload recommendations.
+
+### Added
+
+- Added per-call LLM parameter configuration (`temperature`, `top_p`, `top_k`, `max_tokens`, `max_completion_tokens`, `stop`, `seed`, penalties, and vendor-specific passthrough keys) via `[loop.parameters]`, `LoopConfig.parameters`, `CandidateRequest.parameters`, and `parameters=` on `Harness.run()` / `Harness.resume()`, layered over `[provider.default_parameters]`. Setting a key to `None` in Python removes it for that call.
+- Added `[loop.compaction_parameters]` / `LoopConfig.compaction_parameters` to override model parameters for Compaction calls independently of inference.
+- Added local validation for common sampling ranges and reserved request keys, automatic `stop` to `stop_sequences` mapping for Anthropic, and structured HTTP 400/422 error parsing that surfaces the rejected parameter on `ProviderError.param` and fails the Turn without retrying.
+
 ## 1.1.0rc1 - 2026-11-13
 
 ### Changed

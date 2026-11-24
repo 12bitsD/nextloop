@@ -5,13 +5,15 @@ import json
 
 import httpx
 import pytest
-from helpers import FakeDelivery
+from helpers import FakeDelivery, config
 from test_loop import context, registry
 from test_providers import openai_chunk, request
 
 from nextloop import (
     AgentLoop,
     AnthropicProvider,
+    EventType,
+    InMemoryEventStore,
     OpenAIProvider,
     ProviderError,
     TurnStatus,
@@ -135,3 +137,54 @@ async def test_incomplete_stream_never_reaches_delivery():
 
     assert outcome.status == TurnStatus.FAILED
     assert delivery.messages == []
+
+
+@pytest.mark.asyncio
+async def test_unsupported_parameter_400_fails_turn_without_retry_or_delivery():
+    calls = []
+    error_body = json.dumps(
+        {
+            "error": {
+                "message": "Unrecognized request argument supplied: top_k",
+                "type": "invalid_request_error",
+                "param": "top_k",
+                "code": "unsupported_parameter",
+            }
+        }
+    )
+
+    def handler(http_request):
+        calls.append(http_request)
+        return httpx.Response(400, text=error_body)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAIProvider(
+        model_id="test-model",
+        base_url="https://provider.test/v1",
+        api_key="secret",
+        default_parameters={"top_k": 40},
+        http_client=client,
+    )
+    store = InMemoryEventStore()
+    delivery = FakeDelivery()
+    outcome = await AgentLoop().run(
+        context(
+            store,
+            provider,
+            registry(),
+            delivery,
+            config=config(retry_backoff_seconds=0, max_provider_attempts=3),
+        )
+    )
+
+    assert outcome.status == TurnStatus.FAILED
+    assert "top_k" in (outcome.error or "")
+    assert len(calls) == 1
+    assert delivery.messages == []
+    events = await store.load_recovery("s")
+    attempts = [
+        e for e in events if e.event_type == EventType.ASSISTANT_ATTEMPT
+    ]
+    assert [e.payload["status"] for e in attempts] == ["started", "error"]
+    assert all(e.attempt == 1 for e in attempts)
+    await client.aclose()

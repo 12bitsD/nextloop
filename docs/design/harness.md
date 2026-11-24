@@ -15,8 +15,8 @@ protocol = "openai" # or anthropic
 model_id = "kimi-k2.5"
 base_url = "https://api.moonshot.cn/v1"
 api_key_env = "KIMI_API_KEY"
-default_parameters = { temperature = 0.2 }
 timeout_seconds = 60
+# [provider.default_parameters]  # optional static defaults, e.g. { max_tokens = 16384 }
 
 [store]
 driver = "sqlite" # or memory
@@ -38,6 +38,9 @@ max_total_tokens = 110000
 turn_deadline_seconds = 300
 # tool_result_bytes = 50000
 # tool_result_full_max_bytes = 1048576
+
+# [loop.parameters]             # optional per-loop overrides, e.g. { temperature = 0.6 }
+# [loop.compaction_parameters]  # optional Compaction-only overrides, e.g. { temperature = 0 }
 
 [[tools]]
 driver = "python"
@@ -78,6 +81,7 @@ Use Harness to run and manage work:
 harness = Harness.load("harness.toml")
 await harness.check()
 outcome = await harness.run("Hello", input_id="request-1", preview=None)
+creative = await harness.run("Write a tagline", parameters={"temperature": 0.8})
 await harness.steer("More detail")
 await harness.cancel()
 pending = await harness.pending_inputs()
@@ -91,6 +95,60 @@ Harness also delegates `steer_result()`, `resume()`, `retry_operation()`, `relea
 `resume()` accepts approval decisions or `reject_all`, plus optional replacement input, `input_id`, and `preview`. `retry_operation()` keeps the original operation ID. `delete_session()` deletes EventStore state only. A separately constructed `SQLiteOutbox` has its own cleanup operation.
 
 Skills provide instructions only. Their metadata is added to the system prompt, and the read-only `skill_view` Tool loads their bodies when needed. Loading a Skill never runs adjacent scripts or grants more Tool permissions.
+
+## Model parameters and compatibility
+
+Pass LLM sampling and generation settings as a plain dict using Provider parameter names. Common keys such as `temperature`, `top_p`, `top_k`, `max_tokens`, `max_completion_tokens`, `stop`, `seed`, `presence_penalty`, and `frequency_penalty` are validated locally. Unknown keys pass through unchanged for vendor-specific options such as `reasoning_effort` or `thinking`.
+
+Layers merge in this order, with later values winning:
+
+1. `[provider.default_parameters]` (or `default_parameters=` on the Provider)
+2. `[loop.parameters]` (or `LoopConfig.parameters`)
+3. `parameters=` on `harness.run()` / `harness.resume()`
+4. `[loop.compaction_parameters]` (or `LoopConfig.compaction_parameters`), applied only to Compaction calls
+
+In Python, setting a key to `None` removes it for that call, even if a lower layer set it:
+
+```python
+outcome = await harness.run(
+    "Extract strict JSON",
+    parameters={"temperature": 0, "top_k": None},
+)
+```
+
+Compatibility rules:
+
+- **Local validation fails fast.** Invalid ranges (`temperature < 0`, `top_p` outside `[0, 1]`, `top_k < 1`, booleans passed as numbers), setting both `max_tokens` and `max_completion_tokens`, or reserved keys (`model`, `messages`, `stream`, `tools`, `system`) raise `HarnessError` when loading TOML, `ValueError` when constructing a Provider, or a non-retryable `ProviderError` that ends the Turn as `failed` when passed as a per-call override.
+- **Anthropic `stop` mapping.** `AnthropicProvider` translates `stop` to `stop_sequences` automatically. Setting both `stop` and `stop_sequences` is rejected.
+- **No model-name blocklists.** `protocol = "openai"` covers OpenAI-compatible gateways (such as Kimi or vLLM) that may accept `top_k` or extra fields, so nextloop sends configured parameters as-is rather than guessing model capabilities locally.
+- **Provider or model rejection fails without retry.** When the server rejects a parameter with HTTP 400 or 422 (for example, strict OpenAI rejecting `top_k`, or a reasoning model rejecting `temperature`), the Provider extracts the rejected parameter into `ProviderError.param`, does not retry, records an `assistant/attempt` error, and ends the Turn as `failed` with the parameter named in `TurnOutcome.error`. Remove the parameter or override it with `None` to proceed. For newer OpenAI reasoning models that require `max_completion_tokens` instead of `max_tokens`, pass `{"max_tokens": None, "max_completion_tokens": 2048}`.
+
+Parameters are not written to the Event log and do not affect `CandidateRequest.canonical_bytes()` or context capacity estimation.
+
+### Recommended defaults
+
+**nextloop injects no model parameters by default.** `default_parameters`, `LoopConfig.parameters`, `LoopConfig.compaction_parameters`, and `CandidateRequest.parameters` all default to empty `{}` for both `OpenAIProvider` and `AnthropicProvider`. Every parameter is sent only when you explicitly set it.
+
+Leaving `temperature`, `top_p`, `top_k`, and `max_tokens` unset is the best default for modern hosted models: each provider tunes its native default for the selected model and thinking mode, and many 2026 reasoning models reject explicit sampling overrides:
+
+| Provider / model family | Server behavior when unset | What to know |
+|---|---|---|
+| OpenAI GPT-5 / o-series | `temperature = 1` (locked); no output cap sent | Sending `temperature != 1`, `top_k`, or `max_tokens` returns 400 (use `max_completion_tokens` if a cap is needed). |
+| Anthropic Claude (post-Opus 4.6 / API `2026-10-21`) | Adaptive sampling; `temperature/top_p/top_k` deprecated | Sending `top_k` (or any sampling field on API `2026-10-21`) returns 400. **Anthropic's protocol requires `max_tokens`**: set it explicitly (e.g. `{"max_tokens": 16384}`) or Anthropic returns 400 `Field required`. |
+| DeepSeek (`deepseek-flash` / `deepseek-v4-pro`) | `temperature = 1.0`; `max_tokens` defaults to 8K non-thinking / 64K thinking (128K at `reasoning_effort="max"`), hard cap 384K | Low temperatures can collapse reasoning quality in thinking mode; `temperature` has no effect there. |
+| Kimi (`kimi-k2.5` / `k2.6` / `k3`) | Thinking mode locks/recommends `temperature = 1.0`, `top_p = 0.95` | K3 requires omitting sampling fields; K2.x non-thinking coding/tool calling recommends `temperature = 0.6`, `top_p = 0.95`, `max_tokens >= 16384`. |
+
+**`max_tokens` vs `context_window`:** `max_tokens` caps a *single response's output*, not the conversation context window. Setting `max_tokens = 500000` exceeds current single-response limits (for example, DeepSeek caps at 393,216 and Claude at 64K–128K without beta headers) and fails with HTTP 400. To handle 500K-token conversations on a model that supports a 500K context window, set `loop.context_window = 500000` (and optionally `loop.output_reserve`), and leave `max_tokens` unset so the provider applies the model's native output limit.
+
+Recommended overrides by workload:
+
+| Workload | Recommended parameters | Notes |
+|---|---|---|
+| General agent / tool calling (hosted models) | `{}` (omit) | Uses the provider's model-tuned defaults and stays compatible with thinking models. |
+| Coding / tool calling on non-thinking Kimi K2.x | `{"temperature": 0.6, "top_p": 0.95, "max_tokens": 16384}` | Matches Moonshot's non-thinking agent guidance. |
+| Deterministic extraction / Compaction on non-thinking models | `{"temperature": 0}` (or `0.2`) | Only apply when the target model accepts custom `temperature`; omit for GPT-5, Claude post-4.6, and thinking modes. |
+| Creative writing / brainstorming | `{"temperature": 1.0}` to `1.3` | DeepSeek suggests `1.3` for general chat/translation and `1.5` for poetry in non-thinking mode. |
+| Local open-weight models (vLLM / SGLang) | Follow the model card, e.g. `{"temperature": 0.7, "top_p": 0.8, "top_k": 20}` | `top_k` belongs here; do not set it globally for hosted OpenAI/Claude endpoints. |
 
 ## Adapter injection and ownership
 
