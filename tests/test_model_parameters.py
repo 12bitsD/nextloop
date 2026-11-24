@@ -474,3 +474,174 @@ async def test_harness_run_non_mapping_parameters_raises_harness_error(
             await harness.run("hello", parameters=[])
     finally:
         await harness.close()
+
+
+@pytest.mark.asyncio
+async def test_harness_run_reserved_parameters_raise_harness_error(tmp_path):
+    from nextloop import Harness, HarnessError, ModelResponse
+
+    calls = []
+
+    class CustomProvider:
+        async def complete(self, request, *, attempt, cancel):
+            calls.append(request)
+            return ModelResponse(content="must not be called")
+
+    config_path = tmp_path / "harness.toml"
+    config_path.write_text(
+        'schema = "nextloop.harness/v1"\n'
+        'min_nextloop = "1.1.0rc1"\n'
+        "[provider]\n"
+        'protocol = "openai"\n'
+        'model_id = "test-model"\n'
+        'base_url = "https://provider.test/v1"\n'
+        'api_key_env = "NEXTLOOP_TEST_KEY"\n',
+        encoding="utf-8",
+    )
+    harness = Harness.load(config_path, provider=CustomProvider())
+    try:
+        with pytest.raises(HarnessError, match="'model' is reserved"):
+            await harness.run("hello", parameters={"model": "other"})
+    finally:
+        await harness.close()
+
+    assert calls == []
+
+
+@pytest.mark.parametrize("provider_cls", [OpenAIProvider, AnthropicProvider])
+@pytest.mark.parametrize("bad_default", [[], "", 0])
+def test_providers_reject_falsey_non_mapping_defaults(
+    provider_cls, bad_default
+):
+    with pytest.raises(ValueError, match="parameters must be a mapping"):
+        provider_cls(
+            model_id="m",
+            base_url="https://provider.test",
+            api_key="secret",
+            default_parameters=bad_default,
+        )
+
+
+@pytest.mark.asyncio
+async def test_harness_resume_applies_parameter_overrides(tmp_path):
+    from helpers import FakeProvider
+    from test_loop import call
+
+    from nextloop import (
+        ApprovalPolicy,
+        Completed,
+        EventType,
+        FinishReason,
+        Harness,
+        ModelResponse,
+        ToolRegistry,
+        ToolSpec,
+        TurnStatus,
+    )
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolSpec(
+            "write",
+            "Write",
+            {"type": "object"},
+            approval=ApprovalPolicy("v1"),
+        ),
+        lambda arguments, ctx: Completed("written"),
+    )
+    provider = FakeProvider(
+        [
+            ModelResponse(
+                tool_calls=(call("write"),),
+                finish_reason=FinishReason.TOOL_CALLS,
+            ),
+            ModelResponse(content="done"),
+        ]
+    )
+    config_path = tmp_path / "harness.toml"
+    config_path.write_text(
+        'schema = "nextloop.harness/v1"\n'
+        'min_nextloop = "1.1.0rc1"\n'
+        "[provider]\n"
+        'protocol = "openai"\n'
+        'model_id = "test-model"\n'
+        'base_url = "https://provider.test/v1"\n'
+        'api_key_env = "NEXTLOOP_TEST_KEY"\n',
+        encoding="utf-8",
+    )
+    harness = Harness.load(config_path, provider=provider, tools=tools)
+    try:
+        pending = await harness.run(
+            "start", parameters={"temperature": 0.2, "top_k": 40}
+        )
+        operation_id = next(
+            event.payload["items"][0]["operation_id"]
+            for event in await harness.store.load_recovery(harness.session_id)
+            if event.event_type == EventType.APPROVAL_REQUESTED
+        )
+        outcome = await harness.resume(
+            decisions={operation_id: True},
+            parameters={"temperature": 0.9, "top_k": None},
+        )
+    finally:
+        await harness.close()
+
+    assert pending.status == TurnStatus.APPROVAL_PENDING
+    assert outcome.status == TurnStatus.SUCCEEDED
+    assert provider.requests[0].parameters == {"temperature": 0.2, "top_k": 40}
+    assert provider.requests[1].parameters == {
+        "temperature": 0.9,
+        "top_k": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_compaction_none_removes_provider_default_in_wire_body():
+    from helpers import FakeDelivery
+    from test_loop import context, registry
+
+    from nextloop import AgentLoop, InMemoryEventStore, LoopConfig, TurnStatus
+
+    seen = []
+
+    def handler(http_request):
+        seen.append(json.loads(http_request.content))
+        text = "short summary" if len(seen) == 1 else "done"
+        chunk = openai_chunk({"content": text}, "stop")
+        body = f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n"
+        return httpx.Response(200, text=body)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAIProvider(
+        model_id="test-model",
+        base_url="https://provider.test/v1",
+        api_key="secret",
+        default_parameters={"temperature": 0.5, "top_k": 40},
+        http_client=client,
+    )
+    outcome = await AgentLoop().run(
+        context(
+            InMemoryEventStore(),
+            provider,
+            registry(),
+            FakeDelivery(),
+            initial_input="x" * 5000,
+            config=LoopConfig(
+                system_prompt="sys",
+                compaction_prompt="compact",
+                context_window=1000,
+                output_reserve=0,
+                retry_backoff_seconds=0,
+                parameters={"temperature": 0.7},
+                compaction_parameters={"top_k": None},
+            ),
+        )
+    )
+
+    assert outcome.status == TurnStatus.SUCCEEDED
+    assert len(seen) == 2
+    assert seen[0]["temperature"] == 0.7
+    assert "top_k" not in seen[0]
+    assert seen[1]["temperature"] == 0.7
+    assert seen[1]["top_k"] == 40
+    await client.aclose()

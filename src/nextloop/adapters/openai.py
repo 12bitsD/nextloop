@@ -36,7 +36,9 @@ class OpenAIProvider:
         self.model_id = model_id
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        check_reserved_parameters(default_parameters or {})
+        check_reserved_parameters(
+            {} if default_parameters is None else default_parameters
+        )
         self.default_parameters = merge_parameters(default_parameters)
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client

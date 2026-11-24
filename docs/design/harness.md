@@ -92,7 +92,7 @@ await harness.close()
 
 Harness also delegates `steer_result()`, `resume()`, `retry_operation()`, `release_resource()`, and `delete_session()`. All execution entries use the same checked Tools and Skills and reuse the Harness-owned Provider.
 
-`resume()` accepts approval decisions or `reject_all`, plus optional replacement input, `input_id`, and `preview`. `retry_operation()` keeps the original operation ID. `delete_session()` deletes EventStore state only. A separately constructed `SQLiteOutbox` has its own cleanup operation.
+`resume()` accepts approval decisions or `reject_all`, plus optional replacement input, `input_id`, `preview`, and per-call `parameters`. `retry_operation()` keeps the original operation ID. `delete_session()` deletes EventStore state only. A separately constructed `SQLiteOutbox` has its own cleanup operation.
 
 Skills provide instructions only. Their metadata is added to the system prompt, and the read-only `skill_view` Tool loads their bodies when needed. Loading a Skill never runs adjacent scripts or grants more Tool permissions.
 

@@ -172,3 +172,49 @@ async def test_dispatch_subcommands_reject_unknown_and_uninitialized(
         await _dispatch_skills(
             uninitialized, argparse.Namespace(skills_command="list")
         )
+
+
+def test_cli_smoke_closes_owned_provider_on_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from nextloop import ProviderError
+
+    class FailingProvider:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def complete(self, request, *, attempt, cancel):
+            raise ProviderError("upstream down")
+
+        async def close(self) -> None:
+            self.close_calls += 1
+
+    config = tmp_path / "harness.toml"
+    config.write_text(BASE, encoding="utf-8")
+    (tmp_path / "cli_tools.py").write_text(
+        "def register(registry):\n    pass\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    provider = FailingProvider()
+    monkeypatch.setattr(
+        "nextloop.harness.OpenAIProvider", lambda **kwargs: provider
+    )
+    monkeypatch.setenv("NEXTLOOP_TEST_KEY", "secret")
+
+    assert main(["--json", "smoke", str(config), "--input", "hello"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "failed"
+    assert "upstream down" in payload["error"]
+    assert provider.close_calls == 1
+
+    missing_key_provider = FailingProvider()
+    monkeypatch.setattr(
+        "nextloop.harness.OpenAIProvider", lambda **kwargs: missing_key_provider
+    )
+    monkeypatch.delenv("NEXTLOOP_TEST_KEY", raising=False)
+    assert main(["--json", "smoke", str(config), "--input", "hello"]) == 1
+    assert json.loads(capsys.readouterr().out)["ok"] is False
+    assert missing_key_provider.close_calls == 0

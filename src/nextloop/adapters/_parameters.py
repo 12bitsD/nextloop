@@ -32,7 +32,6 @@ def build_wire_parameters(
     overrides: Mapping[str, Any],
 ) -> dict[str, Any]:
     try:
-        check_reserved_parameters(defaults)
         check_reserved_parameters(overrides)
     except ValueError as exc:
         raise ProviderError(str(exc)) from exc
