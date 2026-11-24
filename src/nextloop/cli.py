@@ -8,7 +8,7 @@ import sys
 from collections.abc import Sequence
 from typing import Any, NoReturn
 
-from .contracts import NextloopError, TurnOutcome
+from .contracts import NextloopError, ToolCall, ToolSpec, TurnOutcome
 from .harness import Harness
 
 
@@ -87,60 +87,67 @@ def main(argv: Sequence[str] | None = None) -> int:
 async def _dispatch(args: argparse.Namespace) -> Any:
     harness = Harness.load(args.harness)
     try:
-        if args.command == "check":
-            return await harness.check()
-        if args.command == "tools" and args.tools_command == "list":
-            await harness.check()
-            return [
-                {
-                    "name": spec.name,
-                    "description": spec.description,
-                    "mode": spec.mode.value,
-                    "effect": spec.effect.value,
-                    "resources": list(spec.resources),
-                    "parameters": dict(spec.parameters),
-                }
-                for spec in harness.tools.catalog()
-            ]
-        if args.command == "tools" and args.tools_command == "call":
-            await harness.check()
-            from .contracts import ToolCall
-
-            call = ToolCall("cli_call", args.name, args.arguments)
-            _, issues = harness.tools.validate([call])
-            if issues:
-                raise NextloopError(
-                    "; ".join(issue.message for issue in issues)
-                )
-            import asyncio
-
-            tool_outcome = await harness.tools.execute(
-                call,
-                json.loads(args.arguments),
-                session_id="cli",
-                turn=0,
-                step=0,
-                cancel=asyncio.Event(),
-            )
-            return dataclasses.asdict(tool_outcome)
-        if args.command == "skills":
-            await harness.check()
-            assert harness.skills is not None
-            if args.skills_command == "list":
-                return [
-                    dataclasses.asdict(spec) for spec in harness.skills.list()
-                ]
-            document = harness.skills.load(args.name)
-            return {
-                "spec": dataclasses.asdict(document.spec),
-                "body": document.body,
-            }
-        if args.command == "smoke":
-            outcome = await harness.run(args.input)
-            return _turn_outcome(outcome)
-        raise NextloopError("Unknown command")
+        match args.command:
+            case "check":
+                return await harness.check()
+            case "smoke":
+                outcome = await harness.run(args.input)
+                return _turn_outcome(outcome)
+            case "tools":
+                return await _dispatch_tools(harness, args)
+            case "skills":
+                return await _dispatch_skills(harness, args)
+            case _:
+                raise NextloopError(f"Unknown command: {args.command}")
     finally:
         await harness.close()
+
+
+async def _dispatch_tools(harness: Harness, args: argparse.Namespace) -> Any:
+    await harness.check()
+    if args.tools_command == "list":
+        return [_tool_spec_dict(spec) for spec in harness.tools.catalog()]
+    if args.tools_command == "call":
+        call = ToolCall("cli_call", args.name, args.arguments)
+        _, issues = harness.tools.validate([call])
+        if issues:
+            raise NextloopError("; ".join(issue.message for issue in issues))
+        outcome = await harness.tools.execute(
+            call,
+            json.loads(args.arguments),
+            session_id="cli",
+            turn=0,
+            step=0,
+            cancel=asyncio.Event(),
+        )
+        return dataclasses.asdict(outcome)
+    raise NextloopError(f"Unknown tools command: {args.tools_command}")
+
+
+def _tool_spec_dict(spec: ToolSpec) -> dict[str, Any]:
+    return {
+        "name": spec.name,
+        "description": spec.description,
+        "mode": spec.mode.value,
+        "effect": spec.effect.value,
+        "resources": list(spec.resources),
+        "parameters": dict(spec.parameters),
+    }
+
+
+async def _dispatch_skills(harness: Harness, args: argparse.Namespace) -> Any:
+    await harness.check()
+    if harness.skills is None:
+        raise NextloopError("Skills registry is not initialized")
+    if args.skills_command == "list":
+        return [dataclasses.asdict(spec) for spec in harness.skills.list()]
+    if args.skills_command == "view":
+        document = harness.skills.load(args.name)
+        return {
+            "spec": dataclasses.asdict(document.spec),
+            "body": document.body,
+        }
+    raise NextloopError(f"Unknown skills command: {args.skills_command}")
 
 
 def _turn_outcome(outcome: TurnOutcome) -> dict[str, Any]:
@@ -154,28 +161,39 @@ def _turn_outcome(outcome: TurnOutcome) -> dict[str, Any]:
     }
 
 
-# bits:explain(BCS003): config dispatch; split duplicates validation; keep API
 def _print_human(args: argparse.Namespace, result: Any) -> None:
-    if args.command == "check":
-        print("Harness OK")
-        print("Tools: " + (", ".join(result["tools"]) or "none"))
-        print("Skills: " + (", ".join(result["skills"]) or "none"))
-    elif args.command == "tools" and args.tools_command == "list":
+    match args.command:
+        case "check":
+            print("Harness OK")
+            print("Tools: " + (", ".join(result["tools"]) or "none"))
+            print("Skills: " + (", ".join(result["skills"]) or "none"))
+        case "smoke":
+            target = result.get("error") or result.get("final_message_id")
+            print(f"{result['status']}: {target}")
+        case "tools":
+            _print_tools_human(args, result)
+        case "skills":
+            _print_skills_human(args, result)
+        case _:
+            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+def _print_tools_human(args: argparse.Namespace, result: Any) -> None:
+    if args.tools_command == "list":
         for item in result:
             # bits:allow(BCS007): Python has no brace blocks
             print(f"{item['name']}\t{item['mode']}\t{item['description']}")
-    elif args.command == "skills" and args.skills_command == "list":
+        return
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+def _print_skills_human(args: argparse.Namespace, result: Any) -> None:
+    if args.skills_command == "list":
         for item in result:
             # bits:allow(BCS007): Python has no brace blocks
             print(f"{item['name']}\t{item['description']}")
-    elif args.command == "skills":
-        print(result["body"])
-    elif isinstance(result, dict) and "status" in result:
-        print(
-            f"{result['status']}: {result.get('error') or result.get('final_message_id')}"
-        )
-    else:
-        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        return
+    print(result["body"])
 
 
 if __name__ == "__main__":
