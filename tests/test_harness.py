@@ -310,3 +310,31 @@ async def test_all_runtime_validation_entry_points_match() -> None:
         issue.to_dict() for issue in composite.validate(calls)[1]
     ] == expected
     assert [issue.to_dict() for issue in stdio.validate(calls)[1]] == expected
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        '[provider.default_parameters]\nmodel = "other"',
+        "[loop.compaction_parameters]\nstream = false",
+    ],
+)
+def test_reserved_model_parameters_fail_at_load(
+    tmp_path: Path, fragment: str
+) -> None:
+    with pytest.raises(HarnessError, match="reserved"):
+        load_harness_spec(write_config(tmp_path, fragment))
+
+
+def test_load_loop_model_parameters_without_local_value_validation(
+    tmp_path: Path,
+) -> None:
+    spec = load_harness_spec(
+        write_config(
+            tmp_path,
+            "[loop.parameters]\ntemperature = -0.5\ntop_k = 0\n"
+            "[loop.compaction_parameters]\ntemperature = 0\n",
+        )
+    )
+    assert spec.loop.parameters == {"temperature": -0.5, "top_k": 0}
+    assert spec.loop.compaction_parameters == {"temperature": 0}

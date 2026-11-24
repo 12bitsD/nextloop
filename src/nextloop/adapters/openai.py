@@ -15,8 +15,10 @@ from ..contracts import (
     ModelUsage,
     ProviderError,
     ToolCall,
+    merge_parameters,
 )
 from ._http import AsyncClientOwner
+from ._parameters import build_wire_parameters, check_reserved_parameters
 from ._sse import data_events, read_error_text
 
 
@@ -34,7 +36,10 @@ class OpenAIProvider:
         self.model_id = model_id
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        self.default_parameters = dict(default_parameters or {})
+        check_reserved_parameters(
+            {} if default_parameters is None else default_parameters
+        )
+        self.default_parameters = merge_parameters(default_parameters)
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client
         self._clients = AsyncClientOwner(http_client, timeout_seconds)
@@ -69,8 +74,11 @@ class OpenAIProvider:
         cancel: asyncio.Event,
         emit: Callable[[Mapping[str, Any]], None] | None = None,
     ) -> ModelResponse:
+        parameters = build_wire_parameters(
+            self.default_parameters, request.parameters
+        )
         body = {
-            **self.default_parameters,
+            **parameters,
             "model": self.model_id,
             "messages": [
                 self._message(message) for message in request.messages

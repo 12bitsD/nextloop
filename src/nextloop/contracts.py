@@ -44,6 +44,16 @@ def is_positive_number(value: Any) -> bool:
     )
 
 
+def merge_parameters(*layers: Mapping[str, Any] | None) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for layer in layers:
+        # bits:allow(BCS007): Python has no brace blocks
+        if layer is None:
+            continue
+        merged.update(layer)
+    return merged
+
+
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
 
@@ -468,6 +478,7 @@ class CandidateRequest:
     step: int
     messages: tuple[Message, ...]
     tools: tuple[ToolSpec, ...]
+    parameters: Mapping[str, Any] = field(default_factory=dict)
     _canonical_bytes_cache: bytes | None = field(
         default=None, init=False, repr=False, compare=False
     )
@@ -598,6 +609,8 @@ class LoopConfig:
     tool_result_bytes: int = DEFAULT_TOOL_RESULT_BYTES
     tool_result_full_max_bytes: int = DEFAULT_TOOL_RESULT_FULL_MAX_BYTES
     max_pending_inputs: int = 100
+    parameters: Mapping[str, Any] = field(default_factory=dict)
+    compaction_parameters: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,7 @@ from ..contracts import (
     NewEvent,
     SurfaceOp,
     ToolSpec,
+    merge_parameters,
 )
 from .codec import fold_projection_facts, message_from_data
 from .codec import message_to_data as message_to_data
@@ -145,6 +146,7 @@ def project_events(
         step=step,
         messages=tuple(messages),
         tools=tuple(tools),
+        parameters=merge_parameters(config.parameters),
     )
     reason = _capacity_reason(len(request.canonical_bytes()), config)
     return Projection(
@@ -172,6 +174,9 @@ def make_compaction_request(
             *request.messages[1 + len(config.bootstrap_messages) :],
         ),
         tools=(),
+        parameters=merge_parameters(
+            config.parameters, config.compaction_parameters
+        ),
     )
 
 

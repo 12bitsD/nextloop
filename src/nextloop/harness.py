@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
+from .adapters._parameters import check_reserved_parameters
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
 from .adapters.observing import (
@@ -50,6 +51,7 @@ from .contracts import (
     TurnOutcome,
     TurnTrace,
     is_positive_number,
+    merge_parameters,
     new_id,
     parse_version,
 )
@@ -100,6 +102,8 @@ _LOOP_FIELDS = {
     "tool_result_bytes",
     "tool_result_full_max_bytes",
     "max_pending_inputs",
+    "parameters",
+    "compaction_parameters",
 }
 _TOOL_FIELDS = {
     "driver",
@@ -219,9 +223,13 @@ class Harness:
         *,
         input_id: str | None = None,
         preview: PreviewSink | None = None,
+        parameters: Mapping[str, Any] | None = None,
     ) -> TurnOutcome:
         context = await self._make_context(
-            initial_input, input_id=input_id, preview=preview
+            initial_input,
+            input_id=input_id,
+            preview=preview,
+            parameters=parameters,
         )
         return await self.loop.run(context)
 
@@ -231,14 +239,25 @@ class Harness:
         *,
         input_id: str | None,
         preview: PreviewSink | None,
+        parameters: Mapping[str, Any] | None = None,
     ) -> TurnContext:
         await self.check()
-        provider = self._make_provider()
         assert self._all_tools is not None
+        loop_config = self._loop_config()
+        if parameters is not None:
+            try:
+                check_reserved_parameters(parameters)
+            except ValueError as exc:
+                raise HarnessError(str(exc)) from exc
+            loop_config = replace(
+                loop_config,
+                parameters=merge_parameters(loop_config.parameters, parameters),
+            )
+        provider = self._make_provider()
         return TurnContext(
             session_id=self.session_id,
             initial_input=initial_input,
-            config=self._loop_config(),
+            config=loop_config,
             store=self.store,
             provider=provider,
             tools=self._all_tools,
@@ -280,11 +299,13 @@ class Harness:
         new_input: str | None = None,
         input_id: str | None = None,
         preview: PreviewSink | None = None,
+        parameters: Mapping[str, Any] | None = None,
     ) -> TurnOutcome:
         context = await self._make_context(
             new_input if new_input is not None else "Resume approval",
             input_id=input_id,
             preview=preview,
+            parameters=parameters,
         )
         return await self.loop.resume(
             context, decisions=decisions, reject_all=reject_all
@@ -465,6 +486,12 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
 
     provider_raw = _table(raw, "provider", source)
     _fields(provider_raw, _PROVIDER_FIELDS, "provider", source)
+    default_parameters = _optional_table(
+        provider_raw, "default_parameters", source, "provider"
+    )
+    _check_reserved_parameters(
+        default_parameters, source, "provider.default_parameters"
+    )
     provider = ProviderConfig(
         protocol=_choice(
             provider_raw, "protocol", ("openai", "anthropic"), source
@@ -472,9 +499,7 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
         model_id=_string(provider_raw, "model_id", source, "provider"),
         base_url=_string(provider_raw, "base_url", source, "provider"),
         api_key_env=_string(provider_raw, "api_key_env", source, "provider"),
-        default_parameters=_optional_table(
-            provider_raw, "default_parameters", source, "provider"
-        ),
+        default_parameters=default_parameters,
         timeout_seconds=_number(
             provider_raw, "timeout_seconds", 60.0, source, "provider"
         ),
@@ -500,7 +525,13 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     _fields(loop_raw, _LOOP_FIELDS, "loop", source)
     loop_values: dict[str, Any] = {}
     for name in _LOOP_FIELDS:
-        if name in loop_raw:
+        # bits:allow(BCS007): Python has no brace blocks
+        if name in ("parameters", "compaction_parameters"):
+            table = _optional_table(loop_raw, name, source, "loop")
+            _check_reserved_parameters(table, source, f"loop.{name}")
+            if name in loop_raw:
+                loop_values[name] = table
+        elif name in loop_raw:
             loop_values[name] = loop_raw[name]
     loop_values.setdefault("system_prompt", "You are a helpful assistant.")
     try:
@@ -732,6 +763,15 @@ def _reject_secrets(raw: Mapping[str, Any], source: Path) -> None:
                 visit(child, f"{path}[{index}]")
 
     visit(raw, "")
+
+
+def _check_reserved_parameters(
+    raw: Mapping[str, Any], source: Path, prefix: str
+) -> None:
+    try:
+        check_reserved_parameters(raw)
+    except ValueError as exc:
+        _fail(source, prefix, str(exc))
 
 
 # bits:explain(BCS003): config dispatch; split duplicates validation; keep API

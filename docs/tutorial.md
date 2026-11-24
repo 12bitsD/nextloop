@@ -142,7 +142,7 @@ path = "nextloop.db"
 system_prompt = "You are a helpful assistant."
 ```
 
-Set the API key in your environment, then run:
+Leaving sampling parameters unset lets the provider use the model's tuned defaults (and avoids errors on thinking models that reject explicit `temperature` or `top_k`). Set the API key in your environment, then run:
 
 ```python
 import asyncio
@@ -168,6 +168,8 @@ if __name__ == "__main__":
 ```
 
 The default Harness DeliveryOwner keeps messages in memory. Inject your own Delivery adapter when your application needs to send them somewhere else.
+
+You can override sampling parameters such as `temperature`, `top_p`, or `top_k` for a single call with `await harness.run("...", parameters={"temperature": 0.8})`. Passing `None` for a key removes it for that call. See [Harness configuration](design/harness.md#model-parameters-and-compatibility) for merge order and how unsupported parameters fail.
 
 Use a stable `input_id` to retry safely. After a successful Turn, calling `run()` again with the same ID and content returns the original `TurnOutcome`. It does not rerun the model, Tools, or Delivery. Reusing the ID with different content is rejected.
 
