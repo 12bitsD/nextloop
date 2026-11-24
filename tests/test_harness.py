@@ -316,12 +316,8 @@ async def test_all_runtime_validation_entry_points_match() -> None:
     ("fragment", "message"),
     [
         (
-            "[provider.default_parameters]\ntemperature = -0.5",
-            "provider.default_parameters.temperature",
-        ),
-        (
-            "[loop.parameters]\ntop_k = 0",
-            "loop.parameters.top_k",
+            '[provider.default_parameters]\nmodel = "other"',
+            "provider.default_parameters.model",
         ),
         (
             "[loop.compaction_parameters]\nstream = false",
@@ -329,20 +325,22 @@ async def test_all_runtime_validation_entry_points_match() -> None:
         ),
     ],
 )
-def test_invalid_model_parameters_fail_at_load(
+def test_reserved_model_parameters_fail_at_load(
     tmp_path: Path, fragment: str, message: str
 ) -> None:
     with pytest.raises(HarnessError, match=message):
         load_harness_spec(write_config(tmp_path, fragment))
 
 
-def test_load_loop_model_parameters(tmp_path: Path) -> None:
+def test_load_loop_model_parameters_without_local_value_validation(
+    tmp_path: Path,
+) -> None:
     spec = load_harness_spec(
         write_config(
             tmp_path,
-            "[loop.parameters]\ntemperature = 0.4\ntop_k = 20\n"
+            "[loop.parameters]\ntemperature = -0.5\ntop_k = 0\n"
             "[loop.compaction_parameters]\ntemperature = 0\n",
         )
     )
-    assert spec.loop.parameters == {"temperature": 0.4, "top_k": 20}
+    assert spec.loop.parameters == {"temperature": -0.5, "top_k": 0}
     assert spec.loop.compaction_parameters == {"temperature": 0}

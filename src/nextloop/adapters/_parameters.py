@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -10,10 +9,9 @@ from ..contracts import ProviderError, merge_parameters
 __all__ = [
     "ParameterValidationError",
     "build_wire_parameters",
+    "check_reserved_parameters",
     "merge_parameters",
     "parameter_error",
-    "to_wire_parameters",
-    "validate_parameters",
 ]
 
 RESERVED_PARAMETER_KEYS = frozenset(
@@ -27,135 +25,28 @@ class ParameterValidationError(ValueError):
         self.param = param
 
 
-def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def _is_int(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _valid_string_list(value: Any) -> bool:
-    return (
-        isinstance(value, (list, tuple))
-        and len(value) > 0
-        and all(isinstance(item, str) and item != "" for item in value)
-    )
-
-
-# bits:explain(BCS003): single validation table; split scatters field rules
-def validate_parameters(raw: Mapping[str, Any]) -> None:
+def check_reserved_parameters(raw: Mapping[str, Any]) -> None:
     if not isinstance(raw, Mapping):
         raise ParameterValidationError(None, "parameters must be a mapping")
-    for key, value in raw.items():
-        # bits:allow(BCS007): Python has no brace blocks
-        if not isinstance(key, str) or not key:
-            raise ParameterValidationError(
-                None, "parameter names must be non-empty strings"
-            )
-        if key in RESERVED_PARAMETER_KEYS:
-            raise ParameterValidationError(
-                key, f"parameter '{key}' is reserved and managed by nextloop"
-            )
-        if value is None:
-            continue
-        if key == "temperature":
-            if not _is_number(value) or not math.isfinite(value) or value < 0:
-                raise ParameterValidationError(
-                    key, "temperature must be a finite number >= 0"
-                )
-        elif key == "top_p":
-            if (
-                not _is_number(value)
-                or not math.isfinite(value)
-                or not 0 <= value <= 1
-            ):
-                raise ParameterValidationError(
-                    key, "top_p must be a finite number between 0 and 1"
-                )
-        elif key == "top_k":
-            if not _is_int(value) or value < 1:
-                raise ParameterValidationError(
-                    key, "top_k must be an integer >= 1"
-                )
-        elif key in ("max_tokens", "max_completion_tokens"):
-            if not _is_int(value) or value < 1:
-                raise ParameterValidationError(
-                    key, f"{key} must be an integer >= 1"
-                )
-        elif key == "seed":
-            if not _is_int(value):
-                raise ParameterValidationError(key, "seed must be an integer")
-        elif key in ("presence_penalty", "frequency_penalty"):
-            if (
-                not _is_number(value)
-                or not math.isfinite(value)
-                or not -2 <= value <= 2
-            ):
-                raise ParameterValidationError(
-                    key, f"{key} must be a finite number between -2 and 2"
-                )
-        elif key == "stop":
-            if not (
-                (isinstance(value, str) and value != "")
-                or _valid_string_list(value)
-            ):
-                raise ParameterValidationError(
-                    key,
-                    "stop must be a non-empty string or list of non-empty strings",
-                )
-        elif key == "stop_sequences" and not _valid_string_list(value):
-            raise ParameterValidationError(
-                key, "stop_sequences must be a list of non-empty strings"
-            )
-    if (
-        raw.get("max_tokens") is not None
-        and raw.get("max_completion_tokens") is not None
-    ):
+    reserved = RESERVED_PARAMETER_KEYS.intersection(raw)
+    if reserved:
+        key = sorted(reserved)[0]
         raise ParameterValidationError(
-            "max_completion_tokens",
-            "max_tokens and max_completion_tokens are mutually exclusive",
+            key, f"parameter '{key}' is reserved and managed by nextloop"
         )
-
-
-def to_wire_parameters(
-    merged: Mapping[str, Any], protocol: str
-) -> dict[str, Any]:
-    validate_parameters(merged)
-    wire = dict(merged)
-    if protocol == "anthropic":
-        if "stop" in wire and "stop_sequences" in wire:
-            raise ParameterValidationError(
-                "stop",
-                "use either 'stop' or 'stop_sequences' for Anthropic, not both",
-            )
-        if "stop" in wire:
-            stop = wire.pop("stop")
-            wire["stop_sequences"] = (
-                [stop] if isinstance(stop, str) else list(stop)
-            )
-    if isinstance(wire.get("stop"), tuple):
-        wire["stop"] = list(wire["stop"])
-    return wire
-
-
-def without_unset_parameters(raw: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in raw.items() if value is not None}
 
 
 def build_wire_parameters(
     defaults: Mapping[str, Any],
     overrides: Mapping[str, Any],
-    protocol: str,
 ) -> dict[str, Any]:
     try:
-        validate_parameters(overrides)
-        merged = without_unset_parameters(merge_parameters(defaults, overrides))
-        return to_wire_parameters(merged, protocol)
+        check_reserved_parameters(defaults)
+        check_reserved_parameters(overrides)
     except ParameterValidationError as exc:
-        raise ProviderError(
-            f"Invalid model parameters: {exc}", param=exc.param
-        ) from exc
+        raise ProviderError(str(exc), param=exc.param) from exc
+    merged = merge_parameters(defaults, overrides)
+    return {key: value for key, value in merged.items() if value is not None}
 
 
 def _extract_error_fields(

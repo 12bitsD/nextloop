@@ -15,10 +15,9 @@ from nextloop import (
 )
 from nextloop.adapters._parameters import (
     build_wire_parameters,
+    check_reserved_parameters,
     merge_parameters,
     parameter_error,
-    to_wire_parameters,
-    validate_parameters,
 )
 
 
@@ -31,7 +30,7 @@ def test_merge_parameters_preserves_unset_until_wire_build():
     )
 
     assert overrides == {"temperature": 0.8, "top_k": None, "seed": 7}
-    assert build_wire_parameters(defaults, overrides, "openai") == {
+    assert build_wire_parameters(defaults, overrides) == {
         "temperature": 0.8,
         "max_tokens": 512,
         "seed": 7,
@@ -39,79 +38,15 @@ def test_merge_parameters_preserves_unset_until_wire_build():
 
 
 @pytest.mark.parametrize(
-    ("params", "match"),
-    [
-        ({"temperature": -0.1}, "temperature"),
-        ({"temperature": True}, "temperature"),
-        ({"temperature": float("nan")}, "temperature"),
-        ({"top_p": 1.1}, "top_p"),
-        ({"top_p": -0.1}, "top_p"),
-        ({"top_k": 0}, "top_k"),
-        ({"top_k": True}, "top_k"),
-        ({"top_k": 2.5}, "top_k"),
-        ({"max_tokens": 0}, "max_tokens"),
-        ({"max_completion_tokens": -5}, "max_completion_tokens"),
-        (
-            {"max_tokens": 100, "max_completion_tokens": 200},
-            "mutually exclusive",
-        ),
-        ({"seed": 1.5}, "seed"),
-        ({"seed": False}, "seed"),
-        ({"presence_penalty": 2.5}, "presence_penalty"),
-        ({"frequency_penalty": -2.5}, "frequency_penalty"),
-        ({"stop": ""}, "stop"),
-        ({"stop": ["ok", ""]}, "stop"),
-        ({"stop": 123}, "stop"),
-        ({"stop_sequences": "not-a-list"}, "stop_sequences"),
-        ({"messages": []}, "reserved"),
-        ({"model": "other"}, "reserved"),
-        ({"stream": False}, "reserved"),
-        ({"tools": []}, "reserved"),
-        ({"system": "override"}, "reserved"),
-        ({"": 1}, "non-empty"),
-    ],
+    "key", ["model", "messages", "stream", "tools", "system"]
 )
-def test_validate_parameters_rejects_invalid_values(params, match):
-    with pytest.raises(ValueError, match=match):
-        validate_parameters(params)
-
-
-def test_validate_parameters_allows_vendor_extensions_and_zero_temperature():
-    validate_parameters(
-        {
-            "temperature": 0,
-            "top_p": 1.0,
-            "top_k": 1,
-            "reasoning_effort": "high",
-            "seed": None,
-        }
-    )
-
-
-def test_anthropic_wire_parameters_map_stop_to_stop_sequences():
-    wire = to_wire_parameters(
-        {"temperature": 0.3, "stop": "END", "top_k": 20}, "anthropic"
-    )
-    assert wire == {
-        "temperature": 0.3,
-        "stop_sequences": ["END"],
-        "top_k": 20,
-    }
-
-    wire_list = to_wire_parameters({"stop": ("A", "B")}, "anthropic")
-    assert wire_list == {"stop_sequences": ["A", "B"]}
-
-    with pytest.raises(ValueError, match="not both"):
-        to_wire_parameters(
-            {"stop": ["A"], "stop_sequences": ["B"]}, "anthropic"
-        )
-
-
-def test_openai_wire_parameters_keep_top_k_for_compatible_gateways():
-    wire = to_wire_parameters(
-        {"top_k": 40, "stop": ("A", "B"), "custom_flag": True}, "openai"
-    )
-    assert wire == {"top_k": 40, "stop": ["A", "B"], "custom_flag": True}
+def test_reserved_runtime_parameters_are_rejected(key):
+    with pytest.raises(ValueError, match="reserved"):
+        check_reserved_parameters({key: "x"})
+    with pytest.raises(ProviderError, match="reserved") as caught:
+        build_wire_parameters({}, {key: "x"})
+    assert caught.value.param == key
+    assert caught.value.retryable is False
 
 
 def test_parameter_error_extracts_openai_param_and_code():
@@ -225,7 +160,79 @@ async def test_openai_provider_merges_request_parameters_into_wire_body():
 
 
 @pytest.mark.asyncio
-async def test_anthropic_provider_merges_parameters_and_maps_stop():
+async def test_providers_pass_through_values_without_local_validation():
+    seen = []
+
+    def handler(http_request):
+        seen.append(json.loads(http_request.content))
+        return httpx.Response(200, text=_sse_done_body())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    raw_values = {
+        "temperature": -1,
+        "top_k": "not-an-int",
+        "max_tokens": 100,
+        "max_completion_tokens": 200,
+        "stop": 123,
+        "vendor_extension": {"nested": True},
+    }
+    provider = OpenAIProvider(
+        model_id="test-model",
+        base_url="https://provider.test/v1",
+        api_key="secret",
+        default_parameters=raw_values,
+        http_client=client,
+    )
+
+    await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+
+    assert len(seen) == 1
+    for key, value in raw_values.items():
+        assert seen[0][key] == value
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_server_parameter_rejection_is_forwarded_without_retry():
+    seen = []
+
+    def handler(http_request):
+        seen.append(json.loads(http_request.content))
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "message": "temperature must be greater than or equal to 0",
+                    "type": "invalid_request_error",
+                    "param": "temperature",
+                    "code": "invalid_value",
+                }
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAIProvider(
+        model_id="test-model",
+        base_url="https://provider.test/v1",
+        api_key="secret",
+        default_parameters={"temperature": -1},
+        http_client=client,
+    )
+
+    with pytest.raises(ProviderError) as caught:
+        await provider.complete(request(), attempt=1, cancel=asyncio.Event())
+
+    assert len(seen) == 1
+    assert seen[0]["temperature"] == -1
+    assert caught.value.param == "temperature"
+    assert caught.value.code == "invalid_value"
+    assert caught.value.retryable is False
+    assert "greater than or equal to 0" in str(caught.value)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_merges_request_parameters():
     seen = []
     events = [
         ("message_start", {"message": {"usage": {"input_tokens": 3}}}),
@@ -252,7 +259,10 @@ async def test_anthropic_provider_merges_parameters_and_maps_stop():
         default_parameters={"temperature": 0.5, "top_k": 10},
         http_client=client,
     )
-    req = replace(request(), parameters={"temperature": None, "stop": ["END"]})
+    req = replace(
+        request(),
+        parameters={"temperature": None, "stop_sequences": ["END"]},
+    )
 
     await provider.complete(req, attempt=1, cancel=asyncio.Event())
 
@@ -262,17 +272,16 @@ async def test_anthropic_provider_merges_parameters_and_maps_stop():
     assert payload["top_k"] == 10
     assert "max_tokens" not in payload
     assert payload["stop_sequences"] == ["END"]
-    assert "stop" not in payload
     await client.aclose()
 
 
-def test_providers_reject_invalid_default_parameters_at_init():
-    with pytest.raises(ValueError, match="temperature"):
+def test_providers_reject_reserved_default_parameters_at_init():
+    with pytest.raises(ValueError, match="reserved"):
         OpenAIProvider(
             model_id="m",
             base_url="https://provider.test/v1",
             api_key="secret",
-            default_parameters={"temperature": -1},
+            default_parameters={"model": "other"},
         )
     with pytest.raises(ValueError, match="reserved"):
         AnthropicProvider(
@@ -284,7 +293,7 @@ def test_providers_reject_invalid_default_parameters_at_init():
 
 
 @pytest.mark.asyncio
-async def test_invalid_request_parameters_fail_before_http_request():
+async def test_reserved_request_parameters_fail_before_http_request():
     calls = []
 
     def handler(http_request):
@@ -298,13 +307,13 @@ async def test_invalid_request_parameters_fail_before_http_request():
         api_key="secret",
         http_client=client,
     )
-    req = replace(request(), parameters={"top_k": 0})
+    req = replace(request(), parameters={"stream": False})
 
-    with pytest.raises(ProviderError, match="top_k") as caught:
+    with pytest.raises(ProviderError, match="reserved") as caught:
         await provider.complete(req, attempt=1, cancel=asyncio.Event())
 
     assert caught.value.retryable is False
-    assert caught.value.param == "top_k"
+    assert caught.value.param == "stream"
     assert calls == []
     await client.aclose()
 
@@ -398,7 +407,7 @@ async def test_loop_applies_inference_and_compaction_parameters():
 
 
 @pytest.mark.asyncio
-async def test_harness_run_invalid_override_fails_turn_without_http(
+async def test_harness_run_forwards_server_parameter_error(
     tmp_path, monkeypatch
 ):
     from nextloop import Harness, TurnStatus
@@ -406,8 +415,18 @@ async def test_harness_run_invalid_override_fails_turn_without_http(
     seen = []
 
     def handler(http_request):
-        seen.append(http_request)
-        return httpx.Response(200, text=_sse_done_body())
+        seen.append(json.loads(http_request.content))
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "message": "Invalid temperature: -1",
+                    "type": "invalid_request_error",
+                    "param": "temperature",
+                    "code": None,
+                }
+            },
+        )
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     real_provider_cls = OpenAIProvider
@@ -434,8 +453,9 @@ async def test_harness_run_invalid_override_fails_turn_without_http(
         await harness.close()
 
     assert outcome.status == TurnStatus.FAILED
-    assert "temperature" in (outcome.error or "")
-    assert seen == []
+    assert "Invalid temperature: -1" in (outcome.error or "")
+    assert len(seen) == 1
+    assert seen[0]["temperature"] == -1
     await client.aclose()
 
 

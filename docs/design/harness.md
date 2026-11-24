@@ -98,7 +98,7 @@ Skills provide instructions only. Their metadata is added to the system prompt, 
 
 ## Model parameters and compatibility
 
-Pass LLM sampling and generation settings as a plain dict using Provider parameter names. Common keys such as `temperature`, `top_p`, `top_k`, `max_tokens`, `max_completion_tokens`, `stop`, `seed`, `presence_penalty`, and `frequency_penalty` are validated locally. Unknown keys pass through unchanged for vendor-specific options such as `reasoning_effort` or `thinking`.
+Pass LLM sampling and generation settings as a plain dict using each Provider's native parameter names (for example, `temperature`, `top_p`, `top_k`, `max_tokens`, `max_completion_tokens`, `stop` on OpenAI or `stop_sequences` on Anthropic, `seed`, or vendor-specific options such as `reasoning_effort` and `thinking`). nextloop passes values through verbatim and does not validate ranges or rename fields locally—the model server owns parameter validation.
 
 Layers merge in this order, with later values winning:
 
@@ -118,8 +118,8 @@ outcome = await harness.run(
 
 Compatibility rules:
 
-- **Local validation fails fast.** Invalid ranges (`temperature < 0`, `top_p` outside `[0, 1]`, `top_k < 1`, booleans passed as numbers), setting both `max_tokens` and `max_completion_tokens`, or reserved keys (`model`, `messages`, `stream`, `tools`, `system`) raise `HarnessError` when loading TOML, `ValueError` when constructing a Provider, or a non-retryable `ProviderError` that ends the Turn as `failed` when passed as a per-call override.
-- **Anthropic `stop` mapping.** `AnthropicProvider` translates `stop` to `stop_sequences` automatically. Setting both `stop` and `stop_sequences` is rejected.
+- **Only runtime-owned keys are rejected locally.** `model`, `messages`, `stream`, `tools`, and `system` are managed by nextloop's execution engine; setting them in parameter dicts raises `HarnessError` when loading TOML, `ValueError` when constructing a Provider, or a non-retryable `ProviderError` when passed as a per-call override. All other keys and values are sent as-is.
+- **Invalid values fail at the Provider.** If a value or field is wrong (for example `temperature = -1` or an unsupported `top_k`), the server returns HTTP 400/422 and nextloop forwards that error directly without retrying.
 - **No model-name blocklists.** `protocol = "openai"` covers OpenAI-compatible gateways (such as Kimi or vLLM) that may accept `top_k` or extra fields, so nextloop sends configured parameters as-is rather than guessing model capabilities locally.
 - **Provider or model rejection fails without retry.** When the server rejects a parameter with HTTP 400 or 422 (for example, strict OpenAI rejecting `top_k`, or a reasoning model rejecting `temperature`), the Provider extracts the rejected parameter into `ProviderError.param`, does not retry, records an `assistant/attempt` error, and ends the Turn as `failed` with the parameter named in `TurnOutcome.error`. Remove the parameter or override it with `None` to proceed. For newer OpenAI reasoning models that require `max_completion_tokens` instead of `max_tokens`, pass `{"max_tokens": None, "max_completion_tokens": 2048}`.
 

@@ -20,8 +20,8 @@ from ..contracts import (
 from ._http import AsyncClientOwner
 from ._parameters import (
     build_wire_parameters,
+    check_reserved_parameters,
     parameter_error,
-    validate_parameters,
 )
 from ._sse import data_events, read_error_text
 
@@ -40,7 +40,7 @@ class AnthropicProvider:
         self.model_id = model_id
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        validate_parameters(default_parameters or {})
+        check_reserved_parameters(default_parameters or {})
         self.default_parameters = merge_parameters(default_parameters)
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client
@@ -82,7 +82,7 @@ class AnthropicProvider:
             if message.role == "system"
         )
         parameters = build_wire_parameters(
-            self.default_parameters, request.parameters, "anthropic"
+            self.default_parameters, request.parameters
         )
         body = {
             **parameters,

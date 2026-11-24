@@ -13,7 +13,7 @@ from typing import Any, NoReturn, cast
 
 from .adapters._parameters import (
     ParameterValidationError,
-    validate_parameters,
+    check_reserved_parameters,
 )
 from .adapters.anthropic import AnthropicProvider
 from .adapters.memory import InMemoryEventStore
@@ -490,7 +490,7 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
     default_parameters = _optional_table(
         provider_raw, "default_parameters", source, "provider"
     )
-    _validate_parameters(
+    _check_reserved_parameters(
         default_parameters, source, "provider.default_parameters"
     )
     provider = ProviderConfig(
@@ -529,7 +529,7 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
         # bits:allow(BCS007): Python has no brace blocks
         if name in ("parameters", "compaction_parameters"):
             table = _optional_table(loop_raw, name, source, "loop")
-            _validate_parameters(table, source, f"loop.{name}")
+            _check_reserved_parameters(table, source, f"loop.{name}")
             if name in loop_raw:
                 loop_values[name] = table
         elif name in loop_raw:
@@ -766,11 +766,11 @@ def _reject_secrets(raw: Mapping[str, Any], source: Path) -> None:
     visit(raw, "")
 
 
-def _validate_parameters(
+def _check_reserved_parameters(
     raw: Mapping[str, Any], source: Path, prefix: str
 ) -> None:
     try:
-        validate_parameters(raw)
+        check_reserved_parameters(raw)
     except ParameterValidationError as exc:
         field = f"{prefix}.{exc.param}" if exc.param else prefix
         _fail(source, field, str(exc))
