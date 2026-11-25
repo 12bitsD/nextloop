@@ -477,8 +477,8 @@ async def test_harness_run_non_mapping_parameters_raises_harness_error(
 
 
 @pytest.mark.asyncio
-async def test_harness_run_reserved_parameters_raise_harness_error(tmp_path):
-    from nextloop import Harness, HarnessError, ModelResponse
+async def test_harness_run_reserved_parameters_raise_provider_error(tmp_path):
+    from nextloop import Harness, ModelResponse, ProviderError
 
     calls = []
 
@@ -500,8 +500,9 @@ async def test_harness_run_reserved_parameters_raise_harness_error(tmp_path):
     )
     harness = Harness.load(config_path, provider=CustomProvider())
     try:
-        with pytest.raises(HarnessError, match="'model' is reserved"):
+        with pytest.raises(ProviderError, match="reserved") as caught:
             await harness.run("hello", parameters={"model": "other"})
+        assert caught.value.retryable is False
     finally:
         await harness.close()
 

@@ -36,6 +36,7 @@ from .contracts import (
     PendingInput,
     PreviewSink,
     ProviderConfig,
+    ProviderError,
     RecoveryOutcome,
     SkillConfig,
     SteerResult,
@@ -246,10 +247,12 @@ class Harness:
         assert self._all_tools is not None
         loop_config = self._loop_config()
         if parameters is not None:
+            if not isinstance(parameters, Mapping):
+                raise HarnessError("parameters must be a mapping")
             try:
                 check_reserved_parameters(parameters)
             except ValueError as exc:
-                raise HarnessError(str(exc)) from exc
+                raise ProviderError(str(exc)) from exc
             loop_config = replace(
                 loop_config,
                 parameters=merge_parameters(loop_config.parameters, parameters),
