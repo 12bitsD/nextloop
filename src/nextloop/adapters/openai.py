@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -21,148 +20,6 @@ from ..contracts import (
 from ._http import AsyncClientOwner
 from ._parameters import build_wire_parameters, check_reserved_parameters
 from ._sse import data_events, read_error_text
-
-Emit = Callable[[Mapping[str, Any]], None] | None
-
-
-@dataclass
-class OpenAIStreamState:
-    content_parts: list[str] = field(default_factory=list)
-    refusal_parts: list[str] = field(default_factory=list)
-    calls: dict[int, dict[str, str]] = field(default_factory=dict)
-    finish_reason: FinishReason | None = None
-    usage: ModelUsage | None = None
-    done: bool = False
-    provider_data: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def partial_output(self) -> bool:
-        return bool(
-            self.content_parts
-            or self.refusal_parts
-            or self.calls
-            or self.provider_data
-        )
-
-
-def absorb_private_delta(
-    state: OpenAIStreamState, key: str, value: Any
-) -> None:
-    private_field = key.startswith("reasoning") or key in (
-        "signature",
-        "encrypted_content",
-        "encrypted_reasoning",
-        "continuation_token",
-        "continuation_tokens",
-    )
-    if not private_field or value is None:
-        return
-    if key in ("reasoning_content", "reasoning_summary"):
-        state.provider_data[key] = state.provider_data.get(key, "") + str(value)
-    else:
-        state.provider_data[key] = value
-
-
-def absorb_tool_fragment(
-    state: OpenAIStreamState,
-    fragment: Mapping[str, Any],
-    emit: Emit,
-) -> None:
-    index = int(fragment["index"])
-    current = state.calls.setdefault(
-        index,
-        {"id": f"call_{index}", "name": "", "arguments": ""},
-    )
-    function = fragment.get("function") or {}
-    preview: dict[str, Any] = {"channel": "tool_call", "index": index}
-    if fragment.get("id"):
-        current["id"] = str(fragment["id"])
-        preview["call_id"] = current["id"]
-    if function.get("name"):
-        current["name"] += str(function["name"])
-        preview["name_delta"] = str(function["name"])
-    if function.get("arguments"):
-        current["arguments"] += str(function["arguments"])
-        preview["arguments_delta"] = str(function["arguments"])
-    if emit is not None:
-        emit(preview)
-
-
-def absorb_delta(
-    state: OpenAIStreamState,
-    delta: Mapping[str, Any],
-    emit: Emit,
-) -> None:
-    for key, value in delta.items():
-        absorb_private_delta(state, key, value)
-    if delta.get("content"):
-        text = str(delta["content"])
-        state.content_parts.append(text)
-        if emit is not None:
-            emit({"channel": "content", "delta": text})
-    if delta.get("refusal"):
-        text = str(delta["refusal"])
-        state.refusal_parts.append(text)
-        if emit is not None:
-            emit({"channel": "refusal", "delta": text})
-    for fragment in delta.get("tool_calls") or []:
-        absorb_tool_fragment(state, fragment, emit)
-
-
-def absorb_choice(
-    state: OpenAIStreamState,
-    choice: Mapping[str, Any],
-    emit: Emit,
-) -> None:
-    absorb_delta(state, choice.get("delta") or {}, emit)
-    raw_finish_reason = choice.get("finish_reason")
-    if raw_finish_reason is None:
-        return
-    mapped = OpenAIProvider._finish_reason(raw_finish_reason)
-    if mapped is None:
-        raise ProviderError(
-            "OpenAI stream returned unknown finish reason: "
-            f"{raw_finish_reason}",
-            partial_output=state.partial_output,
-        )
-    state.finish_reason = mapped
-
-
-def absorb_chunk(
-    state: OpenAIStreamState,
-    chunk: Mapping[str, Any],
-    emit: Emit,
-) -> None:
-    state.usage = OpenAIProvider._usage(chunk.get("usage")) or state.usage
-    choices = chunk.get("choices") or []
-    if not choices:
-        return
-    absorb_choice(state, choices[0], emit)
-
-
-def build_openai_response(state: OpenAIStreamState) -> ModelResponse:
-    if not state.done:
-        raise ProviderError(
-            "OpenAI stream ended before [DONE]",
-            retryable=True,
-            partial_output=state.partial_output,
-        )
-    if state.finish_reason is None:
-        raise ProviderError(
-            "OpenAI stream completed without a finish reason",
-            partial_output=state.partial_output,
-        )
-    return ModelResponse(
-        content="".join(state.content_parts),
-        refusal="".join(state.refusal_parts) or None,
-        tool_calls=tuple(
-            ToolCall(call["id"], call["name"], call["arguments"])
-            for _, call in sorted(state.calls.items())
-        ),
-        finish_reason=state.finish_reason,
-        usage=state.usage,
-        provider_data=state.provider_data,
-    )
 
 
 class OpenAIProvider:
@@ -208,7 +65,15 @@ class OpenAIProvider:
             request, attempt=attempt, cancel=cancel, emit=emit
         )
 
-    def request_body(self, request: CandidateRequest) -> dict[str, Any]:
+    # bits:explain(BCS003): SSE state; split scatters state; keep protocol
+    async def _complete(
+        self,
+        request: CandidateRequest,
+        *,
+        attempt: int,
+        cancel: asyncio.Event,
+        emit: Callable[[Mapping[str, Any]], None] | None = None,
+    ) -> ModelResponse:
         parameters = build_wire_parameters(
             self.default_parameters, request.parameters
         )
@@ -232,23 +97,18 @@ class OpenAIProvider:
                 }
                 for tool in request.tools
             ]
-        return body
-
-    async def _complete(
-        self,
-        request: CandidateRequest,
-        *,
-        attempt: int,
-        cancel: asyncio.Event,
-        emit: Emit = None,
-    ) -> ModelResponse:
-        body = self.request_body(request)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
         client = await self._clients.client()
-        state = OpenAIStreamState()
+        content_parts: list[str] = []
+        refusal_parts: list[str] = []
+        calls: dict[int, dict[str, str]] = {}
+        finish_reason: FinishReason | None = None
+        usage: ModelUsage | None = None
+        done = False
+        provider_data: dict[str, Any] = {}
         try:
             async with client.stream(
                 "POST",
@@ -265,28 +125,135 @@ class OpenAIProvider:
                         code=str(response.status_code),
                     )
                 async for event, data in data_events(response):
+                    # bits:allow(BCS007): Python has no brace blocks
                     if cancel.is_set():
                         return ModelResponse(
-                            content="".join(state.content_parts),
+                            content="".join(content_parts),
                             finish_reason=FinishReason.CANCELLED,
                         )
                     if event == "error":
                         raise ProviderError(
                             f"OpenAI stream error: {data}",
-                            partial_output=state.partial_output,
+                            partial_output=bool(
+                                content_parts
+                                or refusal_parts
+                                or calls
+                                or provider_data
+                            ),
                         )
                     if data == "[DONE]":
-                        state.done = True
+                        done = True
                         break
-                    absorb_chunk(state, json.loads(data), emit)
-            return build_openai_response(state)
+                    chunk = json.loads(data)
+                    usage = self._usage(chunk.get("usage")) or usage
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    delta = choice.get("delta") or {}
+                    for key, value in delta.items():
+                        private_field = key.startswith("reasoning") or key in (
+                            "signature",
+                            "encrypted_content",
+                            "encrypted_reasoning",
+                            "continuation_token",
+                            "continuation_tokens",
+                        )
+                        if not private_field or value is None:
+                            continue
+                        if key in ("reasoning_content", "reasoning_summary"):
+                            provider_data[key] = provider_data.get(
+                                key, ""
+                            ) + str(value)
+                        else:
+                            provider_data[key] = value
+                    if delta.get("content"):
+                        text = str(delta["content"])
+                        content_parts.append(text)
+                        if emit is not None:
+                            emit({"channel": "content", "delta": text})
+                    if delta.get("refusal"):
+                        text = str(delta["refusal"])
+                        refusal_parts.append(text)
+                        if emit is not None:
+                            emit({"channel": "refusal", "delta": text})
+                    for fragment in delta.get("tool_calls") or []:
+                        # bits:allow(BCS007): Python has no brace blocks
+                        index = int(fragment["index"])
+                        current = calls.setdefault(
+                            index,
+                            {
+                                "id": f"call_{index}",
+                                "name": "",
+                                "arguments": "",
+                            },
+                        )
+                        function = fragment.get("function") or {}
+                        preview = {"channel": "tool_call", "index": index}
+                        if fragment.get("id"):
+                            current["id"] = str(fragment["id"])
+                            preview["call_id"] = current["id"]
+                        if function.get("name"):
+                            current["name"] += str(function["name"])
+                            preview["name_delta"] = str(function["name"])
+                        if function.get("arguments"):
+                            current["arguments"] += str(function["arguments"])
+                            preview["arguments_delta"] = str(
+                                function["arguments"]
+                            )
+                        if emit is not None:
+                            emit(preview)
+                    raw_finish_reason = choice.get("finish_reason")
+                    if raw_finish_reason is not None:
+                        mapped = self._finish_reason(raw_finish_reason)
+                        if mapped is None:
+                            raise ProviderError(
+                                "OpenAI stream returned unknown finish reason: "
+                                f"{raw_finish_reason}",
+                                partial_output=bool(
+                                    content_parts
+                                    or refusal_parts
+                                    or calls
+                                    or provider_data
+                                ),
+                            )
+                        finish_reason = mapped
+            if not done:
+                raise ProviderError(
+                    "OpenAI stream ended before [DONE]",
+                    retryable=True,
+                    partial_output=bool(
+                        content_parts or refusal_parts or calls or provider_data
+                    ),
+                )
+            if finish_reason is None:
+                raise ProviderError(
+                    "OpenAI stream completed without a finish reason",
+                    partial_output=bool(
+                        content_parts or refusal_parts or calls or provider_data
+                    ),
+                )
+            return ModelResponse(
+                content="".join(content_parts),
+                refusal="".join(refusal_parts) or None,
+                tool_calls=tuple(
+                    ToolCall(call["id"], call["name"], call["arguments"])
+                    for _, call in sorted(calls.items())
+                ),
+                finish_reason=finish_reason,
+                usage=usage,
+                provider_data=provider_data,
+            )
         except ProviderError:
             raise
         except (TimeoutError, httpx.HTTPError, json.JSONDecodeError) as exc:
+            partial = bool(
+                content_parts or refusal_parts or calls or provider_data
+            )
             raise ProviderError(
                 f"OpenAI stream failed: {exc}",
                 retryable=True,
-                partial_output=state.partial_output,
+                partial_output=partial,
             ) from exc
 
     async def close(self) -> None:

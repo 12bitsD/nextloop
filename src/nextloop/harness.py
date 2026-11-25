@@ -117,7 +117,6 @@ _TOOL_FIELDS = {
     "cancel_grace_seconds",
 }
 _SKILL_FIELDS = {"paths"}
-_PARAMETER_FIELDS = frozenset(("parameters", "compaction_parameters"))
 
 
 class MemoryDeliveryOwner:
@@ -456,121 +455,7 @@ class Harness:
         return replace(self.spec.loop, system_prompt=prompt)
 
 
-def _provider_from_raw(raw: Mapping[str, Any], source: Path) -> ProviderConfig:
-    provider_raw = _table(raw, "provider", source)
-    _fields(provider_raw, _PROVIDER_FIELDS, "provider", source)
-    default_parameters = _optional_table(
-        provider_raw, "default_parameters", source, "provider"
-    )
-    _check_reserved_parameters(
-        default_parameters, source, "provider.default_parameters"
-    )
-    return ProviderConfig(
-        protocol=_choice(
-            provider_raw, "protocol", ("openai", "anthropic"), source
-        ),
-        model_id=_string(provider_raw, "model_id", source, "provider"),
-        base_url=_string(provider_raw, "base_url", source, "provider"),
-        api_key_env=_string(provider_raw, "api_key_env", source, "provider"),
-        default_parameters=default_parameters,
-        timeout_seconds=_number(
-            provider_raw, "timeout_seconds", 60.0, source, "provider"
-        ),
-    )
-
-
-def _store_from_raw(raw: Mapping[str, Any], source: Path) -> StoreConfig:
-    store_raw = _optional_table(raw, "store", source)
-    _fields(store_raw, _STORE_FIELDS, "store", source)
-    owner_id = store_raw.get("owner_id")
-    if owner_id is not None and not isinstance(owner_id, str):
-        _fail(source, "store.owner_id", "must be a string")
-    store = StoreConfig(
-        driver=_choice(
-            store_raw, "driver", ("memory", "sqlite"), source, default="memory"
-        ),
-        path=_string(store_raw, "path", source, "store", default=":memory:"),
-        owner_id=owner_id,
-        lease_seconds=_number(store_raw, "lease_seconds", 5.0, source, "store"),
-    )
-    if store.driver == "memory" and store.path != ":memory:":
-        _fail(source, "store.path", "memory Store only supports ':memory:'")
-    if store.driver == "sqlite":
-        store = replace(store, path=str(_resolve_path(source, store.path)))
-    return store
-
-
-def _validated_parameter_table(
-    raw: Mapping[str, Any], source: Path, name: str
-) -> tuple[str, Mapping[str, Any]]:
-    table = _optional_table(raw, name, source, "loop")
-    _check_reserved_parameters(table, source, f"loop.{name}")
-    return name, table
-
-
-def _loop_from_raw(raw: Mapping[str, Any], source: Path) -> LoopConfig:
-    loop_raw = _optional_table(raw, "loop", source)
-    _fields(loop_raw, _LOOP_FIELDS, "loop", source)
-    loop_values: dict[str, Any] = dict(
-        _validated_parameter_table(loop_raw, source, name)
-        for name in _PARAMETER_FIELDS
-    )
-    loop_values.update(
-        {
-            name: loop_raw[name]
-            for name in _LOOP_FIELDS - _PARAMETER_FIELDS
-            if name in loop_raw
-        }
-    )
-    loop_values.setdefault("system_prompt", "You are a helpful assistant.")
-    try:
-        loop = LoopConfig(**loop_values)
-    except TypeError as exc:
-        raise HarnessError(f"{source}: loop: {exc}") from exc
-    _validate_loop(loop, source)
-    return loop
-
-
-def _skills_from_raw(raw: Mapping[str, Any], source: Path) -> SkillConfig:
-    skills_raw = _optional_table(raw, "skills", source)
-    _fields(skills_raw, _SKILL_FIELDS, "skills", source)
-    paths_raw = skills_raw.get("paths", [])
-    if not isinstance(paths_raw, list) or not all(
-        isinstance(item, str) for item in paths_raw
-    ):
-        _fail(source, "skills.paths", "must be an array of paths")
-    skills = SkillConfig(
-        paths=tuple(str(_resolve_path(source, item)) for item in paths_raw)
-    )
-    for skill_path in skills.paths:
-        if not Path(skill_path).exists():
-            _fail(source, "skills.paths", f"path does not exist: {skill_path}")
-    return skills
-
-
-def _trace_from_raw(raw: Mapping[str, Any], source: Path) -> TraceConfig:
-    trace_raw = _optional_table(raw, "trace", source)
-    _fields(trace_raw, _TRACE_FIELDS, "trace", source)
-    trace_exporter = trace_raw.get("exporter")
-    if trace_exporter is not None:
-        if not isinstance(trace_exporter, str) or not trace_exporter:
-            _fail(source, "trace.exporter", "must be a nonempty string")
-        if (
-            trace_exporter != "stdout"
-            and re.fullmatch(
-                r"[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*",
-                trace_exporter,
-            )
-            is None
-        ):
-            _fail(
-                source,
-                "trace.exporter",
-                "must be 'stdout' or 'module.path:attribute'",
-            )
-    return TraceConfig(exporter=trace_exporter)
-
-
+# bits:explain(BCS003): config dispatch; split duplicates validation; keep API
 def load_harness_spec(path: str | Path) -> HarnessSpec:
     source = Path(path).expanduser().resolve()
     try:
@@ -599,9 +484,61 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
             f"requires nextloop >= {minimum}, current is {API_VERSION}",
         )
 
-    provider = _provider_from_raw(raw, source)
-    store = _store_from_raw(raw, source)
-    loop = _loop_from_raw(raw, source)
+    provider_raw = _table(raw, "provider", source)
+    _fields(provider_raw, _PROVIDER_FIELDS, "provider", source)
+    default_parameters = _optional_table(
+        provider_raw, "default_parameters", source, "provider"
+    )
+    _check_reserved_parameters(
+        default_parameters, source, "provider.default_parameters"
+    )
+    provider = ProviderConfig(
+        protocol=_choice(
+            provider_raw, "protocol", ("openai", "anthropic"), source
+        ),
+        model_id=_string(provider_raw, "model_id", source, "provider"),
+        base_url=_string(provider_raw, "base_url", source, "provider"),
+        api_key_env=_string(provider_raw, "api_key_env", source, "provider"),
+        default_parameters=default_parameters,
+        timeout_seconds=_number(
+            provider_raw, "timeout_seconds", 60.0, source, "provider"
+        ),
+    )
+    store_raw = _optional_table(raw, "store", source)
+    _fields(store_raw, _STORE_FIELDS, "store", source)
+    owner_id = store_raw.get("owner_id")
+    if owner_id is not None and not isinstance(owner_id, str):
+        _fail(source, "store.owner_id", "must be a string")
+    store = StoreConfig(
+        driver=_choice(
+            store_raw, "driver", ("memory", "sqlite"), source, default="memory"
+        ),
+        path=_string(store_raw, "path", source, "store", default=":memory:"),
+        owner_id=owner_id,
+        lease_seconds=_number(store_raw, "lease_seconds", 5.0, source, "store"),
+    )
+    if store.driver == "memory" and store.path != ":memory:":
+        _fail(source, "store.path", "memory Store only supports ':memory:'")
+    if store.driver == "sqlite":
+        store = replace(store, path=str(_resolve_path(source, store.path)))
+    loop_raw = _optional_table(raw, "loop", source)
+    _fields(loop_raw, _LOOP_FIELDS, "loop", source)
+    loop_values: dict[str, Any] = {}
+    for name in _LOOP_FIELDS:
+        # bits:allow(BCS007): Python has no brace blocks
+        if name in ("parameters", "compaction_parameters"):
+            table = _optional_table(loop_raw, name, source, "loop")
+            _check_reserved_parameters(table, source, f"loop.{name}")
+            if name in loop_raw:
+                loop_values[name] = table
+        elif name in loop_raw:
+            loop_values[name] = loop_raw[name]
+    loop_values.setdefault("system_prompt", "You are a helpful assistant.")
+    try:
+        loop = LoopConfig(**loop_values)
+    except TypeError as exc:
+        raise HarnessError(f"{source}: loop: {exc}") from exc
+    _validate_loop(loop, source)
 
     tools_raw = raw.get("tools", [])
     if not isinstance(tools_raw, list) or not all(
@@ -612,8 +549,40 @@ def load_harness_spec(path: str | Path) -> HarnessSpec:
         _tool_config(item, index, source)
         for index, item in enumerate(tools_raw)
     )
-    skills = _skills_from_raw(raw, source)
-    trace = _trace_from_raw(raw, source)
+    skills_raw = _optional_table(raw, "skills", source)
+    _fields(skills_raw, _SKILL_FIELDS, "skills", source)
+    paths_raw = skills_raw.get("paths", [])
+    if not isinstance(paths_raw, list) or not all(
+        isinstance(item, str) for item in paths_raw
+    ):
+        _fail(source, "skills.paths", "must be an array of paths")
+    skills = SkillConfig(
+        paths=tuple(str(_resolve_path(source, item)) for item in paths_raw)
+    )
+    for skill_path in skills.paths:
+        # bits:allow(BCS007): Python has no brace blocks
+        if not Path(skill_path).exists():
+            _fail(source, "skills.paths", f"path does not exist: {skill_path}")
+    trace_raw = _optional_table(raw, "trace", source)
+    _fields(trace_raw, _TRACE_FIELDS, "trace", source)
+    trace_exporter = trace_raw.get("exporter")
+    if trace_exporter is not None:
+        if not isinstance(trace_exporter, str) or not trace_exporter:
+            _fail(source, "trace.exporter", "must be a nonempty string")
+        if (
+            trace_exporter != "stdout"
+            and re.fullmatch(
+                r"[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*",
+                trace_exporter,
+            )
+            is None
+        ):
+            _fail(
+                source,
+                "trace.exporter",
+                "must be 'stdout' or 'module.path:attribute'",
+            )
+    trace = TraceConfig(exporter=trace_exporter)
     return HarnessSpec(
         schema=schema,
         min_nextloop=minimum,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence, Set
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -80,55 +80,7 @@ def _capacity_reason(request_bytes: int, config: LoopConfig) -> str | None:
     return None
 
 
-def inject_pending_first(
-    approval_result_seq: int,
-    event: Event,
-    turn: int,
-) -> bool:
-    return (
-        approval_result_seq == 0
-        and event.event_type == EventType.USER_MESSAGE
-        and event.turn == turn
-        and event.step == 1
-    )
-
-
-def append_projected_message(
-    messages: list[Message],
-    event: Event,
-    rejected_steps: Set[tuple[int, int]],
-) -> None:
-    if event.event_type == EventType.COMPACTION:
-        messages.append(
-            Message(
-                role="user",
-                content="[Task summary]\n" + str(event.payload["summary"]),
-            )
-        )
-        return
-    if event.event_type not in (
-        EventType.USER_MESSAGE,
-        EventType.ASSISTANT_MESSAGE,
-        EventType.TOOL_RESULT,
-        EventType.RECONCILIATION_RESULT,
-    ):
-        return
-    message = message_from_data(event.payload["message"])
-    rejected = (
-        event.event_type == EventType.ASSISTANT_MESSAGE
-        and (event.turn, event.step) in rejected_steps
-    )
-    if rejected and not message.content:
-        return
-    if rejected:
-        message = Message(
-            role=message.role,
-            content=message.content,
-            provider_data=message.provider_data,
-        )
-    messages.append(message)
-
-
+# bits:explain(BCS003): event projection; split risks parity; keep hot path
 def project_events(
     events: Sequence[Event],
     *,
@@ -148,15 +100,44 @@ def project_events(
     messages = [Message(role="system", content=config.system_prompt)]
     messages.extend(config.bootstrap_messages)
     for event in events:
-        if not injected and inject_pending_first(
-            approval_result_seq, event, turn
+        if (
+            not injected
+            and approval_result_seq == 0
+            and event.event_type == EventType.USER_MESSAGE
+            and event.turn == turn
+            and event.step == 1
         ):
             messages.extend(pending)
             injected = True
-        append_projected_message(messages, event, rejected_steps)
-        if not injected and event.seq == approval_result_seq:
-            messages.extend(pending)
-            injected = True
+        if event.event_type == EventType.COMPACTION:
+            messages.append(
+                Message(
+                    role="user",
+                    content="[Task summary]\n" + str(event.payload["summary"]),
+                )
+            )
+        elif event.event_type in (
+            EventType.USER_MESSAGE,
+            EventType.ASSISTANT_MESSAGE,
+            EventType.TOOL_RESULT,
+            EventType.RECONCILIATION_RESULT,
+        ):
+            message = message_from_data(event.payload["message"])
+            if (
+                event.event_type == EventType.ASSISTANT_MESSAGE
+                and (event.turn, event.step) in rejected_steps
+            ):
+                if not message.content:
+                    continue
+                message = Message(
+                    role=message.role,
+                    content=message.content,
+                    provider_data=message.provider_data,
+                )
+            messages.append(message)
+            if not injected and event.seq == approval_result_seq:
+                messages.extend(pending)
+                injected = True
     if not injected:
         messages.extend(pending)
     request = CandidateRequest(
