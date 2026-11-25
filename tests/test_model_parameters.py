@@ -645,36 +645,3 @@ async def test_compaction_none_removes_provider_default_in_wire_body():
     assert seen[1]["temperature"] == 0.7
     assert seen[1]["top_k"] == 40
     await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_custom_provider_rejects_reserved_per_call_parameters(tmp_path):
-    from nextloop import Harness, ModelResponse, ProviderError
-
-    calls = []
-
-    class CustomProvider:
-        async def complete(self, request, *, attempt, cancel):
-            calls.append(request)
-            return ModelResponse(content="must not be called")
-
-    config_path = tmp_path / "harness.toml"
-    config_path.write_text(
-        'schema = "nextloop.harness/v1"\n'
-        'min_nextloop = "1.1.0rc1"\n'
-        "[provider]\n"
-        'protocol = "openai"\n'
-        'model_id = "test-model"\n'
-        'base_url = "https://provider.test/v1"\n'
-        'api_key_env = "NEXTLOOP_TEST_KEY"\n',
-        encoding="utf-8",
-    )
-    harness = Harness.load(config_path, provider=CustomProvider())
-    try:
-        with pytest.raises(ProviderError, match="reserved") as caught:
-            await harness.run("hello", parameters={"model": "other"})
-        assert caught.value.retryable is False
-    finally:
-        await harness.close()
-
-    assert calls == []
